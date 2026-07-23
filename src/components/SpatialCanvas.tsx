@@ -42,10 +42,26 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
 
   const stageRef = useRef<any>(null);
 
-  const getPointerPos = () => {
+  const getPointerPos = (e?: any) => {
     const stage = stageRef.current;
     if (!stage) return { x: 0, y: 0, pressure: 0.5 };
-    const pointer = stage.getPointerPosition();
+    
+    let pointer = stage.getPointerPosition();
+    
+    // Fallback if Konva's pointer is null (happens sometimes on synthetic events like dblclick)
+    if (!pointer) {
+      if (e && e.evt) {
+        // Try to get from raw event
+        const rect = stage.container().getBoundingClientRect();
+        pointer = {
+          x: e.evt.clientX - rect.left,
+          y: e.evt.clientY - rect.top
+        };
+      } else {
+        return { x: 0, y: 0, pressure: 0.5 };
+      }
+    }
+    
     return {
       x: (pointer.x - pan.x) / zoom,
       y: (pointer.y - pan.y) / zoom,
@@ -60,7 +76,7 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
     }
     
     setIsDrawing(true);
-    const pos = getPointerPos();
+    const pos = getPointerPos(e);
     
     setCurrentStroke({
       id: uuidv4(),
@@ -73,7 +89,7 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
   const handlePointerMove = (e: any) => {
     if (!isDrawing || !currentStroke) return;
     
-    const pos = getPointerPos();
+    const pos = getPointerPos(e);
     setCurrentStroke(prev => {
       if (!prev) return null;
       return {
@@ -119,7 +135,7 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
   // Handle Double Click
   const handleDblClick = (e: any) => {
     if (onDoubleClick) {
-      const pos = getPointerPos();
+      const pos = getPointerPos(e);
       onDoubleClick(pos.x, pos.y);
     }
   };
