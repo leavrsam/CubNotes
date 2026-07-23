@@ -15,6 +15,7 @@ import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
 import { Mic, Square } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { v4 as uuidv4 } from "uuid";
 
 export default function Home() {
   const { 
@@ -79,34 +80,65 @@ export default function Home() {
   const handleToggleMeeting = async () => {
     const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     
-    const callGemini = async (audioBase64: string) => {
+    const processAudio = async (audioBase64: string) => {
       try {
+        if (!selectedPageId) {
+          toast.error("No page selected to save audio.");
+          return;
+        }
+
+        // 1. Upload audio to Supabase Storage
+        toast.loading("Uploading audio and generating summary...", { id: "audio-process" });
+        
+        // Convert base64 to Blob
+        const byteCharacters = atob(audioBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'audio/webm' });
+        
+        const fileName = `${selectedPageId}/${uuidv4()}.webm`;
+        const { error: uploadError } = await supabase.storage
+          .from('recordings')
+          .upload(fileName, blob, { contentType: 'audio/webm' });
+          
+        if (uploadError) {
+          console.error("Upload error:", uploadError);
+          toast.error("Failed to upload audio.", { id: "audio-process" });
+        } else {
+          const { data: publicUrlData } = supabase.storage.from('recordings').getPublicUrl(fileName);
+          window.dispatchEvent(new CustomEvent('inject-audio', { detail: { url: publicUrlData.publicUrl } }));
+        }
+
+        // 2. Call Edge Function for Transcription/Summary
         const { data, error } = await supabase.functions.invoke('summarize-meeting', {
           body: { audioBase64 }
         });
         
         if (error) {
           console.error("Edge function error:", error);
-          // Supabase FunctionsHttpError may contain the status, or we can parse the error message.
-          // Depending on the exact shape, we check for 429 or the message we sent.
           const status = (error as any).status || (error as any).context?.status;
           const isRateLimit = status === 429 || error.message?.includes('429');
           
           if (isRateLimit) {
-            toast.error('Our AI is resting! The daily transcription limit has been reached.');
+            toast.error('Our AI is resting! The daily transcription limit has been reached.', { id: "audio-process" });
           } else {
-            toast.error('Failed to summarize meeting. Please try again.');
+            toast.error('Failed to summarize meeting. Please try again.', { id: "audio-process" });
           }
           return;
         }
         
         if (data?.summary) {
           window.dispatchEvent(new CustomEvent('inject-summary', { detail: { summary: data.summary } }));
-          toast.success('Meeting summary added to canvas!');
+          toast.success('Meeting summary added to canvas!', { id: "audio-process" });
+        } else {
+          toast.dismiss("audio-process");
         }
       } catch (err) {
-        console.error("Failed to invoke edge function:", err);
-        toast.error('Failed to invoke meeting summarizer.');
+        console.error("Failed to process audio:", err);
+        toast.error('Failed to process meeting recording.', { id: "audio-process" });
       }
     };
 
@@ -116,7 +148,7 @@ export default function Home() {
         try {
           const audioBase64 = await invoke<string>("stop_recording");
           console.log("Captured Desktop Audio (Base64 length):", audioBase64.length);
-          await callGemini(audioBase64);
+          await processAudio(audioBase64);
           setIsDesktopRecording(false);
         } catch (e) {
           console.error("Failed to stop desktop recording:", e);
@@ -138,7 +170,7 @@ export default function Home() {
         try {
           const audioBase64 = await stopWeb();
           console.log("Captured Web Audio (Base64 length):", audioBase64.length);
-          await callGemini(audioBase64);
+          await processAudio(audioBase64);
         } catch (e) {
           console.error("Failed to stop web recording:", e);
         } finally {

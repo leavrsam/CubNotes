@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
+import { AudioOverlay } from "./AudioOverlay";
 
 interface CustomCanvasProps {
   pageId: string;
@@ -26,9 +27,17 @@ export type TextNode = {
   width: number;
 };
 
+export type AudioNode = {
+  id: string;
+  x: number;
+  y: number;
+  url: string;
+};
+
 export type DocumentState = {
   strokes: Stroke[];
   texts: TextNode[];
+  audios?: AudioNode[];
 };
 
 export function CustomCanvas({ pageId }: CustomCanvasProps) {
@@ -37,6 +46,7 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
 
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [texts, setTexts] = useState<TextNode[]>([]);
+  const [audios, setAudios] = useState<AudioNode[]>([]);
 
   // Viewport state
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -62,9 +72,11 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
           const state = data.document_state as DocumentState;
           if (state.strokes) setStrokes(state.strokes);
           if (state.texts) setTexts(state.texts);
+          if (state.audios) setAudios(state.audios);
         } else {
           setStrokes([]);
           setTexts([]);
+          setAudios([]);
         }
         setLoading(false);
       }
@@ -79,8 +91,8 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
 
   // Save state to DB
   const saveToSupabase = useCallback(
-    debounce(async (newStrokes: Stroke[], newTexts: TextNode[]) => {
-      const state: DocumentState = { strokes: newStrokes, texts: newTexts };
+    debounce(async (newStrokes: Stroke[], newTexts: TextNode[], newAudios: AudioNode[]) => {
+      const state: DocumentState = { strokes: newStrokes, texts: newTexts, audios: newAudios };
       await supabase
         .from('pages')
         .update({ document_state: state })
@@ -91,9 +103,9 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
 
   useEffect(() => {
     if (!loading) {
-      saveToSupabase(strokes, texts);
+      saveToSupabase(strokes, texts, audios);
     }
-  }, [strokes, texts, loading, saveToSupabase]);
+  }, [strokes, texts, audios, loading, saveToSupabase]);
 
   const handleDoubleClick = useCallback((x: number, y: number) => {
     const newNode: TextNode = {
@@ -105,6 +117,57 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
     };
     setTexts(prev => [...prev, newNode]);
   }, []);
+
+  useEffect(() => {
+    const handleInjectSummary = (e: Event) => {
+      const customEvent = e as CustomEvent<{ summary: string }>;
+      const { summary } = customEvent.detail;
+      
+      // Calculate center of screen
+      const screenCenterX = window.innerWidth / 2;
+      const screenCenterY = window.innerHeight / 2;
+      
+      const worldX = (screenCenterX - pan.x) / zoom;
+      const worldY = (screenCenterY - pan.y) / zoom;
+
+      const newNode: TextNode = {
+        id: uuidv4(),
+        x: worldX,
+        y: worldY,
+        width: 500,
+        // Convert basic markdown to HTML for TipTap
+        content: summary.replace(/\n/g, '<br/>')
+      };
+      
+      setTexts(prev => [...prev, newNode]);
+    };
+
+    const handleInjectAudio = (e: Event) => {
+      const customEvent = e as CustomEvent<{ url: string }>;
+      const { url } = customEvent.detail;
+      
+      // Calculate top right corner roughly
+      const worldX = (window.innerWidth - 350 - pan.x) / zoom;
+      const worldY = (40 - pan.y) / zoom;
+
+      const newAudio: AudioNode = {
+        id: uuidv4(),
+        x: worldX,
+        y: worldY,
+        url
+      };
+      
+      setAudios(prev => [...prev, newAudio]);
+    };
+
+    window.addEventListener('inject-summary', handleInjectSummary);
+    window.addEventListener('inject-audio', handleInjectAudio);
+    
+    return () => {
+      window.removeEventListener('inject-summary', handleInjectSummary);
+      window.removeEventListener('inject-audio', handleInjectAudio);
+    };
+  }, [pan, zoom]);
 
   if (loading) {
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
@@ -124,6 +187,12 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
       <RichTextOverlay 
         texts={texts}
         setTexts={setTexts}
+        pan={pan}
+        zoom={zoom}
+      />
+      <AudioOverlay 
+        audios={audios}
+        setAudios={setAudios}
         pan={pan}
         zoom={zoom}
       />
