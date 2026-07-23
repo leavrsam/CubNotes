@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 
@@ -31,7 +31,7 @@ export function useNotebooks() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
 
   const fetchNotebooks = useCallback(async () => {
     try {

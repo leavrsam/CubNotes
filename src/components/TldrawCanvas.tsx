@@ -13,7 +13,7 @@ interface TldrawCanvasProps {
 export function TldrawCanvas({ pageId }: TldrawCanvasProps) {
   const [store, setStore] = useState<TLStore | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
 
   // Fetch initial canvas state and initialize store
   useEffect(() => {
@@ -74,7 +74,7 @@ export function TldrawCanvas({ pageId }: TldrawCanvasProps) {
 // Sub-component to access the editor instance context and listen to store changes
 function SyncLogic({ pageId }: { pageId: string }) {
   const editor = useEditor();
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
 
   useEffect(() => {
     if (!editor) return;

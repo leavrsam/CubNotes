@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { TldrawCanvas } from "@/components/TldrawCanvas";
 import { useNotebooks } from "@/hooks/useNotebooks";
@@ -27,7 +27,7 @@ export default function Home() {
   const { isRecording: isWebRecording, startRecording: startWeb, stopRecording: stopWeb } = useWebAudio();
   
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
 
   useEffect(() => {
     // Client-side auth check
