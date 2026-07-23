@@ -12,7 +12,12 @@ import { Mic, Square } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 export default function Home() {
-  const { notebooks, loading, addNotebook } = useNotebooks();
+  const { 
+    notebooks, loading, 
+    addNotebook, updateNotebook, deleteNotebook,
+    addSection, updateSection, deleteSection,
+    addPage, updatePage, deletePage
+  } = useNotebooks();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
   
@@ -153,6 +158,15 @@ export default function Home() {
         notebooks={notebooks} 
         selectedPageId={selectedPageId}
         onSelectPage={setSelectedPageId} 
+        onAddNotebook={() => addNotebook("New Notebook")}
+        onUpdateNotebook={updateNotebook}
+        onDeleteNotebook={deleteNotebook}
+        onAddSection={(nbId) => addSection(nbId, "New Section")}
+        onUpdateSection={updateSection}
+        onDeleteSection={deleteSection}
+        onAddPage={(secId) => addPage(secId, "Untitled Page")}
+        onUpdatePage={updatePage}
+        onDeletePage={deletePage}
       />
       
       <div className="flex-1 h-full relative bg-zinc-900">

@@ -133,9 +133,29 @@ export function useNotebooks() {
     await fetchNotebooks();
   };
 
+  const updateNotebook = async (id: string, title: string) => {
+    await supabase.from('notebooks').update({ title }).eq('id', id);
+    await fetchNotebooks();
+  };
+
+  const deleteNotebook = async (id: string) => {
+    await supabase.from('notebooks').delete().eq('id', id);
+    await fetchNotebooks();
+  };
+
   const addSection = async (notebook_id: string, title: string) => {
     const { error } = await supabase.from('sections').insert({ notebook_id, title });
     if (error) console.error("Error creating section:", error);
+    await fetchNotebooks();
+  };
+
+  const updateSection = async (id: string, title: string) => {
+    await supabase.from('sections').update({ title }).eq('id', id);
+    await fetchNotebooks();
+  };
+
+  const deleteSection = async (id: string) => {
+    await supabase.from('sections').delete().eq('id', id);
     await fetchNotebooks();
   };
 
@@ -145,5 +165,20 @@ export function useNotebooks() {
     await fetchNotebooks();
   };
 
-  return { notebooks, loading, addNotebook, addSection, addPage, userId };
+  const updatePage = async (id: string, title: string) => {
+    await supabase.from('pages').update({ title }).eq('id', id);
+    await fetchNotebooks();
+  };
+
+  const deletePage = async (id: string) => {
+    await supabase.from('pages').delete().eq('id', id);
+    await fetchNotebooks();
+  };
+
+  return { 
+    notebooks, loading, userId,
+    addNotebook, updateNotebook, deleteNotebook,
+    addSection, updateSection, deleteSection,
+    addPage, updatePage, deletePage
+  };
 }
