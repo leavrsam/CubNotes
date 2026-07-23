@@ -17,13 +17,15 @@ interface SidebarProps {
   onAddPage: (sectionId: string) => void;
   onUpdatePage: (id: string, title: string) => void;
   onDeletePage: (id: string) => void;
+  onClose?: () => void;
 }
 
 export function Sidebar({ 
   notebooks, selectedPageId, onSelectPage,
   onAddNotebook, onUpdateNotebook, onDeleteNotebook,
   onAddSection, onUpdateSection, onDeleteSection,
-  onAddPage, onUpdatePage, onDeletePage
+  onAddPage, onUpdatePage, onDeletePage,
+  onClose
 }: SidebarProps) {
   return (
     <aside className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800 flex-shrink-0">

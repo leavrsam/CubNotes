@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
-import { Mic, Square } from "lucide-react";
+import { Mic, Square, Menu, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 
@@ -34,6 +34,15 @@ export default function Home() {
   
   const router = useRouter();
   const [supabase] = useState(() => createClient());
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Auto-close sidebar on mobile initially
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
+  }, []);
 
   useEffect(() => {
     // Client-side auth check
@@ -193,23 +202,52 @@ export default function Home() {
   const isAnyRecording = isDesktopRecording || isWebRecording;
 
   return (
-    <main className="flex w-full h-full relative">
-      <Sidebar 
-        notebooks={notebooks} 
-        selectedPageId={selectedPageId}
-        onSelectPage={setSelectedPageId} 
-        onAddNotebook={() => addNotebook("New Notebook")}
-        onUpdateNotebook={updateNotebook}
-        onDeleteNotebook={deleteNotebook}
-        onAddSection={(nbId) => addSection(nbId, "New Section")}
-        onUpdateSection={updateSection}
-        onDeleteSection={deleteSection}
-        onAddPage={(secId) => addPage(secId, "Untitled Page")}
-        onUpdatePage={updatePage}
-        onDeletePage={deletePage}
-      />
+    <main className="flex w-full h-full relative overflow-hidden">
+      {/* Sidebar - Desktop (sliding) and Mobile (overlay) */}
+      <div 
+        className={`absolute md:relative z-50 h-full transition-transform duration-300 ease-in-out ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden md:-translate-x-full md:w-0"
+        }`}
+      >
+        <Sidebar 
+          notebooks={notebooks} 
+          selectedPageId={selectedPageId}
+          onSelectPage={(id) => {
+            setSelectedPageId(id);
+            if (window.innerWidth < 768) setIsSidebarOpen(false);
+          }} 
+          onAddNotebook={() => addNotebook("New Notebook")}
+          onUpdateNotebook={updateNotebook}
+          onDeleteNotebook={deleteNotebook}
+          onAddSection={(nbId) => addSection(nbId, "New Section")}
+          onUpdateSection={updateSection}
+          onDeleteSection={deleteSection}
+          onAddPage={(secId) => addPage(secId, "Untitled Page")}
+          onUpdatePage={updatePage}
+          onDeletePage={deletePage}
+          onClose={() => setIsSidebarOpen(false)}
+        />
+      </div>
       
-      <div className="flex-1 h-full relative bg-zinc-900">
+      {/* Mobile backdrop */}
+      {isSidebarOpen && (
+        <div 
+          className="absolute inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+      
+      <div className="flex-1 h-full relative bg-zinc-900 transition-all duration-300">
+        {/* Toggle Sidebar Button */}
+        <div className="absolute top-4 left-4 z-50">
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded-lg shadow-lg border border-zinc-700 transition-colors flex items-center justify-center"
+            title="Toggle Sidebar"
+          >
+            {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
         {/* Floating Meeting Toggle */}
         <div className="absolute top-4 right-4 z-50">
           <button
