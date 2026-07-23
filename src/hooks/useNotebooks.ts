@@ -128,8 +128,35 @@ export function useNotebooks() {
 
   const addNotebook = async (title: string, is_journal: boolean = false) => {
     if (!userId) return;
-    const { error } = await supabase.from('notebooks').insert({ user_id: userId, title, is_journal });
-    if (error) console.error("Error creating notebook:", error);
+    
+    // Create the notebook
+    const { data: nbData, error: nbError } = await supabase
+      .from('notebooks')
+      .insert({ user_id: userId, title, is_journal })
+      .select()
+      .single();
+      
+    if (nbError) {
+      console.error("Error creating notebook:", nbError);
+      return;
+    }
+    
+    if (nbData) {
+      // Auto-create a default section
+      const { data: secData, error: secError } = await supabase
+        .from('sections')
+        .insert({ notebook_id: nbData.id, title: 'Main' })
+        .select()
+        .single();
+        
+      if (!secError && secData) {
+        // Auto-create a default page
+        await supabase
+          .from('pages')
+          .insert({ section_id: secData.id, title: 'Untitled Page', document_state: {} });
+      }
+    }
+    
     await fetchNotebooks();
   };
 
