@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
+import { Pen, Type, Hand } from "lucide-react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
 import { AudioOverlay } from "./AudioOverlay";
@@ -34,6 +35,8 @@ export type AudioNode = {
   url: string;
 };
 
+export type ToolType = "pen" | "text" | "pan";
+
 export type DocumentState = {
   strokes: Stroke[];
   texts: TextNode[];
@@ -47,6 +50,9 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [texts, setTexts] = useState<TextNode[]>([]);
   const [audios, setAudios] = useState<AudioNode[]>([]);
+
+  // Active Tool
+  const [tool, setTool] = useState<ToolType>("pen");
 
   // Viewport state
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -175,27 +181,62 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-[#fafafa] dark:bg-zinc-900" style={{ touchAction: 'none' }}>
-      <SpatialCanvas 
-        strokes={strokes}
-        setStrokes={setStrokes}
-        pan={pan}
-        setPan={setPan}
-        zoom={zoom}
-        setZoom={setZoom}
-        onDoubleClick={handleDoubleClick}
-      />
-      <RichTextOverlay 
-        texts={texts}
-        setTexts={setTexts}
-        pan={pan}
-        zoom={zoom}
-      />
-      <AudioOverlay 
-        audios={audios}
-        setAudios={setAudios}
-        pan={pan}
-        zoom={zoom}
-      />
+      
+      {/* Tool Bar */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white dark:bg-zinc-800 p-2 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700">
+        <button
+          onClick={() => setTool("pen")}
+          className={`p-2 rounded-lg transition-colors ${tool === "pen" ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+          title="Pen Tool (Draw anywhere)"
+        >
+          <Pen size={20} />
+        </button>
+        <button
+          onClick={() => setTool("text")}
+          className={`p-2 rounded-lg transition-colors ${tool === "text" ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+          title="Text Tool (Double-click to type)"
+        >
+          <Type size={20} />
+        </button>
+        <button
+          onClick={() => setTool("pan")}
+          className={`p-2 rounded-lg transition-colors ${tool === "pan" ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+          title="Pan Tool (Move canvas)"
+        >
+          <Hand size={20} />
+        </button>
+      </div>
+
+      <div className="absolute inset-0" style={{ zIndex: tool === "pen" || tool === "pan" ? 30 : 10, pointerEvents: tool === "pen" || tool === "pan" ? "auto" : "none" }}>
+        <SpatialCanvas 
+          strokes={strokes}
+          setStrokes={setStrokes}
+          pan={pan}
+          setPan={setPan}
+          zoom={zoom}
+          setZoom={setZoom}
+          tool={tool}
+        />
+      </div>
+
+      <div className="absolute inset-0" style={{ zIndex: 20, pointerEvents: tool === "text" ? "auto" : "none" }}>
+        <RichTextOverlay 
+          texts={texts}
+          setTexts={setTexts}
+          pan={pan}
+          zoom={zoom}
+          onDoubleClick={handleDoubleClick}
+        />
+      </div>
+
+      <div className="absolute inset-0 z-40 pointer-events-none">
+        <AudioOverlay 
+          audios={audios}
+          setAudios={setAudios}
+          pan={pan}
+          zoom={zoom}
+        />
+      </div>
     </div>
   );
 }

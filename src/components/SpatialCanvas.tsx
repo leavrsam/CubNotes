@@ -4,7 +4,7 @@ import React, { useState, useRef, useCallback } from "react";
 import { Stage, Layer, Path } from "react-konva";
 import { getStroke } from "perfect-freehand";
 import { v4 as uuidv4 } from "uuid";
-import type { Stroke } from "./CustomCanvas";
+import type { Stroke, ToolType } from "./CustomCanvas";
 
 // Utility to convert perfect-freehand points to an SVG path string
 function getSvgPathFromStroke(stroke: number[][]) {
@@ -28,17 +28,16 @@ interface SpatialCanvasProps {
   setPan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
   zoom: number;
   setZoom: React.Dispatch<React.SetStateAction<number>>;
-  onDoubleClick?: (x: number, y: number) => void;
+  tool: ToolType;
 }
 
-export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom, onDoubleClick }: SpatialCanvasProps) {
+export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom, tool }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   
   // Use a high contrast color by default
   const activeColor = "#3f3f46"; // zinc-700
   const activeSize = 4;
-  const [tool, setTool] = useState<"pen" | "pan">("pen");
 
   const stageRef = useRef<any>(null);
 
@@ -132,16 +131,8 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
     });
   };
 
-  // Handle Double Click
-  const handleDblClick = (e: any) => {
-    if (onDoubleClick) {
-      const pos = getPointerPos(e);
-      onDoubleClick(pos.x, pos.y);
-    }
-  };
-
   return (
-    <div className="absolute inset-0 cursor-crosshair">
+    <div className={`absolute inset-0 ${tool === 'pen' ? 'cursor-crosshair' : tool === 'pan' ? 'cursor-grab' : 'cursor-default'}`}>
       <Stage
         width={typeof window !== 'undefined' ? window.innerWidth : 1000}
         height={typeof window !== 'undefined' ? window.innerHeight : 800}
@@ -149,8 +140,6 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
-        onDblClick={handleDblClick}
-        onDblTap={handleDblClick}
         ref={stageRef}
       >
         <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
