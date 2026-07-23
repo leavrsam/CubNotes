@@ -54,13 +54,16 @@ export default function Home() {
     };
   }, [router, supabase]);
 
+  // Auto-select the first available page only on initial load
+  const hasAutoSelected = React.useRef(false);
   useEffect(() => {
-    // Auto-select the first available page if none selected
+    if (hasAutoSelected.current) return;
     if (!selectedPageId && notebooks.length > 0) {
       for (const nb of notebooks) {
         for (const sec of nb.sections) {
           if (sec.pages.length > 0) {
             setSelectedPageId(sec.pages[0].id);
+            hasAutoSelected.current = true;
             return;
           }
         }

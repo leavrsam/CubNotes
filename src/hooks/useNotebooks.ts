@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 
@@ -8,7 +8,7 @@ export interface Page {
   title: string;
   date: string | null;
   is_journal_entry: boolean;
-  document_state: any;
+  document_state?: any;
 }
 
 export interface Section {
@@ -32,18 +32,23 @@ export function useNotebooks() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [supabase] = useState(() => createClient());
+  const isFetching = useRef(false);
 
   const fetchNotebooks = useCallback(async () => {
+    // Prevent concurrent fetches from causing cascading re-renders
+    if (isFetching.current) return;
+    isFetching.current = true;
+    
     try {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) return;
       setUserId(userData.user.id);
 
-      // Fetch all hierarchy data
+      // Fetch all hierarchy data — exclude document_state from pages to avoid huge payloads
       const [nbRes, secRes, pRes] = await Promise.all([
         supabase.from('notebooks').select('*').order('created_at', { ascending: true }),
         supabase.from('sections').select('*').order('sort_order', { ascending: true }),
-        supabase.from('pages').select('*').order('created_at', { ascending: false }),
+        supabase.from('pages').select('id, section_id, title, date, is_journal_entry, created_at').order('created_at', { ascending: false }),
       ]);
 
       if (nbRes.error || secRes.error || pRes.error) {
@@ -107,6 +112,7 @@ export function useNotebooks() {
     } catch (e) {
       console.error(e);
     } finally {
+      isFetching.current = false;
       setLoading(false);
     }
   }, [supabase]);
@@ -114,11 +120,12 @@ export function useNotebooks() {
   useEffect(() => {
     fetchNotebooks();
 
-    // Setup realtime listeners
+    // Setup realtime listeners — do NOT listen to 'pages' because
+    // the canvas auto-save writes to pages every 1.5s, which would
+    // trigger a full refetch and remount the canvas in an infinite loop.
     const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notebooks' }, fetchNotebooks)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sections' }, fetchNotebooks)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pages' }, fetchNotebooks)
       .subscribe();
 
     return () => {
