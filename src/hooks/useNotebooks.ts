@@ -31,7 +31,7 @@ export function useNotebooks() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const supabase = React.useMemo(() => createClient(), []);
+  const [supabase] = useState(() => createClient());
 
   const fetchNotebooks = useCallback(async () => {
     try {

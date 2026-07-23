@@ -27,7 +27,7 @@ export default function Home() {
   const { isRecording: isWebRecording, startRecording: startWeb, stopRecording: stopWeb } = useWebAudio();
   
   const router = useRouter();
-  const supabase = React.useMemo(() => createClient(), []);
+  const [supabase] = useState(() => createClient());
 
   useEffect(() => {
     // Client-side auth check
