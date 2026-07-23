@@ -51,9 +51,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-4">
+    <div className="flex w-full min-h-screen items-center justify-center bg-zinc-950 p-4">
       <div className="w-full max-w-sm rounded-lg border border-zinc-800 bg-zinc-900 p-8 shadow-xl">
-        <h1 className="mb-6 text-2xl font-bold text-zinc-100 tracking-tight text-center">Zenith Notes</h1>
+        <h1 className="mb-6 text-2xl font-bold text-zinc-100 tracking-tight text-center">CubNotes</h1>
         
         <form className="space-y-4">
           <div>
