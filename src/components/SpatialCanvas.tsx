@@ -28,14 +28,15 @@ interface SpatialCanvasProps {
   setPan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
   zoom: number;
   setZoom: React.Dispatch<React.SetStateAction<number>>;
+  onDoubleClick?: (x: number, y: number) => void;
 }
 
-export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom }: SpatialCanvasProps) {
+export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom, onDoubleClick }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   
-  // Hardcoded tools for now
-  const activeColor = "#f4f4f5"; // zinc-100
+  // Use a high contrast color by default
+  const activeColor = "#3f3f46"; // zinc-700
   const activeSize = 4;
   const [tool, setTool] = useState<"pen" | "pan">("pen");
 
@@ -115,6 +116,14 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom 
     });
   };
 
+  // Handle Double Click
+  const handleDblClick = (e: any) => {
+    if (onDoubleClick) {
+      const pos = getPointerPos();
+      onDoubleClick(pos.x, pos.y);
+    }
+  };
+
   return (
     <div className="absolute inset-0 cursor-crosshair">
       <Stage
@@ -124,6 +133,8 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom 
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
+        onDblClick={handleDblClick}
+        onDblTap={handleDblClick}
         ref={stageRef}
       >
         <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>

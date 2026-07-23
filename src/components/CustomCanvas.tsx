@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { SpatialCanvas } from "./SpatialCanvas";
@@ -94,6 +95,17 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
     }
   }, [strokes, texts, loading, saveToSupabase]);
 
+  const handleDoubleClick = useCallback((x: number, y: number) => {
+    const newNode: TextNode = {
+      id: uuidv4(),
+      x,
+      y,
+      width: 400,
+      content: "<p></p>"
+    };
+    setTexts(prev => [...prev, newNode]);
+  }, []);
+
   if (loading) {
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
   }
@@ -107,6 +119,7 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
         setPan={setPan}
         zoom={zoom}
         setZoom={setZoom}
+        onDoubleClick={handleDoubleClick}
       />
       <RichTextOverlay 
         texts={texts}
