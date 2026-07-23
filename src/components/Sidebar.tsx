@@ -45,7 +45,7 @@ export function Sidebar({
             selectedPageId={selectedPageId}
             onSelectPage={onSelectPage}
             onAddSection={() => onAddSection(nb.id)}
-            onUpdate={(title) => onUpdateNotebook(nb.id, title)}
+            onUpdate={(title: string) => onUpdateNotebook(nb.id, title)}
             onDelete={() => onDeleteNotebook(nb.id)}
             onUpdateSection={onUpdateSection}
             onDeleteSection={onDeleteSection}
