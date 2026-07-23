@@ -2,8 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { TldrawCanvas } from "@/components/TldrawCanvas";
+import dynamic from 'next/dynamic';
 import { useNotebooks } from "@/hooks/useNotebooks";
+
+const CustomCanvas = dynamic(() => import('@/components/CustomCanvas').then(mod => mod.CustomCanvas), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading spatial canvas...</div>
+});
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
@@ -201,7 +206,7 @@ export default function Home() {
         </div>
 
         {selectedPageId ? (
-          <TldrawCanvas pageId={selectedPageId} />
+          <CustomCanvas pageId={selectedPageId} />
         ) : (
           <div className="flex flex-col gap-4 items-center justify-center w-full h-full text-zinc-500">
             <p>Select or create a page to begin.</p>
