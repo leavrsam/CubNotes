@@ -128,15 +128,21 @@ export function useNotebooks() {
 
   const addNotebook = async (title: string, is_journal: boolean = false) => {
     if (!userId) return;
-    await supabase.from('notebooks').insert({ user_id: userId, title, is_journal });
+    const { error } = await supabase.from('notebooks').insert({ user_id: userId, title, is_journal });
+    if (error) console.error("Error creating notebook:", error);
+    await fetchNotebooks();
   };
 
   const addSection = async (notebook_id: string, title: string) => {
-    await supabase.from('sections').insert({ notebook_id, title });
+    const { error } = await supabase.from('sections').insert({ notebook_id, title });
+    if (error) console.error("Error creating section:", error);
+    await fetchNotebooks();
   };
 
   const addPage = async (section_id: string, title: string) => {
-    await supabase.from('pages').insert({ section_id, title, document_state: {} });
+    const { error } = await supabase.from('pages').insert({ section_id, title, document_state: {} });
+    if (error) console.error("Error creating page:", error);
+    await fetchNotebooks();
   };
 
   return { notebooks, loading, addNotebook, addSection, addPage, userId };
