@@ -14,7 +14,7 @@ export function Sidebar({ notebooks, selectedPageId, onSelectPage }: SidebarProp
   return (
     <aside className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800">
       <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-zinc-100 tracking-tight">Zenith Notes</h1>
+        <h1 className="text-lg font-bold text-zinc-100 tracking-tight">CubNotes</h1>
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {notebooks.map((nb) => (

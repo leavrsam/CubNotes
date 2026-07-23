@@ -88,7 +88,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
-              {loading ? 'Processing...' : 'Sign In'}
+              {loading ? 'Processing...' : 'Log In'}
             </button>
             <button
               onClick={handleSignUp}
