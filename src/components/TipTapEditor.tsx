@@ -249,7 +249,7 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
       {(isFocused || content === "<p></p>") && (
         <button 
           onClick={onDelete}
-          className="absolute -top-3 -right-3 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transition-colors opacity-0 group-hover:opacity-100"
+          className={`absolute -top-3 -right-3 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transition-colors ${isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         >
           <Trash2 size={14} />
         </button>

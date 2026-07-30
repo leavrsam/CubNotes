@@ -84,9 +84,9 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
       if (isMounted) {
         if (data?.document_state) {
           const state = data.document_state as DocumentState;
-          if (state.strokes) setStrokes(state.strokes);
-          if (state.texts) setTexts(state.texts);
-          if (state.audios) setAudios(state.audios);
+          setStrokes(state.strokes || []);
+          setTexts(state.texts || []);
+          setAudios(state.audios || []);
         } else {
           setStrokes([]);
           setTexts([]);
