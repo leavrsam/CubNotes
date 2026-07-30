@@ -9,10 +9,48 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
+import Highlight from "@tiptap/extension-highlight";
+import { Extension } from "@tiptap/core";
 import { 
   Trash2, Bold, Italic, Underline as UnderlineIcon, 
-  Heading1, Heading2, List, ListOrdered, AlignLeft, AlignCenter, AlignRight 
+  Heading1, Heading2, List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
+  Highlighter
 } from "lucide-react";
+
+// Custom Font Size Extension
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addOptions() {
+    return { types: ['textStyle'] }
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize.replace(/['"]+/g, ''),
+            renderHTML: attributes => {
+              if (!attributes.fontSize) return {}
+              return { style: `font-size: ${attributes.fontSize}` }
+            },
+          },
+        },
+      },
+    ]
+  },
+  addCommands() {
+    return {
+      setFontSize: fontSize => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize }).run()
+      },
+      unsetFontSize: () => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run()
+      },
+    }
+  },
+});
 
 interface TipTapEditorProps {
   content: string;
@@ -30,6 +68,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
       TextStyle,
       Color,
       FontFamily,
+      Highlight.configure({ multicolor: true }),
+      FontSize,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
     ],
     content: content,
@@ -68,6 +108,47 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
           editor={editor} 
           className="flex bg-zinc-900 text-white rounded-md overflow-hidden shadow-lg border border-zinc-700"
         >
+          <select
+            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
+            onChange={(e) => {
+              if (e.target.value === "") {
+                editor.chain().focus().unsetFontFamily().run();
+              } else {
+                editor.chain().focus().setFontFamily(e.target.value).run();
+              }
+            }}
+            value={editor.getAttributes('textStyle').fontFamily || ""}
+          >
+            <option value="">Font</option>
+            <option value="Inter, sans-serif">Sans Serif</option>
+            <option value="Georgia, serif">Serif</option>
+            <option value="Menlo, monospace">Monospace</option>
+          </select>
+          
+          <select
+            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
+            onChange={(e) => {
+              if (e.target.value === "") {
+                (editor.chain().focus() as any).unsetFontSize().run();
+              } else {
+                (editor.chain().focus() as any).setFontSize(e.target.value).run();
+              }
+            }}
+            value={editor.getAttributes('textStyle').fontSize || ""}
+          >
+            <option value="">Size</option>
+            <option value="12px">12px</option>
+            <option value="14px">14px</option>
+            <option value="16px">16px</option>
+            <option value="18px">18px</option>
+            <option value="20px">20px</option>
+            <option value="24px">24px</option>
+            <option value="30px">30px</option>
+            <option value="36px">36px</option>
+          </select>
+
+          <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
+
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('bold') ? 'bg-zinc-800' : ''}`}
@@ -88,6 +169,13 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             title="Underline"
           >
             <UnderlineIcon size={14} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleHighlight().run()}
+            className={`p-2 hover:bg-zinc-700 ${editor.isActive('highlight') ? 'bg-zinc-800 text-yellow-400' : ''}`}
+            title="Highlight"
+          >
+            <Highlighter size={14} />
           </button>
           
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />

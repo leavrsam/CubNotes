@@ -52,7 +52,7 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
   const [audios, setAudios] = useState<AudioNode[]>([]);
 
   // Active Tool
-  const [tool, setTool] = useState<ToolType>("pen");
+  const [tool, setTool] = useState<ToolType>("text");
 
   // Viewport state
   const [pan, setPan] = useState({ x: 0, y: 0 });
