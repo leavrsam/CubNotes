@@ -106,12 +106,14 @@ export default function Home() {
           byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
         const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'audio/webm' });
+        const mimeType = isDesktop ? 'audio/wav' : 'audio/webm';
+        const fileExt = isDesktop ? 'wav' : 'webm';
+        const blob = new Blob([byteArray], { type: mimeType });
         
-        const fileName = `${selectedPageId}/${uuidv4()}.webm`;
+        const fileName = `${selectedPageId}/${uuidv4()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('recordings')
-          .upload(fileName, blob, { contentType: 'audio/webm' });
+          .upload(fileName, blob, { contentType: mimeType });
           
         if (uploadError) {
           console.error("Upload error:", uploadError);
@@ -123,7 +125,7 @@ export default function Home() {
 
         // 2. Call Edge Function for Transcription/Summary
         const { data, error } = await supabase.functions.invoke('summarize-meeting', {
-          body: { audioBase64 }
+          body: { audioBase64, mimeType }
         });
         
         if (error) {

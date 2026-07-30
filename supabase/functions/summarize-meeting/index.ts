@@ -39,7 +39,7 @@ serve(async (req) => {
     }
 
     // 2. Parse request body
-    const { audioBase64 } = await req.json();
+    const { audioBase64, mimeType = 'audio/webm' } = await req.json();
 
     if (!audioBase64) {
       return new Response(JSON.stringify({ error: 'Missing audioBase64' }), {
@@ -70,7 +70,7 @@ serve(async (req) => {
                     {
                         inlineData: {
                             data: audioBase64,
-                            mimeType: 'audio/webm',
+                            mimeType: mimeType,
                         }
                     }
                 ]
