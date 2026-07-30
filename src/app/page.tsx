@@ -89,7 +89,7 @@ export default function Home() {
   const handleToggleMeeting = async () => {
     const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     
-    const processAudio = async (audioBase64: string) => {
+    const processAudio = async (audioBase64: string, webMimeType?: string) => {
       try {
         if (!selectedPageId) {
           toast.error("No page selected to save audio.");
@@ -106,8 +106,8 @@ export default function Home() {
           byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
         const byteArray = new Uint8Array(byteNumbers);
-        const mimeType = isDesktop ? 'audio/wav' : 'audio/webm';
-        const fileExt = isDesktop ? 'wav' : 'webm';
+        const mimeType = isDesktop ? 'audio/wav' : (webMimeType || 'audio/webm');
+        const fileExt = mimeType.split('/')[1]?.split(';')[0] || 'webm';
         const blob = new Blob([byteArray], { type: mimeType });
         
         const fileName = `${selectedPageId}/${uuidv4()}.${fileExt}`;
@@ -179,9 +179,9 @@ export default function Home() {
       if (isWebRecording) {
         setIsProcessing(true);
         try {
-          const audioBase64 = await stopWeb();
-          console.log("Captured Web Audio (Base64 length):", audioBase64.length);
-          await processAudio(audioBase64);
+          const { base64, mimeType } = await stopWeb();
+          console.log("Captured Web Audio (Base64 length):", base64.length, "MIME:", mimeType);
+          await processAudio(base64, mimeType);
         } catch (e) {
           console.error("Failed to stop web recording:", e);
         } finally {

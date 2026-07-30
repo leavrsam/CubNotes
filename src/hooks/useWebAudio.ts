@@ -25,7 +25,7 @@ export function useWebAudio() {
     }
   }, []);
 
-  const stopRecording = useCallback((): Promise<string> => {
+  const stopRecording = useCallback((): Promise<{ base64: string, mimeType: string }> => {
     return new Promise((resolve, reject) => {
       if (!mediaRecorderRef.current) {
         reject("No active recording");
@@ -35,14 +35,15 @@ export function useWebAudio() {
       const recorder = mediaRecorderRef.current;
       
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const actualMimeType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: actualMimeType });
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = () => {
           const base64data = reader.result as string;
           // Extract just the base64 part, stripping the data URL prefix
           const base64Content = base64data.split(',')[1];
-          resolve(base64Content);
+          resolve({ base64: base64Content, mimeType: actualMimeType } as any); // Type cast since we change return signature
         };
         reader.onerror = () => reject("Failed to read audio blob");
         
