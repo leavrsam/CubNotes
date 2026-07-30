@@ -106,14 +106,15 @@ export default function Home() {
           byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
         const byteArray = new Uint8Array(byteNumbers);
-        const mimeType = isDesktop ? 'audio/wav' : (webMimeType || 'audio/webm');
-        const fileExt = mimeType.split('/')[1]?.split(';')[0] || 'webm';
-        const blob = new Blob([byteArray], { type: mimeType });
+        const rawMimeType = isDesktop ? 'audio/wav' : (webMimeType || 'audio/webm');
+        const cleanMimeType = rawMimeType.split(';')[0];
+        const fileExt = cleanMimeType.split('/')[1] || 'webm';
+        const blob = new Blob([byteArray], { type: cleanMimeType });
         
         const fileName = `${selectedPageId}/${uuidv4()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from('recordings')
-          .upload(fileName, blob, { contentType: mimeType });
+          .upload(fileName, blob, { contentType: cleanMimeType });
           
         if (uploadError) {
           console.error("Upload error:", uploadError);
@@ -125,7 +126,7 @@ export default function Home() {
 
         // 2. Call Edge Function for Transcription/Summary
         const { data, error } = await supabase.functions.invoke('summarize-meeting', {
-          body: { audioBase64, mimeType }
+          body: { audioBase64, mimeType: cleanMimeType }
         });
         
         if (error) {
