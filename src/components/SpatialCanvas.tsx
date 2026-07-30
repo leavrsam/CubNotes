@@ -69,8 +69,8 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
   };
 
   const handlePointerDown = (e: any) => {
-    if (e.evt.button === 1 || tool === "pan") {
-      // Middle click or pan tool
+    if (e.evt.button === 1 || tool === "pan" || tool === "select") {
+      // Middle click, pan tool, or select tool
       return;
     }
     
@@ -132,7 +132,7 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
   };
 
   return (
-    <div className={`absolute inset-0 ${tool === 'pen' ? 'cursor-crosshair' : tool === 'pan' ? 'cursor-grab' : 'cursor-default'}`}>
+    <div className={`absolute inset-0 ${tool === 'pen' ? 'cursor-crosshair' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       <Stage
         width={typeof window !== 'undefined' ? window.innerWidth : 1000}
         height={typeof window !== 'undefined' ? window.innerHeight : 800}
@@ -140,9 +140,30 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
+        draggable={tool === 'pan'}
+        onDragStart={() => {
+          if (tool === 'pan') {
+            document.body.style.cursor = 'grabbing';
+          }
+        }}
+        onDragMove={(e) => {
+          if (e.target === stageRef.current) {
+            setPan({ x: e.target.x(), y: e.target.y() });
+          }
+        }}
+        onDragEnd={(e) => {
+          if (tool === 'pan') {
+            document.body.style.cursor = 'default';
+          }
+          if (e.target === stageRef.current) {
+            setPan({ x: e.target.x(), y: e.target.y() });
+          }
+        }}
+        x={pan.x}
+        y={pan.y}
         ref={stageRef}
       >
-        <Layer x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
+        <Layer scaleX={zoom} scaleY={zoom}>
           {strokes.map((stroke) => {
             const strokeData = getStroke(stroke.points, {
               size: stroke.size,
@@ -156,6 +177,32 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
                 key={stroke.id}
                 data={pathData}
                 fill={stroke.color}
+                x={stroke.x || 0}
+                y={stroke.y || 0}
+                draggable={tool === 'select'}
+                onDragStart={(e) => {
+                  e.cancelBubble = true;
+                }}
+                onDragEnd={(e) => {
+                  e.cancelBubble = true;
+                  const newX = e.target.x();
+                  const newY = e.target.y();
+                  setStrokes(prev => prev.map(s => 
+                    s.id === stroke.id ? { ...s, x: newX, y: newY } : s
+                  ));
+                }}
+                onMouseEnter={(e) => {
+                  if (tool === 'select') {
+                    const container = e.target.getStage()?.container();
+                    if (container) container.style.cursor = 'move';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (tool === 'select') {
+                    const container = e.target.getStage()?.container();
+                    if (container) container.style.cursor = 'default';
+                  }
+                }}
               />
             );
           })}

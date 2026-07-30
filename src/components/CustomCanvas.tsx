@@ -4,13 +4,15 @@ import React, { useState, useEffect, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
-import { Pen, Type, Hand } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2 } from "lucide-react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
 import { AudioOverlay } from "./AudioOverlay";
 
 interface CustomCanvasProps {
   pageId: string;
+  pageTitle: string;
+  onUpdatePageTitle: (title: string) => void;
 }
 
 export type Stroke = {
@@ -18,6 +20,8 @@ export type Stroke = {
   points: number[][]; // [x, y, pressure][]
   color: string;
   size: number;
+  x?: number;
+  y?: number;
 };
 
 export type TextNode = {
@@ -35,7 +39,7 @@ export type AudioNode = {
   url: string;
 };
 
-export type ToolType = "pen" | "text" | "pan";
+export type ToolType = "pen" | "text" | "pan" | "select";
 
 export type DocumentState = {
   strokes: Stroke[];
@@ -43,7 +47,7 @@ export type DocumentState = {
   audios?: AudioNode[];
 };
 
-export function CustomCanvas({ pageId }: CustomCanvasProps) {
+export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCanvasProps) {
   const [loading, setLoading] = useState(true);
   const [supabase] = useState(() => createClient());
 
@@ -185,6 +189,13 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
       {/* Tool Bar */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white dark:bg-zinc-800 p-2 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700">
         <button
+          onClick={() => setTool("select")}
+          className={`p-2 rounded-lg transition-colors ${tool === "select" ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+          title="Select Tool (Move items)"
+        >
+          <MousePointer2 size={20} />
+        </button>
+        <button
           onClick={() => setTool("pen")}
           className={`p-2 rounded-lg transition-colors ${tool === "pen" ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
           title="Pen Tool (Draw anywhere)"
@@ -207,7 +218,20 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
         </button>
       </div>
 
-      <div className="absolute inset-0" style={{ zIndex: tool === "pen" || tool === "pan" ? 30 : 10, pointerEvents: tool === "pen" || tool === "pan" ? "auto" : "none" }}>
+      {/* Page Title overlay */}
+      <div className="absolute top-24 left-16 z-40">
+        <input
+          type="text"
+          value={pageTitle}
+          onChange={(e) => onUpdatePageTitle(e.target.value)}
+          placeholder="Page Title"
+          className="bg-transparent text-4xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-[500px]"
+        />
+        {/* Decorative OneNote-style underline */}
+        <div className="w-[500px] h-[1px] bg-gradient-to-r from-zinc-300 to-transparent dark:from-zinc-700 mt-2"></div>
+      </div>
+
+      <div className="absolute inset-0" style={{ zIndex: tool === "pen" || tool === "pan" || tool === "select" ? 30 : 10, pointerEvents: tool === "pen" || tool === "pan" || tool === "select" ? "auto" : "none" }}>
         <SpatialCanvas 
           strokes={strokes}
           setStrokes={setStrokes}
@@ -219,13 +243,14 @@ export function CustomCanvas({ pageId }: CustomCanvasProps) {
         />
       </div>
 
-      <div className="absolute inset-0" style={{ zIndex: 20, pointerEvents: tool === "text" ? "auto" : "none" }}>
+      <div className="absolute inset-0" style={{ zIndex: 20, pointerEvents: tool === "text" || tool === "select" ? "auto" : "none" }}>
         <RichTextOverlay 
           texts={texts}
           setTexts={setTexts}
           pan={pan}
           zoom={zoom}
           onDoubleClick={handleDoubleClick}
+          tool={tool}
         />
       </div>
 

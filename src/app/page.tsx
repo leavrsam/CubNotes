@@ -201,6 +201,16 @@ export default function Home() {
 
   const isAnyRecording = isDesktopRecording || isWebRecording;
 
+  let activePageTitle = "Untitled Page";
+  if (selectedPageId) {
+    for (const nb of notebooks) {
+      for (const sec of nb.sections) {
+        const page = sec.pages.find(p => p.id === selectedPageId);
+        if (page) activePageTitle = page.title;
+      }
+    }
+  }
+
   return (
     <main className="flex w-full h-full relative overflow-hidden">
       {/* Sidebar - Desktop (sliding) and Mobile (overlay) */}
@@ -276,7 +286,11 @@ export default function Home() {
         </div>
 
         {selectedPageId ? (
-          <CustomCanvas pageId={selectedPageId} />
+          <CustomCanvas 
+            pageId={selectedPageId} 
+            pageTitle={activePageTitle}
+            onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
+          />
         ) : (
           <div className="flex flex-col gap-4 items-center justify-center w-full h-full text-zinc-500">
             <p>Select or create a page to begin.</p>
