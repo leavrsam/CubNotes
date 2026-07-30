@@ -105,6 +105,7 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
 
   // Save state to DB
   const saveToSupabase = useCallback(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     debounce(async (newStrokes: Stroke[], newTexts: TextNode[], newAudios: AudioNode[]) => {
       const state: DocumentState = { strokes: newStrokes, texts: newTexts, audios: newAudios };
       await supabase

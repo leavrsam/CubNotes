@@ -105,6 +105,7 @@ export function useNotebooks() {
 
       if (needsRefresh) {
         // We re-fetch to get the new structure including the DB-generated IDs
+        // eslint-disable-next-line no-use-before-define
         await fetchNotebooks();
       } else {
         setNotebooks(notebooksData);
