@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
-import { GoogleGenAI } from "npm:@google/genai";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,31 +54,20 @@ serve(async (req) => {
       throw new Error("GEMINI_API_KEY is not set in Edge Function secrets.");
     }
 
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
+    const ai = new GoogleGenerativeAI(geminiKey);
+    const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
     
-    // Convert base64 back into bytes for the SDK if needed, or pass it directly.
-    // The @google/genai SDK accepts base64 data directly for inline data
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-            {
-                role: 'user',
-                parts: [
-                    {
-                        text: "You are an expert AI meeting assistant. Transcribe and summarize this audio into key takeaways, action items, and decisions. Output clean markdown."
-                    },
-                    {
-                        inlineData: {
-                            data: audioBase64,
-                            mimeType: mimeType,
-                        }
-                    }
-                ]
-            }
-        ]
-    });
+    const result = await model.generateContent([
+      "You are an expert AI meeting assistant. Transcribe and summarize this audio into key takeaways, action items, and decisions. Output clean markdown.",
+      {
+        inlineData: {
+          data: audioBase64,
+          mimeType: mimeType,
+        }
+      }
+    ]);
 
-    const summaryText = response.text;
+    const summaryText = result.response.text();
 
     return new Response(JSON.stringify({ summary: summaryText }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
