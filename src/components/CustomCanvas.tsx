@@ -51,6 +51,10 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
   const [loading, setLoading] = useState(true);
   const [supabase] = useState(() => createClient());
 
+  // Drawing state
+  const [activeColor, setActiveColor] = useState("#3f3f46"); // zinc-700
+  const [activeSize, setActiveSize] = useState(4);
+
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [texts, setTexts] = useState<TextNode[]>([]);
   const [audios, setAudios] = useState<AudioNode[]>([]);
@@ -218,6 +222,39 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
         </button>
       </div>
 
+      {/* Pen Options Sub-menu */}
+      {tool === 'pen' && (
+        <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-white dark:bg-zinc-800 p-2 px-4 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center gap-1">
+            {['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#3f3f46', '#ffffff'].map(color => (
+              <button
+                key={color}
+                onClick={() => setActiveColor(color)}
+                className={`w-6 h-6 rounded-full border-2 transition-transform ${activeColor === color ? 'scale-125 border-zinc-400' : 'border-transparent hover:scale-110'}`}
+                style={{ backgroundColor: color }}
+                title={`Color: ${color}`}
+              />
+            ))}
+          </div>
+          <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+          <div className="flex items-center gap-2">
+            {[2, 4, 8, 12].map(size => (
+              <button
+                key={size}
+                onClick={() => setActiveSize(size)}
+                className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${activeSize === size ? 'bg-zinc-100 dark:bg-zinc-700' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+                title={`Thickness: ${size}`}
+              >
+                <div 
+                  className="rounded-full bg-current text-zinc-900 dark:text-zinc-100" 
+                  style={{ width: size, height: size }} 
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Page Title overlay */}
       <div className="absolute top-24 left-16 z-40">
         <input
@@ -240,6 +277,8 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
           zoom={zoom}
           setZoom={setZoom}
           tool={tool}
+          activeColor={activeColor}
+          activeSize={activeSize}
         />
       </div>
 

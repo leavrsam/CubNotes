@@ -29,15 +29,13 @@ interface SpatialCanvasProps {
   zoom: number;
   setZoom: React.Dispatch<React.SetStateAction<number>>;
   tool: ToolType;
+  activeColor: string;
+  activeSize: number;
 }
 
-export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom, tool }: SpatialCanvasProps) {
+export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom, tool, activeColor, activeSize }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
-  
-  // Use a high contrast color by default
-  const activeColor = "#3f3f46"; // zinc-700
-  const activeSize = 4;
 
   const stageRef = useRef<any>(null);
 
