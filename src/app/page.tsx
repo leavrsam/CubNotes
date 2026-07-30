@@ -287,6 +287,7 @@ export default function Home() {
 
         {selectedPageId ? (
           <CustomCanvas 
+            key={selectedPageId}
             pageId={selectedPageId} 
             pageTitle={activePageTitle}
             onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}

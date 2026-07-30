@@ -120,6 +120,10 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
     if (!loading) {
       saveToSupabase(strokes, texts, audios);
     }
+    
+    return () => {
+      saveToSupabase.flush();
+    };
   }, [strokes, texts, audios, loading, saveToSupabase]);
 
   const handleDoubleClick = useCallback((x: number, y: number) => {
