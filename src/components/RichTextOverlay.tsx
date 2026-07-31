@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import type { TextNode, ToolType } from "./CustomCanvas";
 import { TipTapEditor } from "./TipTapEditor";
@@ -13,25 +13,30 @@ interface RichTextOverlayProps {
   zoom: number;
   onDoubleClick: (x: number, y: number) => void;
   tool: ToolType;
+  selectedNodeId?: string | null;
+  setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
-export function RichTextOverlay({ texts, setTexts, pan, zoom, onDoubleClick, tool }: RichTextOverlayProps) {
+export function RichTextOverlay({ 
+  texts, setTexts, 
+  pan, zoom, onDoubleClick, tool,
+  selectedNodeId, setSelectedNodeId
+}: RichTextOverlayProps) {
   // Dragging state
-  const [draggingId, setDraggingId] = React.useState<string | null>(null);
-  const dragStartRef = React.useRef<{ x: number, y: number, nodeX: number, nodeY: number } | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragStartRef = useRef<{ x: number, y: number, nodeX: number, nodeY: number } | null>(null);
+  
+  // Resizing state
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const resizeStartRef = useRef<{ x: number, nodeWidth: number } | null>(null);
   
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    // Only trigger if clicking directly on the overlay background, not on an existing text box
     if (e.target !== e.currentTarget) return;
-    
     const rect = e.currentTarget.getBoundingClientRect();
     const clientX = e.clientX - rect.left;
     const clientY = e.clientY - rect.top;
-    
-    // Convert screen coordinates to world coordinates
     const worldX = (clientX - pan.x) / zoom;
     const worldY = (clientY - pan.y) / zoom;
-    
     onDoubleClick(worldX, worldY);
   }, [pan, zoom, onDoubleClick]);
 
@@ -44,27 +49,38 @@ export function RichTextOverlay({ texts, setTexts, pan, zoom, onDoubleClick, too
   }, [setTexts]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!draggingId || !dragStartRef.current) return;
-    
-    // We calculate the delta in screen pixels, then divide by zoom to get world pixels
-    const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
-    const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
-    
-    setTexts(prev => prev.map(t => {
-      if (t.id === draggingId && dragStartRef.current) {
-        return {
-          ...t,
-          x: dragStartRef.current.nodeX + deltaX,
-          y: dragStartRef.current.nodeY + deltaY
-        };
-      }
-      return t;
-    }));
-  }, [draggingId, setTexts, zoom]);
+    if (draggingId && dragStartRef.current) {
+      const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
+      const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
+      setTexts(prev => prev.map(t => {
+        if (t.id === draggingId && dragStartRef.current) {
+          return {
+            ...t,
+            x: dragStartRef.current.nodeX + deltaX,
+            y: dragStartRef.current.nodeY + deltaY
+          };
+        }
+        return t;
+      }));
+    } else if (resizingId && resizeStartRef.current) {
+      const deltaX = (e.clientX - resizeStartRef.current.x) / zoom;
+      setTexts(prev => prev.map(t => {
+        if (t.id === resizingId && resizeStartRef.current) {
+          return {
+            ...t,
+            width: Math.max(100, resizeStartRef.current.nodeWidth + deltaX)
+          };
+        }
+        return t;
+      }));
+    }
+  }, [draggingId, resizingId, setTexts, zoom]);
 
   const handlePointerUp = useCallback(() => {
     setDraggingId(null);
     dragStartRef.current = null;
+    setResizingId(null);
+    resizeStartRef.current = null;
   }, []);
 
   return (
@@ -74,10 +90,14 @@ export function RichTextOverlay({ texts, setTexts, pan, zoom, onDoubleClick, too
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      {/* Background capture for double clicks in text mode */}
       <div 
         className="absolute inset-0 cursor-text" 
         onDoubleClick={handleDoubleClick} 
+        onPointerDown={() => {
+          if (tool === 'select') {
+            setSelectedNodeId?.(null);
+          }
+        }}
       />
       
       <div 
@@ -87,40 +107,67 @@ export function RichTextOverlay({ texts, setTexts, pan, zoom, onDoubleClick, too
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`
         }}
       >
-        {texts.map(node => (
-          <div 
-            key={node.id}
-            className={`absolute pointer-events-auto group ${tool === 'select' ? 'ring-1 ring-dashed ring-zinc-400 hover:ring-indigo-400' : ''}`}
-            style={{
-              left: node.x,
-              top: node.y,
-              width: node.width,
-            }}
-          >
-            {tool === 'select' && (
-              <div 
-                className="absolute -left-6 top-0 p-1 cursor-grab active:cursor-grabbing text-zinc-400 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                onPointerDown={(e) => {
+        {texts.map(node => {
+          const isSelected = selectedNodeId === node.id;
+          return (
+            <div 
+              key={node.id}
+              onPointerDown={(e) => {
+                if (tool === 'select') {
                   e.stopPropagation();
-                  setDraggingId(node.id);
-                  dragStartRef.current = {
-                    x: e.clientX,
-                    y: e.clientY,
-                    nodeX: node.x,
-                    nodeY: node.y
-                  };
-                }}
-              >
-                <GripVertical size={16} />
-              </div>
-            )}
-            <TipTapEditor 
-              content={node.content} 
-              onChange={(content) => updateTextNode(node.id, content)}
-              onDelete={() => deleteTextNode(node.id)}
-            />
-          </div>
-        ))}
+                  setSelectedNodeId?.(node.id);
+                }
+              }}
+              className={`absolute pointer-events-auto group ${isSelected && tool === 'select' ? 'ring-2 ring-indigo-500 rounded-lg' : tool === 'select' ? 'hover:ring-2 hover:ring-indigo-300 rounded-lg' : ''}`}
+              style={{
+                left: node.x,
+                top: node.y,
+                width: node.width,
+              }}
+            >
+              {isSelected && tool === 'select' && (
+                <>
+                  {/* Drag Handle (Move) */}
+                  <div 
+                    className="absolute -left-6 top-0 p-1 cursor-grab active:cursor-grabbing text-indigo-500 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-sm"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      setDraggingId(node.id);
+                      dragStartRef.current = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        nodeX: node.x,
+                        nodeY: node.y
+                      };
+                    }}
+                  >
+                    <GripVertical size={16} />
+                  </div>
+
+                  {/* Resize Handle (Right edge) */}
+                  <div 
+                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      setResizingId(node.id);
+                      resizeStartRef.current = {
+                        x: e.clientX,
+                        nodeWidth: node.width
+                      };
+                    }}
+                  >
+                    <div className="w-1 h-8 bg-indigo-300 group-hover/resize:bg-indigo-500 rounded-full" />
+                  </div>
+                </>
+              )}
+              <TipTapEditor 
+                content={node.content} 
+                onChange={(content) => updateTextNode(node.id, content)}
+                onDelete={() => deleteTextNode(node.id)}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

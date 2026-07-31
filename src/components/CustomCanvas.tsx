@@ -22,6 +22,8 @@ export type Stroke = {
   size: number;
   x?: number;
   y?: number;
+  scaleX?: number;
+  scaleY?: number;
 };
 
 export type TextNode = {
@@ -36,6 +38,7 @@ export type AudioNode = {
   id: string;
   x: number;
   y: number;
+  width?: number;
   url: string;
   title?: string;
   summary?: string;
@@ -61,6 +64,9 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [texts, setTexts] = useState<TextNode[]>([]);
   const [audios, setAudios] = useState<AudioNode[]>([]);
+
+  // Selection state
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   // Active Tool
   const [tool, setTool] = useState<ToolType>("text");
@@ -169,6 +175,7 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
         id: id || uuidv4(),
         x: worldX,
         y: worldY,
+        width: 400,
         url,
         title: "Meeting Recording"
       };
@@ -281,6 +288,8 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
           tool={tool}
           activeColor={activeColor}
           activeSize={activeSize}
+          selectedNodeId={selectedNodeId}
+          setSelectedNodeId={setSelectedNodeId}
         />
       </div>
 
@@ -292,6 +301,8 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
           zoom={zoom}
           onDoubleClick={handleDoubleClick}
           tool={tool}
+          selectedNodeId={selectedNodeId}
+          setSelectedNodeId={setSelectedNodeId}
         />
       </div>
 
@@ -301,6 +312,9 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
           setAudios={setAudios}
           pan={pan}
           zoom={zoom}
+          tool={tool}
+          selectedNodeId={selectedNodeId}
+          setSelectedNodeId={setSelectedNodeId}
         />
       </div>
     </div>

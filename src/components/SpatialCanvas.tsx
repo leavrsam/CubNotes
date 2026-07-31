@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
-import { Stage, Layer, Path } from "react-konva";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import { Stage, Layer, Path, Transformer } from "react-konva";
 import { getStroke } from "perfect-freehand";
 import { v4 as uuidv4 } from "uuid";
 import type { Stroke, ToolType } from "./CustomCanvas";
@@ -31,13 +31,37 @@ interface SpatialCanvasProps {
   tool: ToolType;
   activeColor: string;
   activeSize: number;
+  selectedNodeId?: string | null;
+  setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
-export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom, tool, activeColor, activeSize }: SpatialCanvasProps) {
+export function SpatialCanvas({ 
+  strokes, setStrokes, 
+  pan, setPan, 
+  zoom, setZoom, 
+  tool, activeColor, activeSize,
+  selectedNodeId, setSelectedNodeId
+}: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
 
   const stageRef = useRef<any>(null);
+  const transformerRef = useRef<any>(null);
+  const selectedNodeRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (selectedNodeId && transformerRef.current && selectedNodeRef.current) {
+      // Check if the selected node is actually a stroke in this canvas
+      if (strokes.some(s => s.id === selectedNodeId)) {
+        transformerRef.current.nodes([selectedNodeRef.current]);
+        transformerRef.current.getLayer().batchDraw();
+      } else {
+        transformerRef.current.nodes([]);
+      }
+    } else if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+    }
+  }, [selectedNodeId, strokes]);
 
   const getPointerPos = (e?: any) => {
     const stage = stageRef.current;
@@ -67,11 +91,20 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
   };
 
   const handlePointerDown = (e: any) => {
-    if (e.evt.button === 1 || tool === "pan" || tool === "select") {
-      // Middle click, pan tool, or select tool
+    if (e.evt.button === 1 || tool === "pan") {
+      // Middle click or pan tool
       return;
     }
     
+    if (tool === "select") {
+      // If we clicked on empty space, deselect
+      if (e.target === stageRef.current) {
+        setSelectedNodeId?.(null);
+      }
+      return;
+    }
+    
+    if (setSelectedNodeId) setSelectedNodeId(null);
     setIsDrawing(true);
     const pos = getPointerPos(e);
     
@@ -170,14 +203,24 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
               streamline: 0.5,
             });
             const pathData = getSvgPathFromStroke(strokeData);
+            const isSelected = stroke.id === selectedNodeId;
             return (
               <Path
                 key={stroke.id}
+                ref={isSelected ? selectedNodeRef : undefined}
                 data={pathData}
                 fill={stroke.color}
                 x={stroke.x || 0}
                 y={stroke.y || 0}
+                scaleX={stroke.scaleX || 1}
+                scaleY={stroke.scaleY || 1}
                 draggable={tool === 'select'}
+                onPointerDown={(e) => {
+                  if (tool === 'select') {
+                    e.cancelBubble = true;
+                    setSelectedNodeId?.(stroke.id);
+                  }
+                }}
                 onDragStart={(e) => {
                   e.cancelBubble = true;
                 }}
@@ -187,6 +230,17 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
                   const newY = e.target.y();
                   setStrokes(prev => prev.map(s => 
                     s.id === stroke.id ? { ...s, x: newX, y: newY } : s
+                  ));
+                }}
+                onTransformEnd={(e) => {
+                  const node = e.target;
+                  const scaleX = node.scaleX();
+                  const scaleY = node.scaleY();
+                  const x = node.x();
+                  const y = node.y();
+
+                  setStrokes(prev => prev.map(s => 
+                    s.id === stroke.id ? { ...s, x, y, scaleX, scaleY } : s
                   ));
                 }}
                 onMouseEnter={(e) => {
@@ -214,6 +268,20 @@ export function SpatialCanvas({ strokes, setStrokes, pan, setPan, zoom, setZoom,
                 streamline: 0.5,
               }))}
               fill={currentStroke.color}
+            />
+          )}
+
+          {/* Attach Transformer for selected node */}
+          {tool === 'select' && selectedNodeId && strokes.some(s => s.id === selectedNodeId) && (
+            <Transformer
+              ref={transformerRef}
+              boundBoxFunc={(oldBox, newBox) => {
+                // limit resize
+                if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5) {
+                  return oldBox;
+                }
+                return newBox;
+              }}
             />
           )}
         </Layer>
