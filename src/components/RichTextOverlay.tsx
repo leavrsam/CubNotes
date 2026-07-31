@@ -165,6 +165,10 @@ export function RichTextOverlay({
                 onChange={(content) => updateTextNode(node.id, content)}
                 onDelete={() => deleteTextNode(node.id)}
               />
+              {/* Invisible overlay to capture clicks when in select mode */}
+              {tool === 'select' && (
+                <div className="absolute inset-0 z-10 cursor-pointer" />
+              )}
             </div>
           );
         })}

@@ -242,6 +242,11 @@ export function AudioOverlay({
                   </div>
                 </details>
               )}
+              
+              {/* Invisible overlay to capture clicks when in select mode */}
+              {tool === 'select' && (
+                <div className="absolute inset-0 z-10 cursor-pointer" />
+              )}
             </div>
           );
         })}
