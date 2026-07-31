@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -75,12 +75,13 @@ serve(async (req) => {
   } catch (error) {
     console.error("Function error:", error);
     
-    // Check if the error is a rate limit or quota error from Gemini
-    const errorMsg = error.message?.toLowerCase() || '';
-    const isRateLimit = errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit');
-    
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: isRateLimit ? 429 : 500,
+    // We return 200 so supabase-js parses the body instead of throwing a generic HttpError
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: error.message || String(error),
+      stack: error.stack
+    }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
