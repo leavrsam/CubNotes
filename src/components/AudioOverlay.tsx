@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import type { AudioNode } from "./CustomCanvas";
-import { Trash2 } from "lucide-react";
+import { Trash2, Edit2, Check } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'react-markdown';
 
@@ -15,12 +15,18 @@ interface AudioOverlayProps {
 
 export function AudioOverlay({ audios, setAudios, pan, zoom }: AudioOverlayProps) {
   
+  const [editingId, setEditingId] = useState<{ id: string, field: 'summary' | 'transcript' } | null>(null);
+
   const deleteAudioNode = useCallback((id: string) => {
     setAudios(prev => prev.filter(a => a.id !== id));
   }, [setAudios]);
 
   const updateAudioTitle = useCallback((id: string, newTitle: string) => {
     setAudios(prev => prev.map(a => a.id === id ? { ...a, title: newTitle } : a));
+  }, [setAudios]);
+
+  const updateAudioField = useCallback((id: string, field: 'summary' | 'transcript', value: string) => {
+    setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   }, [setAudios]);
 
   return (
@@ -64,19 +70,75 @@ export function AudioOverlay({ audios, setAudios, pan, zoom }: AudioOverlayProps
           </audio>
 
           {node.summary && (
-            <div className="mt-2 text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 overflow-hidden">
-              <ReactMarkdown>{node.summary}</ReactMarkdown>
-            </div>
+            <details open className="mt-2 group/details">
+              <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="transform transition-transform group-open/details:rotate-90">▶</span>
+                  View Summary
+                </div>
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (editingId?.id === node.id && editingId?.field === 'summary') {
+                      setEditingId(null);
+                    } else {
+                      setEditingId({ id: node.id, field: 'summary' });
+                    }
+                  }}
+                  className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  {editingId?.id === node.id && editingId?.field === 'summary' ? <Check size={14} /> : <Edit2 size={14} />}
+                </button>
+              </summary>
+              <div className="mt-3">
+                {editingId?.id === node.id && editingId?.field === 'summary' ? (
+                  <textarea 
+                    value={node.summary}
+                    onChange={(e) => updateAudioField(node.id, 'summary', e.target.value)}
+                    className="w-full h-40 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
+                  />
+                ) : (
+                  <div className="text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 overflow-hidden">
+                    <ReactMarkdown>{node.summary}</ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            </details>
           )}
 
           {node.transcript && (
             <details className="mt-2 border-t border-zinc-200 dark:border-zinc-700 pt-2 group/details">
-              <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center gap-2">
-                <span className="transform transition-transform group-open/details:rotate-90">▶</span>
-                View Transcript
+              <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="transform transition-transform group-open/details:rotate-90">▶</span>
+                  View Transcript
+                </div>
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (editingId?.id === node.id && editingId?.field === 'transcript') {
+                      setEditingId(null);
+                    } else {
+                      setEditingId({ id: node.id, field: 'transcript' });
+                    }
+                  }}
+                  className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  {editingId?.id === node.id && editingId?.field === 'transcript' ? <Check size={14} /> : <Edit2 size={14} />}
+                </button>
               </summary>
-              <div className="mt-3 text-sm text-zinc-600 dark:text-zinc-400 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar whitespace-pre-wrap leading-relaxed">
-                {node.transcript}
+              <div className="mt-3">
+                {editingId?.id === node.id && editingId?.field === 'transcript' ? (
+                  <textarea 
+                    value={node.transcript}
+                    onChange={(e) => updateAudioField(node.id, 'transcript', e.target.value)}
+                    className="w-full h-64 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
+                  />
+                ) : (
+                  <div className="text-sm text-zinc-600 dark:text-zinc-400 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar whitespace-pre-wrap leading-relaxed">
+                    {node.transcript}
+                  </div>
+                )}
               </div>
             </details>
           )}
