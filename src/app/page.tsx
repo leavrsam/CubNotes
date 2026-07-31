@@ -96,6 +96,8 @@ export default function Home() {
           return;
         }
 
+        const audioId = uuidv4();
+
         // 1. Upload audio to Supabase Storage
         toast.loading("Uploading audio and generating summary...", { id: "audio-process" });
         
