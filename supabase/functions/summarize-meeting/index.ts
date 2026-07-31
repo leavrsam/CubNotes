@@ -55,7 +55,7 @@ serve(async (req) => {
     }
 
     const ai = new GoogleGenerativeAI(geminiKey);
-    const model = ai.getGenerativeModel({ model: "gemini-3-flash" });
+    const model = ai.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
     
     const result = await model.generateContent([
       "You are an expert AI meeting assistant. Transcribe and summarize this audio into key takeaways, action items, and decisions. Output clean markdown.",
