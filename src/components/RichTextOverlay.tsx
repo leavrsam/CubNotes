@@ -76,28 +76,23 @@ export function RichTextOverlay({
     }
   }, [draggingId, resizingId, setTexts, zoom]);
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (draggingId || resizingId) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    }
     setDraggingId(null);
     dragStartRef.current = null;
     setResizingId(null);
     resizeStartRef.current = null;
-  }, []);
+  }, [draggingId, resizingId]);
 
   return (
-    <div 
-      className="absolute inset-0 z-10"
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-    >
+    <div className="absolute inset-0 z-10 pointer-events-none">
       <div 
-        className="absolute inset-0 cursor-text" 
+        className={`absolute inset-0 ${tool === 'text' ? 'cursor-text pointer-events-auto' : 'pointer-events-none'}`} 
         onDoubleClick={handleDoubleClick} 
-        onPointerDown={() => {
-          if (tool === 'select') {
-            setSelectedNodeId?.(null);
-          }
-        }}
       />
       
       <div 
@@ -129,9 +124,10 @@ export function RichTextOverlay({
                 <>
                   {/* Drag Handle (Move) */}
                   <div 
-                    className="absolute -left-6 top-0 p-1 cursor-grab active:cursor-grabbing text-indigo-500 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-sm"
+                    className="absolute -left-6 top-0 p-1 cursor-grab active:cursor-grabbing text-indigo-500 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-sm z-20"
                     onPointerDown={(e) => {
                       e.stopPropagation();
+                      e.currentTarget.setPointerCapture(e.pointerId);
                       setDraggingId(node.id);
                       dragStartRef.current = {
                         x: e.clientX,
@@ -140,21 +136,26 @@ export function RichTextOverlay({
                         nodeY: node.y
                       };
                     }}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
                   >
                     <GripVertical size={16} />
                   </div>
 
                   {/* Resize Handle (Right edge) */}
                   <div 
-                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize"
+                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20"
                     onPointerDown={(e) => {
                       e.stopPropagation();
+                      e.currentTarget.setPointerCapture(e.pointerId);
                       setResizingId(node.id);
                       resizeStartRef.current = {
                         x: e.clientX,
                         nodeWidth: node.width
                       };
                     }}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
                   >
                     <div className="w-1 h-8 bg-indigo-300 group-hover/resize:bg-indigo-500 rounded-full" />
                   </div>

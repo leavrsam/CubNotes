@@ -277,7 +277,7 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
         <div className="w-[500px] h-[1px] bg-gradient-to-r from-zinc-300 to-transparent dark:from-zinc-700 mt-2"></div>
       </div>
 
-      <div className="absolute inset-0" style={{ zIndex: tool === "pen" || tool === "pan" || tool === "select" ? 30 : 10, pointerEvents: tool === "pen" || tool === "pan" || tool === "select" ? "auto" : "none" }}>
+      <div className="absolute inset-0" style={{ zIndex: tool === "pen" || tool === "pan" ? 30 : 10, pointerEvents: tool === "pen" || tool === "pan" || tool === "select" ? "auto" : "none" }}>
         <SpatialCanvas 
           strokes={strokes}
           setStrokes={setStrokes}
