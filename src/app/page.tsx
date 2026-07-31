@@ -131,14 +131,16 @@ export default function Home() {
         
         if (error || (data && data.success === false)) {
           const actualError = data?.error || error;
-          console.error("Edge function exact error:", actualError);
+          console.error("============= EDGE FUNCTION ERROR =============");
+          console.error(actualError);
+          console.error("===============================================");
           const errorMsg = String(actualError).toLowerCase();
           const isRateLimit = errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit') || errorMsg.includes('exhausted');
           
           if (isRateLimit) {
             toast.error('Our AI is resting! The daily transcription limit has been reached.', { id: "audio-process" });
           } else {
-            toast.error(`Error: ${String(actualError).substring(0, 50)}...`, { id: "audio-process" });
+            toast.error(`Error: ${String(actualError)}`, { id: "audio-process", duration: 8000 });
           }
           return;
         }
