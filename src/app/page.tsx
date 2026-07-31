@@ -129,15 +129,16 @@ export default function Home() {
           body: { audioBase64, mimeType: cleanMimeType }
         });
         
-        if (error) {
-          console.error("Edge function error:", error);
-          const status = (error as any).status || (error as any).context?.status;
-          const isRateLimit = status === 429 || error.message?.includes('429');
+        if (error || (data && data.success === false)) {
+          const actualError = data?.error || error;
+          console.error("Edge function exact error:", actualError);
+          const errorMsg = String(actualError).toLowerCase();
+          const isRateLimit = errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit') || errorMsg.includes('exhausted');
           
           if (isRateLimit) {
             toast.error('Our AI is resting! The daily transcription limit has been reached.', { id: "audio-process" });
           } else {
-            toast.error('Failed to summarize meeting. Please try again.', { id: "audio-process" });
+            toast.error(`Error: ${String(actualError).substring(0, 50)}...`, { id: "audio-process" });
           }
           return;
         }
