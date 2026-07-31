@@ -37,6 +37,9 @@ export type AudioNode = {
   x: number;
   y: number;
   url: string;
+  title?: string;
+  summary?: string;
+  transcript?: string;
 };
 
 export type ToolType = "pen" | "text" | "pan" | "select";
@@ -139,41 +142,35 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
 
   useEffect(() => {
     const handleInjectSummary = (e: Event) => {
-      const customEvent = e as CustomEvent<{ summary: string }>;
-      const { summary } = customEvent.detail;
+      const customEvent = e as CustomEvent<{ id: string, summary: string, transcript: string }>;
+      const { id, summary, transcript } = customEvent.detail;
       
-      // Calculate center of screen
-      const screenCenterX = window.innerWidth / 2;
-      const screenCenterY = window.innerHeight / 2;
-      
-      const worldX = (screenCenterX - pan.x) / zoom;
-      const worldY = (screenCenterY - pan.y) / zoom;
-
-      const newNode: TextNode = {
-        id: uuidv4(),
-        x: worldX,
-        y: worldY,
-        width: 500,
-        // Convert basic markdown to HTML for TipTap
-        content: summary.replace(/\n/g, '<br/>')
-      };
-      
-      setTexts(prev => [...prev, newNode]);
+      setAudios(prev => prev.map(audio => {
+        if (audio.id === id) {
+          return { ...audio, summary, transcript };
+        }
+        return audio;
+      }));
     };
 
     const handleInjectAudio = (e: Event) => {
-      const customEvent = e as CustomEvent<{ url: string }>;
-      const { url } = customEvent.detail;
+      const customEvent = e as CustomEvent<{ id: string, url: string }>;
+      const { id, url } = customEvent.detail;
       
-      // Calculate top right corner roughly
-      const worldX = (window.innerWidth - 350 - pan.x) / zoom;
-      const worldY = (40 - pan.y) / zoom;
+      // Calculate center of screen for the audio node
+      const screenCenterX = window.innerWidth / 2;
+      const screenCenterY = window.innerHeight / 2;
+      
+      // Offset by half the width of the audio player (approx 160px) to truly center it
+      const worldX = (screenCenterX - 160 - pan.x) / zoom;
+      const worldY = (screenCenterY - pan.y) / zoom;
 
       const newAudio: AudioNode = {
-        id: uuidv4(),
+        id: id || uuidv4(),
         x: worldX,
         y: worldY,
-        url
+        url,
+        title: "Meeting Recording"
       };
       
       setAudios(prev => [...prev, newAudio]);

@@ -55,10 +55,15 @@ serve(async (req) => {
     }
 
     const ai = new GoogleGenerativeAI(geminiKey);
-    const model = ai.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-3.5-flash-lite",
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    });
     
     const result = await model.generateContent([
-      "You are an expert AI meeting assistant. Transcribe and summarize this audio into key takeaways, action items, and decisions. Output clean markdown.",
+      "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript'. Then, summarize it into key takeaways, action items, and decisions as 'summary' (formatted in clean markdown). Return a JSON object with two string keys: 'summary' and 'transcript'.",
       {
         inlineData: {
           data: audioBase64,
@@ -67,9 +72,22 @@ serve(async (req) => {
       }
     ]);
 
-    const summaryText = result.response.text();
+    const responseText = result.response.text();
+    let parsedData = { summary: "", transcript: "" };
+    
+    try {
+      parsedData = JSON.parse(responseText);
+    } catch (e) {
+      console.warn("Failed to parse JSON, falling back to raw text", e);
+      parsedData.summary = responseText;
+      parsedData.transcript = "Transcript not available in requested format.";
+    }
 
-    return new Response(JSON.stringify({ summary: summaryText }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      summary: parsedData.summary,
+      transcript: parsedData.transcript
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

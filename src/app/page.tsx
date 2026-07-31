@@ -121,7 +121,7 @@ export default function Home() {
           toast.error("Failed to upload audio.", { id: "audio-process" });
         } else {
           const { data: publicUrlData } = supabase.storage.from('recordings').getPublicUrl(fileName);
-          window.dispatchEvent(new CustomEvent('inject-audio', { detail: { url: publicUrlData.publicUrl } }));
+          window.dispatchEvent(new CustomEvent('inject-audio', { detail: { id: audioId, url: publicUrlData.publicUrl } }));
         }
 
         // 2. Call Edge Function for Transcription/Summary
@@ -146,7 +146,7 @@ export default function Home() {
         }
         
         if (data?.summary) {
-          window.dispatchEvent(new CustomEvent('inject-summary', { detail: { summary: data.summary } }));
+          window.dispatchEvent(new CustomEvent('inject-summary', { detail: { id: audioId, summary: data.summary, transcript: data.transcript || "Transcript not available." } }));
           toast.success('Meeting summary added to canvas!', { id: "audio-process" });
         } else {
           toast.dismiss("audio-process");
