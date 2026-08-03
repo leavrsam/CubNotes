@@ -110,7 +110,7 @@ export function AudioOverlay({
                   setSelectedNodeId?.(node.id);
                 }
               }}
-              className={`absolute pointer-events-auto group bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md p-4 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 flex flex-col gap-3 transition-colors ${isSelected && tool === 'select' ? 'ring-2 ring-indigo-500' : tool === 'select' ? 'hover:ring-2 hover:ring-indigo-300 cursor-pointer' : ''} max-h-[80vh] overflow-y-auto`}
+              className={`absolute pointer-events-auto group transition-colors ${isSelected && tool === 'select' ? 'ring-2 ring-indigo-500 rounded-xl' : tool === 'select' ? 'hover:ring-2 hover:ring-indigo-300 rounded-xl cursor-pointer' : ''}`}
               style={{
                 left: node.x,
                 top: node.y,
@@ -153,106 +153,108 @@ export function AudioOverlay({
                 </>
               )}
 
-              <div className="flex justify-between items-center px-1">
-                <input 
-                  type="text"
-                  value={node.title || "Meeting Recording"}
-                  onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-                  className={`text-sm font-bold text-zinc-800 dark:text-zinc-100 bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-1 py-0.5 rounded transition-colors w-full ${tool === 'select' ? 'pointer-events-none' : ''}`}
-                  placeholder="Recording Name..."
-                />
-                <button 
-                  onClick={() => deleteAudioNode(node.id)}
-                  className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0 ${tool === 'select' ? 'pointer-events-none' : ''}`}
-                  title="Delete Recording"
-                >
-                  <Trash2 size={16} />
-                </button>
+              <div className="w-full flex flex-col gap-3 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md p-4 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 max-h-[80vh] overflow-y-auto overflow-x-hidden">
+                <div className="flex justify-between items-center px-1">
+                  <input 
+                    type="text"
+                    value={node.title || "Meeting Recording"}
+                    onChange={(e) => updateAudioTitle(node.id, e.target.value)}
+                    className={`text-sm font-bold text-zinc-800 dark:text-zinc-100 bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-1 py-0.5 rounded transition-colors w-full ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                    placeholder="Recording Name..."
+                  />
+                  <button 
+                    onClick={() => deleteAudioNode(node.id)}
+                    className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0 ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                    title="Delete Recording"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                
+                <audio controls className={`w-full h-10 outline-none rounded-md ${tool === 'select' ? 'pointer-events-none' : ''}`}>
+                  <source src={node.url} type="audio/webm" />
+                  Your browser does not support the audio element.
+                </audio>
+
+                {node.summary && (
+                  <details open className="mt-2 group/details">
+                    <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="transform transition-transform group-open/details:rotate-90">▶</span>
+                        View Summary
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (editingId?.id === node.id && editingId?.field === 'summary') {
+                            setEditingId(null);
+                          } else {
+                            setEditingId({ id: node.id, field: 'summary' });
+                          }
+                        }}
+                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                      >
+                        {editingId?.id === node.id && editingId?.field === 'summary' ? <Check size={14} /> : <Edit2 size={14} />}
+                      </button>
+                    </summary>
+                    <div className={`mt-3 ${tool === 'select' ? 'pointer-events-none' : ''}`}>
+                      {editingId?.id === node.id && editingId?.field === 'summary' ? (
+                        <textarea 
+                          value={node.summary}
+                          onChange={(e) => updateAudioField(node.id, 'summary', e.target.value)}
+                          className="w-full h-40 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
+                        />
+                      ) : (
+                        <div className="text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 overflow-hidden">
+                          <ReactMarkdown>{node.summary}</ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
+
+                {node.transcript && (
+                  <details className="mt-2 border-t border-zinc-200 dark:border-zinc-700 pt-2 group/details">
+                    <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="transform transition-transform group-open/details:rotate-90">▶</span>
+                        View Transcript
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (editingId?.id === node.id && editingId?.field === 'transcript') {
+                            setEditingId(null);
+                          } else {
+                            setEditingId({ id: node.id, field: 'transcript' });
+                          }
+                        }}
+                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                      >
+                        {editingId?.id === node.id && editingId?.field === 'transcript' ? <Check size={14} /> : <Edit2 size={14} />}
+                      </button>
+                    </summary>
+                    <div className={`mt-3 ${tool === 'select' ? 'pointer-events-none' : ''}`}>
+                      {editingId?.id === node.id && editingId?.field === 'transcript' ? (
+                        <textarea 
+                          value={node.transcript}
+                          onChange={(e) => updateAudioField(node.id, 'transcript', e.target.value)}
+                          className="w-full h-64 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
+                        />
+                      ) : (
+                        <div className="text-sm text-zinc-600 dark:text-zinc-400 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar whitespace-pre-wrap leading-relaxed">
+                          {node.transcript}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
+                
+                {/* Invisible overlay to capture clicks when in select mode */}
+                {tool === 'select' && (
+                  <div className="absolute inset-0 z-10 cursor-pointer" />
+                )}
               </div>
-              
-              <audio controls className={`w-full h-10 outline-none rounded-md ${tool === 'select' ? 'pointer-events-none' : ''}`}>
-                <source src={node.url} type="audio/webm" />
-                Your browser does not support the audio element.
-              </audio>
-
-              {node.summary && (
-                <details open className="mt-2 group/details">
-                  <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="transform transition-transform group-open/details:rotate-90">▶</span>
-                      View Summary
-                    </div>
-                    <button 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (editingId?.id === node.id && editingId?.field === 'summary') {
-                          setEditingId(null);
-                        } else {
-                          setEditingId({ id: node.id, field: 'summary' });
-                        }
-                      }}
-                      className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors ${tool === 'select' ? 'pointer-events-none' : ''}`}
-                    >
-                      {editingId?.id === node.id && editingId?.field === 'summary' ? <Check size={14} /> : <Edit2 size={14} />}
-                    </button>
-                  </summary>
-                  <div className={`mt-3 ${tool === 'select' ? 'pointer-events-none' : ''}`}>
-                    {editingId?.id === node.id && editingId?.field === 'summary' ? (
-                      <textarea 
-                        value={node.summary}
-                        onChange={(e) => updateAudioField(node.id, 'summary', e.target.value)}
-                        className="w-full h-40 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
-                      />
-                    ) : (
-                      <div className="text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 overflow-hidden">
-                        <ReactMarkdown>{node.summary}</ReactMarkdown>
-                      </div>
-                    )}
-                  </div>
-                </details>
-              )}
-
-              {node.transcript && (
-                <details className="mt-2 border-t border-zinc-200 dark:border-zinc-700 pt-2 group/details">
-                  <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="transform transition-transform group-open/details:rotate-90">▶</span>
-                      View Transcript
-                    </div>
-                    <button 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (editingId?.id === node.id && editingId?.field === 'transcript') {
-                          setEditingId(null);
-                        } else {
-                          setEditingId({ id: node.id, field: 'transcript' });
-                        }
-                      }}
-                      className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors ${tool === 'select' ? 'pointer-events-none' : ''}`}
-                    >
-                      {editingId?.id === node.id && editingId?.field === 'transcript' ? <Check size={14} /> : <Edit2 size={14} />}
-                    </button>
-                  </summary>
-                  <div className={`mt-3 ${tool === 'select' ? 'pointer-events-none' : ''}`}>
-                    {editingId?.id === node.id && editingId?.field === 'transcript' ? (
-                      <textarea 
-                        value={node.transcript}
-                        onChange={(e) => updateAudioField(node.id, 'transcript', e.target.value)}
-                        className="w-full h-64 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
-                      />
-                    ) : (
-                      <div className="text-sm text-zinc-600 dark:text-zinc-400 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar whitespace-pre-wrap leading-relaxed">
-                        {node.transcript}
-                      </div>
-                    )}
-                  </div>
-                </details>
-              )}
-              
-              {/* Invisible overlay to capture clicks when in select mode */}
-              {tool === 'select' && (
-                <div className="absolute inset-0 z-10 cursor-pointer" />
-              )}
             </div>
           );
         })}
