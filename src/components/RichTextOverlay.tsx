@@ -11,7 +11,7 @@ interface RichTextOverlayProps {
   setTexts: React.Dispatch<React.SetStateAction<TextNode[]>>;
   pan: { x: number; y: number };
   zoom: number;
-  onDoubleClick: (x: number, y: number) => void;
+  onCanvasClick: (x: number, y: number) => void;
   tool: ToolType;
   selectedNodeId?: string | null;
   setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
@@ -19,7 +19,7 @@ interface RichTextOverlayProps {
 
 export function RichTextOverlay({ 
   texts, setTexts, 
-  pan, zoom, onDoubleClick, tool,
+  pan, zoom, onCanvasClick, tool,
   selectedNodeId, setSelectedNodeId
 }: RichTextOverlayProps) {
   // Dragging state
@@ -30,15 +30,15 @@ export function RichTextOverlay({
   const [resizingId, setResizingId] = useState<string | null>(null);
   const resizeStartRef = useRef<{ x: number, nodeWidth: number } | null>(null);
   
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
     if (e.target !== e.currentTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const clientX = e.clientX - rect.left;
     const clientY = e.clientY - rect.top;
     const worldX = (clientX - pan.x) / zoom;
     const worldY = (clientY - pan.y) / zoom;
-    onDoubleClick(worldX, worldY);
-  }, [pan, zoom, onDoubleClick]);
+    onCanvasClick(worldX, worldY);
+  }, [pan, zoom, onCanvasClick]);
 
   const updateTextNode = useCallback((id: string, newContent: string) => {
     setTexts(prev => prev.map(t => t.id === id ? { ...t, content: newContent } : t));
@@ -98,7 +98,7 @@ export function RichTextOverlay({
     <div className="absolute inset-0 z-10 pointer-events-none">
       <div 
         className={`absolute inset-0 ${tool === 'text' ? 'cursor-text pointer-events-auto' : 'pointer-events-none'}`} 
-        onDoubleClick={handleDoubleClick} 
+        onClick={handleCanvasClick} 
       />
       
       <div 
@@ -119,7 +119,7 @@ export function RichTextOverlay({
                   setSelectedNodeId?.(node.id);
                 }
               }}
-              className={`absolute pointer-events-auto group ${isSelected && tool === 'select' ? 'ring-2 ring-indigo-500 rounded-lg' : tool === 'select' ? 'hover:ring-2 hover:ring-indigo-300 rounded-lg' : ''}`}
+              className={`absolute pointer-events-auto group border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 transition-colors ${isSelected && tool === 'select' ? 'ring-2 ring-indigo-500 rounded-b-md' : 'rounded-b-md'}`}
               style={{
                 left: node.x,
                 top: node.y,
@@ -130,7 +130,7 @@ export function RichTextOverlay({
                 <>
                   {/* Drag Handle (Move) */}
                   <div 
-                    className="absolute -left-6 top-0 p-1 cursor-grab active:cursor-grabbing text-indigo-500 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-sm z-20"
+                    className="absolute -top-4 left-[-1px] right-[-1px] h-4 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-md opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setDraggingId(node.id);
@@ -142,7 +142,7 @@ export function RichTextOverlay({
                       };
                     }}
                   >
-                    <GripVertical size={16} />
+                    <div className="w-8 h-1 bg-zinc-400 dark:bg-zinc-500 rounded-full" />
                   </div>
 
                   {/* Resize Handle (Right edge) */}

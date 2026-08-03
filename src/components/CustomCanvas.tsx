@@ -135,12 +135,12 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
     };
   }, [strokes, texts, audios, loading, saveToSupabase]);
 
-  const handleDoubleClick = useCallback((x: number, y: number) => {
+  const handleCanvasClick = useCallback((x: number, y: number) => {
     const newNode: TextNode = {
       id: uuidv4(),
       x,
       y,
-      width: 400,
+      width: 600,
       content: "<p></p>"
     };
     setTexts(prev => [...prev, newNode]);
@@ -299,7 +299,7 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
           setTexts={setTexts}
           pan={pan}
           zoom={zoom}
-          onDoubleClick={handleDoubleClick}
+          onCanvasClick={handleCanvasClick}
           tool={tool}
           selectedNodeId={selectedNodeId}
           setSelectedNodeId={setSelectedNodeId}

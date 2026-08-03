@@ -92,14 +92,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
   }
 
   return (
-    <div 
-      className={`group relative rounded-md transition-all ${
-        isFocused 
-          ? 'ring-2 ring-indigo-500 bg-white/50 dark:bg-zinc-800/50 shadow-sm' 
-          : 'hover:ring-1 hover:ring-zinc-300 dark:hover:ring-zinc-600 bg-transparent'
-      }`}
-    >
-      <div className="p-3 prose prose-sm dark:prose-invert max-w-none focus:outline-none">
+    <div className="group relative w-full h-full bg-transparent">
+      <div className="p-4 prose dark:prose-invert max-w-none focus:outline-none">
         <EditorContent editor={editor} />
       </div>
 
