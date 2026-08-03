@@ -293,7 +293,7 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
         />
       </div>
 
-      <div className="absolute inset-0" style={{ zIndex: 20, pointerEvents: tool === "text" || tool === "select" ? "auto" : "none" }}>
+      <div className="absolute inset-0 z-20 pointer-events-none">
         <RichTextOverlay 
           texts={texts}
           setTexts={setTexts}

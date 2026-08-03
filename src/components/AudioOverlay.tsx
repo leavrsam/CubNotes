@@ -44,7 +44,7 @@ export function AudioOverlay({
     setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   }, [setAudios]);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  const handlePointerMove = useCallback((e: PointerEvent) => {
     if (draggingId && dragStartRef.current) {
       const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
       const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
@@ -72,17 +72,23 @@ export function AudioOverlay({
     }
   }, [draggingId, resizingId, setAudios, zoom]);
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (draggingId || resizingId) {
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch (err) {}
-    }
+  const handlePointerUp = useCallback(() => {
     setDraggingId(null);
     dragStartRef.current = null;
     setResizingId(null);
     resizeStartRef.current = null;
-  }, [draggingId, resizingId]);
+  }, []);
+
+  React.useEffect(() => {
+    if (draggingId || resizingId) {
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+      return () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+      };
+    }
+  }, [draggingId, resizingId, handlePointerMove, handlePointerUp]);
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none">
@@ -118,7 +124,6 @@ export function AudioOverlay({
                     className="absolute -left-6 top-0 p-1 cursor-grab active:cursor-grabbing text-indigo-500 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-sm z-20"
                     onPointerDown={(e) => {
                       e.stopPropagation();
-                      e.currentTarget.setPointerCapture(e.pointerId);
                       setDraggingId(node.id);
                       dragStartRef.current = {
                         x: e.clientX,
@@ -127,8 +132,6 @@ export function AudioOverlay({
                         nodeY: node.y
                       };
                     }}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
                   >
                     <GripVertical size={16} />
                   </div>
@@ -138,15 +141,12 @@ export function AudioOverlay({
                     className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20"
                     onPointerDown={(e) => {
                       e.stopPropagation();
-                      e.currentTarget.setPointerCapture(e.pointerId);
                       setResizingId(node.id);
                       resizeStartRef.current = {
                         x: e.clientX,
                         nodeWidth: node.width || 400
                       };
                     }}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
                   >
                     <div className="w-1 h-8 bg-indigo-300 group-hover/resize:bg-indigo-500 rounded-full" />
                   </div>
