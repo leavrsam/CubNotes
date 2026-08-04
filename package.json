@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.7",
+    "@tailwindcss/typography": "^0.5.20",
     "@tauri-apps/api": "^2.11.1",
     "@tiptap/extension-bubble-menu": "^3.29.2",
     "@tiptap/extension-color": "^3.29.2",
