@@ -128,6 +128,7 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
         >
           <select
             className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
+            onMouseDown={(e) => e.preventDefault()}
             onChange={(e) => {
               if (e.target.value === "") {
                 editor.chain().focus().unsetFontFamily().run();
@@ -145,6 +146,7 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
           
           <select
             className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
+            onMouseDown={(e) => e.preventDefault()}
             onChange={(e) => {
               if (e.target.value === "") {
                 (editor.chain().focus() as any).unsetFontSize().run();
@@ -168,6 +170,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
 
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleBold().run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('bold') ? 'bg-zinc-800' : ''}`}
             title="Bold"
@@ -175,6 +179,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <Bold size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleItalic().run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('italic') ? 'bg-zinc-800' : ''}`}
             title="Italic"
@@ -182,6 +188,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <Italic size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleUnderline().run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('underline') ? 'bg-zinc-800' : ''}`}
             title="Underline"
@@ -189,6 +197,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <UnderlineIcon size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleHighlight().run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('highlight') ? 'bg-zinc-800 text-yellow-400' : ''}`}
             title="Highlight"
@@ -200,15 +210,17 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
 
           {/* Color Picker */}
           <div className="flex px-1 gap-1 items-center">
-            <button onClick={() => editor.chain().focus().setColor('#000000').run()} className="w-4 h-4 rounded-full bg-black border border-zinc-600" title="Black" />
-            <button onClick={() => editor.chain().focus().setColor('#ef4444').run()} className="w-4 h-4 rounded-full bg-red-500" title="Red" />
-            <button onClick={() => editor.chain().focus().setColor('#3b82f6').run()} className="w-4 h-4 rounded-full bg-blue-500" title="Blue" />
-            <button onClick={() => editor.chain().focus().setColor('#22c55e').run()} className="w-4 h-4 rounded-full bg-green-500" title="Green" />
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#000000').run()} className="w-4 h-4 rounded-full bg-black border border-zinc-600" title="Black" />
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#ef4444').run()} className="w-4 h-4 rounded-full bg-red-500" title="Red" />
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#3b82f6').run()} className="w-4 h-4 rounded-full bg-blue-500" title="Blue" />
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#22c55e').run()} className="w-4 h-4 rounded-full bg-green-500" title="Green" />
           </div>
 
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
 
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('heading', { level: 1 }) ? 'bg-zinc-800' : ''}`}
             title="Heading 1"
@@ -216,6 +228,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <Heading1 size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('heading', { level: 2 }) ? 'bg-zinc-800' : ''}`}
             title="Heading 2"
@@ -223,6 +237,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <Heading2 size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleBulletList().run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('bulletList') ? 'bg-zinc-800' : ''}`}
             title="Bullet List"
@@ -230,6 +246,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <List size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive('orderedList') ? 'bg-zinc-800' : ''}`}
             title="Numbered List"
@@ -240,6 +258,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
           
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().setTextAlign('left').run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive({ textAlign: 'left' }) ? 'bg-zinc-800' : ''}`}
             title="Align Left"
@@ -247,6 +267,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <AlignLeft size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().setTextAlign('center').run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive({ textAlign: 'center' }) ? 'bg-zinc-800' : ''}`}
             title="Align Center"
@@ -254,6 +276,8 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <AlignCenter size={14} />
           </button>
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().setTextAlign('right').run()}
             className={`p-2 hover:bg-zinc-700 ${editor.isActive({ textAlign: 'right' }) ? 'bg-zinc-800' : ''}`}
             title="Align Right"
