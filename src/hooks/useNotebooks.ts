@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
+import debounce from 'lodash/debounce';
 
 export interface Page {
   id: string;
@@ -200,10 +201,27 @@ export function useNotebooks() {
     await fetchNotebooks();
   };
 
-  const updatePage = async (id: string, title: string) => {
-    await supabase.from('pages').update({ title }).eq('id', id);
-    await fetchNotebooks();
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const debouncedUpdatePage = useCallback(
+    debounce(async (id: string, title: string) => {
+      await supabase.from('pages').update({ title }).eq('id', id);
+    }, 1000),
+    [supabase]
+  );
+
+  const updatePage = useCallback((id: string, title: string) => {
+    // Optimistic UI update
+    setNotebooks(prev => prev.map(nb => ({
+      ...nb,
+      sections: nb.sections.map(sec => ({
+        ...sec,
+        pages: sec.pages.map(p => p.id === id ? { ...p, title } : p)
+      }))
+    })));
+    
+    // Debounced DB update
+    debouncedUpdatePage(id, title);
+  }, [debouncedUpdatePage]);
 
   const deletePage = async (id: string) => {
     await supabase.from('pages').delete().eq('id', id);
