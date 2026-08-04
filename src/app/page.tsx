@@ -9,6 +9,10 @@ const CustomCanvas = dynamic(() => import('@/components/CustomCanvas').then(mod 
   ssr: false,
   loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading spatial canvas...</div>
 });
+const MobilePage = dynamic(() => import('@/components/MobilePage').then(mod => mod.MobilePage), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading mobile page...</div>
+});
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
@@ -36,6 +40,19 @@ export default function Home() {
   const [supabase] = useState(() => createClient());
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Responsive state
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkMobile = () => {
+        setIsMobile(window.innerWidth < 768);
+      };
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }
+  }, []);
 
   // Auto-close sidebar on mobile initially
   useEffect(() => {
@@ -294,12 +311,21 @@ export default function Home() {
         </div>
 
         {selectedPageId ? (
-          <CustomCanvas 
-            key={selectedPageId}
-            pageId={selectedPageId} 
-            pageTitle={activePageTitle}
-            onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
-          />
+          isMobile ? (
+            <MobilePage 
+              key={selectedPageId}
+              pageId={selectedPageId} 
+              pageTitle={activePageTitle}
+              onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
+            />
+          ) : (
+            <CustomCanvas 
+              key={selectedPageId}
+              pageId={selectedPageId} 
+              pageTitle={activePageTitle}
+              onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
+            />
+          )
         ) : (
           <div className="flex flex-col gap-4 items-center justify-center w-full h-full text-zinc-500">
             <p>Select or create a page to begin.</p>
