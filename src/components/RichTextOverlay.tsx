@@ -121,9 +121,7 @@ export function RichTextOverlay({
               }}
               // Stop canvas click from firing when clicking inside the text box container
               onClick={(e) => e.stopPropagation()}
-              className={`absolute pointer-events-auto group bg-transparent transition-colors rounded-b-md ${
-                tool === 'home' ? 'border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700' : ''
-              }`}
+              className={`absolute pointer-events-auto group bg-transparent transition-colors rounded-b-md`}
               style={{
                 left: node.x,
                 top: node.y,

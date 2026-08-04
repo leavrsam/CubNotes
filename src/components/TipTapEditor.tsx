@@ -117,14 +117,14 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
 
   return (
     <div className="group relative w-full h-full bg-transparent">
-      <div className="p-4 prose dark:prose-invert max-w-none focus:outline-none">
+      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none prose-p:my-0 prose-p:leading-normal">
         <EditorContent editor={editor} />
       </div>
 
       {editor && (
         <BubbleMenu 
           editor={editor} 
-          className="flex bg-zinc-900 text-white rounded-md overflow-hidden shadow-lg border border-zinc-700"
+          className="flex bg-zinc-900 text-white rounded-md overflow-hidden shadow-lg border border-zinc-700 z-50"
         >
           <select
             className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
@@ -271,7 +271,7 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             e.stopPropagation();
             onDelete();
           }}
-          className={`absolute -top-3 -right-3 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transition-colors ${isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          className={`absolute -top-3 -right-3 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transition-colors z-50 ${isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         >
           <Trash2 size={14} />
         </button>
