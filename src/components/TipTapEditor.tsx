@@ -62,8 +62,8 @@ const TabIndent = Extension.create({
         if (this.editor.isActive('listItem')) {
           return false;
         }
-        // Otherwise, insert 4 non-breaking spaces for visual indent
-        return this.editor.commands.insertContent('&nbsp;&nbsp;&nbsp;&nbsp;');
+        // Otherwise, insert 4 spaces for visual indent
+        return this.editor.commands.insertContent('    ');
       },
     };
   },
@@ -117,7 +117,7 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
 
   return (
     <div className="group relative w-full h-full bg-transparent">
-      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none prose-p:my-0 prose-p:leading-normal">
+      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none prose-p:my-0 prose-p:leading-normal prose-p:whitespace-pre-wrap">
         <EditorContent editor={editor} />
       </div>
 
@@ -261,20 +261,6 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             <AlignRight size={14} />
           </button>
         </BubbleMenu>
-      )}
-
-      {/* Delete button (only visible on hover or focus) */}
-      {(isFocused || content === "<p></p>") && (
-        <button 
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDelete();
-          }}
-          className={`absolute -top-3 -right-3 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transition-colors z-50 ${isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-        >
-          <Trash2 size={14} />
-        </button>
       )}
     </div>
   );
