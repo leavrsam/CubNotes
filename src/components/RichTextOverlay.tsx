@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { TextNode, ToolType } from "./CustomCanvas";
 import { TipTapEditor } from "./TipTapEditor";
 import { GripVertical } from "lucide-react";
+import { Editor } from '@tiptap/react';
 
 interface RichTextOverlayProps {
   texts: TextNode[];
@@ -15,12 +16,15 @@ interface RichTextOverlayProps {
   tool: ToolType;
   selectedNodeId?: string | null;
   setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
+  setActiveEditor?: (editor: Editor | null) => void;
+  onEditorUpdate?: () => void;
 }
 
 export function RichTextOverlay({ 
   texts, setTexts, 
   pan, zoom, onCanvasClick, tool,
-  selectedNodeId, setSelectedNodeId
+  selectedNodeId, setSelectedNodeId,
+  setActiveEditor, onEditorUpdate
 }: RichTextOverlayProps) {
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -203,6 +207,8 @@ export function RichTextOverlay({
                 content={node.content} 
                 onChange={(content) => updateTextNode(node.id, content)}
                 onDelete={() => deleteTextNode(node.id)}
+                setActiveEditor={setActiveEditor}
+                onEditorUpdate={onEditorUpdate}
               />
             </div>
           );

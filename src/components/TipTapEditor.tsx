@@ -73,10 +73,13 @@ interface TipTapEditorProps {
   content: string;
   onChange: (content: string) => void;
   onDelete: () => void;
+  isFocused?: boolean;
+  setActiveEditor?: (editor: Editor | null) => void;
+  onEditorUpdate?: () => void;
 }
 
-export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps) {
-  const [isFocused, setIsFocused] = useState(false);
+export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onEditorUpdate }: TipTapEditorProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -93,10 +96,15 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
     content: content,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
+      onEditorUpdate?.();
     },
-    onFocus: () => setIsFocused(true),
+    onSelectionUpdate: () => {
+      onEditorUpdate?.();
+    },
+    onFocus: ({ editor }) => {
+      setActiveEditor?.(editor);
+    },
     onBlur: ({ editor }) => {
-      setIsFocused(false);
       // Clean up empty text boxes when they lose focus
       if (editor.isEmpty) {
         onDelete();
