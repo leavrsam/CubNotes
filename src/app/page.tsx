@@ -86,20 +86,46 @@ export default function Home() {
     };
   }, [router, supabase]);
 
-  // Auto-select the first available page only on initial load
+  // Save selected page to localStorage
+  useEffect(() => {
+    if (selectedPageId) {
+      localStorage.setItem('lastSelectedPageId', selectedPageId);
+    }
+  }, [selectedPageId]);
+
+  // Auto-select the last available page or first available page only on initial load
   const hasAutoSelected = React.useRef(false);
   useEffect(() => {
     if (hasAutoSelected.current) return;
     if (!selectedPageId && notebooks.length > 0) {
-      for (const nb of notebooks) {
-        for (const sec of nb.sections) {
-          if (sec.pages.length > 0) {
-            setSelectedPageId(sec.pages[0].id);
-            hasAutoSelected.current = true;
-            return;
-          }
+      const lastSelectedId = localStorage.getItem('lastSelectedPageId');
+      let targetPageId: string | null = null;
+      
+      if (lastSelectedId) {
+        // Verify it still exists in the loaded notebooks
+        const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === lastSelectedId)));
+        if (exists) {
+          targetPageId = lastSelectedId;
         }
       }
+
+      if (!targetPageId) {
+        // Fallback to first available
+        for (const nb of notebooks) {
+          for (const sec of nb.sections) {
+            if (sec.pages.length > 0) {
+              targetPageId = sec.pages[0].id;
+              break;
+            }
+          }
+          if (targetPageId) break;
+        }
+      }
+
+      if (targetPageId) {
+        setSelectedPageId(targetPageId);
+      }
+      hasAutoSelected.current = true;
     }
   }, [notebooks, selectedPageId]);
 

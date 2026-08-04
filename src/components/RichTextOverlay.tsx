@@ -144,6 +144,7 @@ export function RichTextOverlay({
                         : 'opacity-0 border-transparent group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700'
                     }`}
                     onPointerDown={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       setDraggingId(node.id);
                       dragStartRef.current = {
@@ -166,6 +167,7 @@ export function RichTextOverlay({
                     <div 
                       className="flex gap-[1px] text-[7px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full px-1 cursor-col-resize hover:text-zinc-300 transition-colors"
                       onPointerDown={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         setResizingId(node.id);
                         resizeStartRef.current = {
@@ -183,6 +185,7 @@ export function RichTextOverlay({
                   <div 
                     className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center z-20"
                     onPointerDown={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       setResizingId(node.id);
                       resizeStartRef.current = {
