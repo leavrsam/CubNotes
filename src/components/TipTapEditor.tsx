@@ -117,7 +117,7 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
 
   return (
     <div className="group relative w-full h-full bg-transparent">
-      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none prose-p:my-0 prose-p:leading-normal prose-p:whitespace-pre-wrap">
+      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none prose-p:my-0 prose-p:leading-normal prose-p:whitespace-pre-wrap prose-li:marker:text-inherit">
         <EditorContent editor={editor} />
       </div>
 
@@ -128,7 +128,6 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
         >
           <select
             className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
-            onMouseDown={(e) => e.preventDefault()}
             onChange={(e) => {
               if (e.target.value === "") {
                 editor.chain().focus().unsetFontFamily().run();
@@ -139,14 +138,21 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
             value={editor.getAttributes('textStyle').fontFamily || ""}
           >
             <option value="">Font</option>
-            <option value="Inter, sans-serif">Sans Serif</option>
-            <option value="Georgia, serif">Serif</option>
-            <option value="Menlo, monospace">Monospace</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="Helvetica, sans-serif">Helvetica</option>
+            <option value="Inter, sans-serif">Inter</option>
+            <option value="Verdana, sans-serif">Verdana</option>
+            <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="Times New Roman, serif">Times New Roman</option>
+            <option value="Garamond, serif">Garamond</option>
+            <option value="Menlo, monospace">Menlo</option>
+            <option value="Courier New, monospace">Courier New</option>
+            <option value="Comic Sans MS, cursive">Comic Sans MS</option>
           </select>
           
           <select
             className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
-            onMouseDown={(e) => e.preventDefault()}
             onChange={(e) => {
               if (e.target.value === "") {
                 (editor.chain().focus() as any).unsetFontSize().run();
