@@ -122,8 +122,10 @@ export function RichTextOverlay({
               // Stop canvas click from firing when clicking inside the text box container
               onClick={(e) => e.stopPropagation()}
               className={`absolute pointer-events-auto group bg-transparent transition-colors border ${
-                tool === 'home' && node.content !== '<p></p>' 
-                  ? 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus-within:border-zinc-300 dark:focus-within:border-zinc-700' 
+                (tool === 'home' && node.content !== '<p></p>') 
+                  ? ((draggingId === node.id || resizingId === node.id)
+                      ? 'border-zinc-300 dark:border-zinc-700'
+                      : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus-within:border-zinc-300 dark:focus-within:border-zinc-700')
                   : 'border-transparent'
               }`}
               style={{
@@ -136,7 +138,11 @@ export function RichTextOverlay({
                 <>
                   {/* Drag Handle (Top Bar) */}
                   <div 
-                    className="absolute -top-3 left-[-1px] right-[-1px] h-3 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-[#2b2b2b] opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 transition-opacity z-20 flex items-center justify-between pl-1 border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700"
+                    className={`absolute -top-[10px] left-[-1px] right-[-1px] h-[10px] cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-[#2b2b2b] transition-opacity z-20 flex items-center justify-between pl-1 border border-b-0 ${
+                      (draggingId === node.id || resizingId === node.id)
+                        ? 'opacity-100 border-zinc-300 dark:border-zinc-700'
+                        : 'opacity-0 border-transparent group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700'
+                    }`}
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setDraggingId(node.id);
