@@ -136,7 +136,7 @@ export function RichTextOverlay({
                 <>
                   {/* Drag Handle (Top Bar) */}
                   <div 
-                    className="absolute -top-4 left-[-1px] right-[-1px] h-4 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-[#2b2b2b] opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 transition-opacity z-20 flex items-center justify-between px-1 border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700"
+                    className="absolute -top-3 left-[-1px] right-[-1px] h-3 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-[#2b2b2b] opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 transition-opacity z-20 flex items-center justify-between pl-1 border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setDraggingId(node.id);
@@ -151,13 +151,23 @@ export function RichTextOverlay({
                     <div className="w-4" /> {/* Spacer to center the dots */}
                     
                     <div className="flex gap-[2px] text-zinc-500 dark:text-zinc-400">
-                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
-                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
-                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
-                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
+                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
+                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
+                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
+                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
                     </div>
 
-                    <div className="flex gap-[2px] text-[8px] text-zinc-500 dark:text-zinc-400 items-center justify-center translate-y-[0.5px]">
+                    <div 
+                      className="flex gap-[1px] text-[7px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full px-1 cursor-col-resize hover:text-zinc-300 transition-colors"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        setResizingId(node.id);
+                        resizeStartRef.current = {
+                          x: e.clientX,
+                          nodeWidth: node.width
+                        };
+                      }}
+                    >
                       <span>◀</span>
                       <span>▶</span>
                     </div>
