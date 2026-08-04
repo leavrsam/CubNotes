@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
 import { Trash2, Plus } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { format } from "date-fns";
 
 // Render a static representation of the strokes overlaid
 function StrokesOverlay({ strokes }: { strokes: any[] }) {
@@ -50,10 +51,11 @@ function StrokesOverlay({ strokes }: { strokes: any[] }) {
 interface MobilePageProps {
   pageId: string;
   pageTitle: string;
+  pageCreatedAt: string;
   onUpdatePageTitle: (title: string) => void;
 }
 
-export function MobilePage({ pageId, pageTitle, onUpdatePageTitle }: MobilePageProps) {
+export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: MobilePageProps) {
   const { loading, strokes, texts, setTexts, audios, setAudios } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
 
@@ -106,8 +108,15 @@ export function MobilePage({ pageId, pageTitle, onUpdatePageTitle }: MobilePageP
           value={pageTitle}
           onChange={(e) => onUpdatePageTitle(e.target.value)}
           placeholder="Page Title"
-          className="bg-transparent text-3xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-full mb-6 relative z-10"
+          className="bg-transparent text-3xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-full mb-2 relative z-10"
         />
+        {/* Decorative OneNote-style underline */}
+        <div className="w-full h-[1px] bg-gradient-to-r from-zinc-300 to-transparent dark:from-zinc-700 mb-1"></div>
+        {pageCreatedAt && (
+          <div className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 whitespace-pre">
+            {format(new Date(pageCreatedAt), "EEEE, MMMM d, yyyy     h:mm a")}
+          </div>
+        )}
 
         {/* Linear feed of blocks */}
         <div className="flex flex-col gap-6 w-full relative z-10">

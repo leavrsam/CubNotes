@@ -155,7 +155,7 @@ function NotebookItem({
       </EditableItem>
 
       {expanded && (
-        <div className="ml-4 pl-2 border-l border-zinc-800 space-y-1">
+        <div className="ml-4 pl-2 border-l border-zinc-800 space-y-1 pb-1">
           {notebook.sections.map((sec: any) => (
             <SectionItem
               key={sec.id}
@@ -169,9 +169,12 @@ function NotebookItem({
               onDeletePage={onDeletePage}
             />
           ))}
-          {notebook.sections.length === 0 && (
-            <div className="px-2 py-1.5 text-xs text-zinc-600 italic">No sections</div>
-          )}
+          <button 
+            onClick={onAddSection}
+            className="flex items-center gap-1.5 px-2 py-1 mt-1 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30 rounded w-full transition-colors"
+          >
+            <Plus size={12} /> Add Section
+          </button>
         </div>
       )}
     </div>
@@ -207,7 +210,7 @@ function SectionItem({
       </EditableItem>
 
       {expanded && (
-        <div className="ml-5 space-y-1">
+        <div className="ml-5 space-y-1 pb-1">
           {section.pages.map((page: any) => (
             <PageItem 
               key={page.id} 
@@ -218,9 +221,12 @@ function SectionItem({
               onDelete={() => onDeletePage(page.id)}
             />
           ))}
-          {section.pages.length === 0 && (
-            <div className="px-2 py-1 text-xs text-zinc-600 italic">No pages</div>
-          )}
+          <button 
+            onClick={onAddPage}
+            className="flex items-center gap-1.5 px-2 py-1 mt-1 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30 rounded w-full transition-colors"
+          >
+            <Plus size={12} /> Add Page
+          </button>
         </div>
       )}
     </div>

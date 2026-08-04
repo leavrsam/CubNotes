@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
+import { format } from "date-fns";
 import { Pen, Type, Hand, MousePointer2 } from "lucide-react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -12,6 +13,7 @@ import { AudioOverlay } from "./AudioOverlay";
 interface CustomCanvasProps {
   pageId: string;
   pageTitle: string;
+  pageCreatedAt: string;
   onUpdatePageTitle: (title: string) => void;
 }
 
@@ -58,7 +60,7 @@ import { useCanvasData } from "@/hooks/useCanvasData";
 import { Mic } from "lucide-react";
 import toast from "react-hot-toast";
 
-export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCanvasProps) {
+export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: CustomCanvasProps) {
   const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios } = useCanvasData(pageId);
 
   // Drawing state
@@ -256,16 +258,21 @@ export function CustomCanvas({ pageId, pageTitle, onUpdatePageTitle }: CustomCan
       </div>
 
       {/* Page Title overlay */}
-      <div className="absolute top-24 left-16 z-40">
+      <div className="absolute top-48 left-16 z-40 pointer-events-none">
         <input
           type="text"
           value={pageTitle}
           onChange={(e) => onUpdatePageTitle(e.target.value)}
           placeholder="Page Title"
-          className="bg-transparent text-4xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-[500px]"
+          className="bg-transparent text-4xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-[500px] pointer-events-auto"
         />
         {/* Decorative OneNote-style underline */}
         <div className="w-[500px] h-[1px] bg-gradient-to-r from-zinc-300 to-transparent dark:from-zinc-700 mt-2"></div>
+        {pageCreatedAt && (
+          <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 whitespace-pre">
+            {format(new Date(pageCreatedAt), "EEEE, MMMM d, yyyy     h:mm a")}
+          </div>
+        )}
       </div>
 
       <div className="absolute inset-0" style={{ zIndex: tool === "pen" || tool === "pan" ? 30 : 10, pointerEvents: tool === "pen" || tool === "pan" || tool === "select" ? "auto" : "none" }}>

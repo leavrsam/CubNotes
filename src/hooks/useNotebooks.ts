@@ -9,6 +9,7 @@ export interface Page {
   title: string;
   date: string | null;
   is_journal_entry: boolean;
+  created_at: string;
   document_state?: any;
 }
 

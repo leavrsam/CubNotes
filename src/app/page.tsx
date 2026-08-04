@@ -253,11 +253,15 @@ export default function Home() {
   const isAnyRecording = isDesktopRecording || isWebRecording;
 
   let activePageTitle = "Untitled Page";
+  let activePageCreatedAt = "";
   if (selectedPageId) {
     for (const nb of notebooks) {
       for (const sec of nb.sections) {
         const page = sec.pages.find(p => p.id === selectedPageId);
-        if (page) activePageTitle = page.title;
+        if (page) {
+          activePageTitle = page.title;
+          activePageCreatedAt = page.created_at;
+        }
       }
     }
   }
@@ -342,6 +346,7 @@ export default function Home() {
               key={selectedPageId}
               pageId={selectedPageId} 
               pageTitle={activePageTitle}
+              pageCreatedAt={activePageCreatedAt}
               onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
             />
           ) : (
@@ -349,6 +354,7 @@ export default function Home() {
               key={selectedPageId}
               pageId={selectedPageId} 
               pageTitle={activePageTitle}
+              pageCreatedAt={activePageCreatedAt}
               onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
             />
           )
