@@ -97,7 +97,7 @@ export function RichTextOverlay({
   return (
     <div className="absolute inset-0 z-10 pointer-events-none">
       <div 
-        className={`absolute inset-0 ${tool === 'text' ? 'cursor-text pointer-events-auto' : 'pointer-events-none'}`} 
+        className={`absolute inset-0 ${tool === 'home' ? 'cursor-text pointer-events-auto' : 'pointer-events-none'}`} 
         onClick={handleCanvasClick} 
       />
       
@@ -114,23 +114,27 @@ export function RichTextOverlay({
             <div 
               key={node.id}
               onPointerDown={(e) => {
-                if (tool === 'select') {
+                if (tool === 'home') {
                   e.stopPropagation();
                   setSelectedNodeId?.(node.id);
                 }
               }}
-              className={`absolute pointer-events-auto group border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 transition-colors ${isSelected && tool === 'select' ? 'ring-2 ring-indigo-500 rounded-b-md' : 'rounded-b-md'}`}
+              // Stop canvas click from firing when clicking inside the text box container
+              onClick={(e) => e.stopPropagation()}
+              className={`absolute pointer-events-auto group bg-transparent transition-colors rounded-b-md ${
+                tool === 'home' ? 'border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700' : ''
+              }`}
               style={{
                 left: node.x,
                 top: node.y,
                 width: node.width,
               }}
             >
-              {isSelected && tool === 'select' && (
+              {tool === 'home' && (
                 <>
-                  {/* Drag Handle (Move) */}
+                  {/* Drag Handle (Top Bar) */}
                   <div 
-                    className="absolute -top-4 left-[-1px] right-[-1px] h-4 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-md opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center"
+                    className="absolute -top-5 left-[-1px] right-[-1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-md opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setDraggingId(node.id);
@@ -142,12 +146,17 @@ export function RichTextOverlay({
                       };
                     }}
                   >
-                    <div className="w-8 h-1 bg-zinc-400 dark:bg-zinc-500 rounded-full" />
+                    <div className="flex gap-1">
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                    </div>
                   </div>
 
                   {/* Resize Handle (Right edge) */}
                   <div 
-                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20"
+                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20 opacity-0 group-hover:opacity-100 transition-opacity"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setResizingId(node.id);
@@ -157,19 +166,16 @@ export function RichTextOverlay({
                       };
                     }}
                   >
-                    <div className="w-1 h-8 bg-indigo-300 group-hover/resize:bg-indigo-500 rounded-full" />
+                    <div className="w-1.5 h-6 bg-zinc-300 dark:bg-zinc-600 group-hover/resize:bg-zinc-500 rounded-full" />
                   </div>
                 </>
               )}
+              
               <TipTapEditor 
                 content={node.content} 
                 onChange={(content) => updateTextNode(node.id, content)}
                 onDelete={() => deleteTextNode(node.id)}
               />
-              {/* Invisible overlay to capture clicks when in select mode */}
-              {tool === 'select' && (
-                <div className="absolute inset-0 z-10 cursor-pointer" />
-              )}
             </div>
           );
         })}

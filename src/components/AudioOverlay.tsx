@@ -110,18 +110,18 @@ export function AudioOverlay({
                   setSelectedNodeId?.(node.id);
                 }
               }}
-              className={`absolute pointer-events-auto group transition-colors ${isSelected && tool === 'select' ? 'ring-2 ring-indigo-500 rounded-xl' : tool === 'select' ? 'hover:ring-2 hover:ring-indigo-300 rounded-xl cursor-pointer' : ''}`}
+              className={`absolute pointer-events-auto group transition-colors rounded-xl`}
               style={{
                 left: node.x,
                 top: node.y,
                 width: node.width || 400,
               }}
             >
-              {isSelected && tool === 'select' && (
+              {tool === 'home' && (
                 <>
                   {/* Drag Handle (Move) */}
                   <div 
-                    className="absolute -left-6 top-0 p-1 cursor-grab active:cursor-grabbing text-indigo-500 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-sm z-20"
+                    className="absolute -top-5 left-[-1px] right-[-1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setDraggingId(node.id);
@@ -133,12 +133,17 @@ export function AudioOverlay({
                       };
                     }}
                   >
-                    <GripVertical size={16} />
+                    <div className="flex gap-1">
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                    </div>
                   </div>
 
                   {/* Resize Handle (Right edge) */}
                   <div 
-                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20"
+                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20 opacity-0 group-hover:opacity-100 transition-opacity"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setResizingId(node.id);
@@ -148,7 +153,7 @@ export function AudioOverlay({
                       };
                     }}
                   >
-                    <div className="w-1 h-8 bg-indigo-300 group-hover/resize:bg-indigo-500 rounded-full" />
+                    <div className="w-1.5 h-6 bg-zinc-300 dark:bg-zinc-600 group-hover/resize:bg-zinc-500 rounded-full" />
                   </div>
                 </>
               )}
@@ -159,19 +164,19 @@ export function AudioOverlay({
                     type="text"
                     value={node.title || "Meeting Recording"}
                     onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-                    className={`text-sm font-bold text-zinc-800 dark:text-zinc-100 bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-1 py-0.5 rounded transition-colors w-full ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                    className={`text-sm font-bold text-zinc-800 dark:text-zinc-100 bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-1 py-0.5 rounded transition-colors w-full`}
                     placeholder="Recording Name..."
                   />
                   <button 
                     onClick={() => deleteAudioNode(node.id)}
-                    className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0 ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                    className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0`}
                     title="Delete Recording"
                   >
                     <Trash2 size={16} />
                   </button>
                 </div>
                 
-                <audio controls className={`w-full h-10 outline-none rounded-md ${tool === 'select' ? 'pointer-events-none' : ''}`}>
+                <audio controls className={`w-full h-10 outline-none rounded-md`}>
                   <source src={node.url} type="audio/webm" />
                   Your browser does not support the audio element.
                 </audio>
@@ -192,12 +197,12 @@ export function AudioOverlay({
                             setEditingId({ id: node.id, field: 'summary' });
                           }
                         }}
-                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors`}
                       >
                         {editingId?.id === node.id && editingId?.field === 'summary' ? <Check size={14} /> : <Edit2 size={14} />}
                       </button>
                     </summary>
-                    <div className={`mt-3 ${tool === 'select' ? 'pointer-events-none' : ''}`}>
+                    <div className={`mt-3`}>
                       {editingId?.id === node.id && editingId?.field === 'summary' ? (
                         <textarea 
                           value={node.summary}
@@ -229,12 +234,12 @@ export function AudioOverlay({
                             setEditingId({ id: node.id, field: 'transcript' });
                           }
                         }}
-                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors ${tool === 'select' ? 'pointer-events-none' : ''}`}
+                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors`}
                       >
                         {editingId?.id === node.id && editingId?.field === 'transcript' ? <Check size={14} /> : <Edit2 size={14} />}
                       </button>
                     </summary>
-                    <div className={`mt-3 ${tool === 'select' ? 'pointer-events-none' : ''}`}>
+                    <div className={`mt-3`}>
                       {editingId?.id === node.id && editingId?.field === 'transcript' ? (
                         <textarea 
                           value={node.transcript}
@@ -248,11 +253,6 @@ export function AudioOverlay({
                       )}
                     </div>
                   </details>
-                )}
-                
-                {/* Invisible overlay to capture clicks when in select mode */}
-                {tool === 'select' && (
-                  <div className="absolute inset-0 z-10 cursor-pointer" />
                 )}
               </div>
             </div>
