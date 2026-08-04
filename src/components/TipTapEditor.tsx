@@ -52,6 +52,23 @@ const FontSize = Extension.create({
   },
 });
 
+// Custom Tab Indent Extension
+const TabIndent = Extension.create({
+  name: 'tabIndent',
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => {
+        // If in a list item, let the default list extension handle it (return false)
+        if (this.editor.isActive('listItem')) {
+          return false;
+        }
+        // Otherwise, insert 4 non-breaking spaces for visual indent
+        return this.editor.commands.insertContent('&nbsp;&nbsp;&nbsp;&nbsp;');
+      },
+    };
+  },
+});
+
 interface TipTapEditorProps {
   content: string;
   onChange: (content: string) => void;
@@ -71,13 +88,20 @@ export function TipTapEditor({ content, onChange, onDelete }: TipTapEditorProps)
       Highlight.configure({ multicolor: true }),
       FontSize,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      TabIndent,
     ],
     content: content,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
     },
     onFocus: () => setIsFocused(true),
-    onBlur: () => setIsFocused(false),
+    onBlur: ({ editor }) => {
+      setIsFocused(false);
+      // Clean up empty text boxes when they lose focus
+      if (editor.isEmpty) {
+        onDelete();
+      }
+    },
   });
 
   // Focus on initial mount
