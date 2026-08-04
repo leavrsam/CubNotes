@@ -121,18 +121,22 @@ export function RichTextOverlay({
               }}
               // Stop canvas click from firing when clicking inside the text box container
               onClick={(e) => e.stopPropagation()}
-              className={`absolute pointer-events-auto group bg-transparent transition-colors rounded-b-md`}
+              className={`absolute pointer-events-auto group bg-transparent transition-colors border ${
+                tool === 'home' && node.content !== '<p></p>' 
+                  ? 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus-within:border-zinc-300 dark:focus-within:border-zinc-700' 
+                  : 'border-transparent'
+              }`}
               style={{
                 left: node.x,
                 top: node.y,
                 width: node.width,
               }}
             >
-              {tool === 'home' && (
+              {tool === 'home' && node.content !== '<p></p>' && (
                 <>
                   {/* Drag Handle (Top Bar) */}
                   <div 
-                    className="absolute -top-5 left-[-1px] right-[-1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-md opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
+                    className="absolute -top-4 left-[-1px] right-[-1px] h-4 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-[#2b2b2b] opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 transition-opacity z-20 flex items-center justify-between px-1 border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setDraggingId(node.id);
@@ -144,17 +148,24 @@ export function RichTextOverlay({
                       };
                     }}
                   >
-                    <div className="flex gap-1">
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+                    <div className="w-4" /> {/* Spacer to center the dots */}
+                    
+                    <div className="flex gap-[2px] text-zinc-500 dark:text-zinc-400">
+                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
+                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
+                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
+                      <div className="w-[2px] h-[2px] bg-current rounded-full" />
+                    </div>
+
+                    <div className="flex gap-[2px] text-[8px] text-zinc-500 dark:text-zinc-400 items-center justify-center translate-y-[0.5px]">
+                      <span>◀</span>
+                      <span>▶</span>
                     </div>
                   </div>
 
                   {/* Resize Handle (Right edge) */}
                   <div 
-                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center z-20"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setResizingId(node.id);
@@ -164,7 +175,7 @@ export function RichTextOverlay({
                       };
                     }}
                   >
-                    <div className="w-1.5 h-6 bg-zinc-300 dark:bg-zinc-600 group-hover/resize:bg-zinc-500 rounded-full" />
+                    {/* Invisible hit area for resizing */}
                   </div>
                 </>
               )}
