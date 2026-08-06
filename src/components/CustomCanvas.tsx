@@ -204,7 +204,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                         activeEditor.chain().focus().setFontFamily(e.target.value).run();
                       }
                     }}
-                    value={activeEditor?.getAttributes('textStyle').fontFamily || ""}
+                    value={activeEditor?.getAttributes('textStyle')?.fontFamily || ""}
                     disabled={!activeEditor}
                   >
                     <option value="">Font</option>
@@ -231,7 +231,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                         (activeEditor.chain().focus() as any).setFontSize(e.target.value).run();
                       }
                     }}
-                    value={activeEditor?.getAttributes('textStyle').fontSize || ""}
+                    value={activeEditor?.getAttributes('textStyle')?.fontSize || ""}
                     disabled={!activeEditor}
                   >
                     <option value="">Size</option>
