@@ -66,8 +66,7 @@ export default function Home() {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        // router.push("/login"); // BYPASSED FOR LOCAL TESTING
-        setAuthChecking(false);
+        router.push("/login");
       } else {
         setAuthChecking(false);
       }
@@ -78,7 +77,7 @@ export default function Home() {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
-        // router.push("/login"); // BYPASSED FOR LOCAL TESTING
+        router.push("/login");
       }
     });
 
