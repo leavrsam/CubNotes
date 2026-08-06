@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Youtube, Table as TableIcon } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -520,7 +520,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     onClick={handleInsertVideo}
                     className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
                   >
-                    <Youtube size={16} strokeWidth={2} />
+                    <Video size={16} strokeWidth={2} />
                     <span className="text-[10px] font-medium mt-0.5">Video</span>
                   </button>
                 </div>
