@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, File, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 
@@ -56,20 +56,23 @@ interface MobilePageProps {
 }
 
 export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: MobilePageProps) {
-  const { loading, strokes, texts, setTexts, audios, setAudios } = useCanvasData(pageId);
+  const { loading, strokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
 
   // Combine and sort texts and audios by Y then X
   const sortedBlocks = useMemo(() => {
     const blocks = [
       ...texts.map(t => ({ ...t, type: 'text' as const })),
-      ...audios.map(a => ({ ...a, type: 'audio' as const }))
+      ...(audios || []).map(a => ({ ...a, type: 'audio' as const })),
+      ...(images || []).map(i => ({ ...i, type: 'image' as const })),
+      ...(files || []).map(f => ({ ...f, type: 'file' as const })),
+      ...(videos || []).map(v => ({ ...v, type: 'video' as const }))
     ];
     return blocks.sort((a, b) => {
       if (Math.abs(a.y - b.y) > 10) return a.y - b.y; // 10px tolerance for vertical alignment
       return a.x - b.x;
     });
-  }, [texts, audios]);
+  }, [texts, audios, images, files, videos]);
 
   useEffect(() => {
     if (sortedBlocks.length > 0) {
@@ -179,6 +182,62 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       </div>
                     </details>
                   )}
+                </div>
+              );
+            } else if (block.type === 'image') {
+              return (
+                <div key={block.id} className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-white dark:bg-zinc-800">
+                  <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
+                  <button 
+                    onClick={() => setImages(prev => prev.filter(n => n.id !== block.id))}
+                    className="absolute top-2 right-2 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-red-500 hover:text-red-600"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            } else if (block.type === 'file') {
+              return (
+                <div key={block.id} className="relative w-full bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <File size={24} className="text-indigo-500 flex-shrink-0" />
+                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a href={block.url} download target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-400">
+                      <Download size={18} />
+                    </a>
+                    <button onClick={() => setFiles(prev => prev.filter(n => n.id !== block.id))} className="p-2 text-red-500">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              );
+            } else if (block.type === 'video') {
+              let videoId = "";
+              if (block.url.includes("youtube.com/watch")) {
+                videoId = new URL(block.url).searchParams.get("v") || "";
+              } else if (block.url.includes("youtu.be/")) {
+                videoId = block.url.split("youtu.be/")[1]?.split("?")[0];
+              }
+              const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : block.url;
+
+              return (
+                <div key={block.id} className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-black aspect-video">
+                  <iframe 
+                    src={embedUrl} 
+                    title="YouTube video player" 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowFullScreen
+                    className="w-full h-full"
+                  ></iframe>
+                  <button 
+                    onClick={() => setVideos(prev => prev.filter(n => n.id !== block.id))}
+                    className="absolute top-2 right-2 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-red-500 hover:text-red-600"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               );
             }
