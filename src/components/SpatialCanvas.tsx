@@ -96,7 +96,7 @@ export function SpatialCanvas({
       return;
     }
     
-    if (tool === "select") {
+    if (tool === "home") {
       // If we clicked on empty space, deselect
       if (e.target === stageRef.current) {
         setSelectedNodeId?.(null);
@@ -171,9 +171,9 @@ export function SpatialCanvas({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
-        draggable={tool === 'pan'}
+        draggable={tool !== 'pen'}
         onDragStart={() => {
-          if (tool === 'pan') {
+          if (tool !== 'pen') {
             document.body.style.cursor = 'grabbing';
           }
         }}
@@ -183,7 +183,7 @@ export function SpatialCanvas({
           }
         }}
         onDragEnd={(e) => {
-          if (tool === 'pan') {
+          if (tool !== 'pen') {
             document.body.style.cursor = 'default';
           }
           if (e.target === stageRef.current) {
@@ -214,9 +214,9 @@ export function SpatialCanvas({
                 y={stroke.y || 0}
                 scaleX={stroke.scaleX || 1}
                 scaleY={stroke.scaleY || 1}
-                draggable={tool === 'select'}
+                draggable={tool === 'home'}
                 onPointerDown={(e) => {
-                  if (tool === 'select') {
+                  if (tool === 'home') {
                     e.cancelBubble = true;
                     setSelectedNodeId?.(stroke.id);
                   }
@@ -244,13 +244,13 @@ export function SpatialCanvas({
                   ));
                 }}
                 onMouseEnter={(e) => {
-                  if (tool === 'select') {
+                  if (tool === 'home') {
                     const container = e.target.getStage()?.container();
                     if (container) container.style.cursor = 'move';
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (tool === 'select') {
+                  if (tool === 'home') {
                     const container = e.target.getStage()?.container();
                     if (container) container.style.cursor = 'default';
                   }
@@ -272,7 +272,7 @@ export function SpatialCanvas({
           )}
 
           {/* Attach Transformer for selected node */}
-          {tool === 'select' && selectedNodeId && strokes.some(s => s.id === selectedNodeId) && (
+          {tool === 'home' && selectedNodeId && strokes.some(s => s.id === selectedNodeId) && (
             <Transformer
               ref={transformerRef}
               boundBoxFunc={(oldBox, newBox) => {

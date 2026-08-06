@@ -322,8 +322,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   setActiveTab(tab);
                   setIsRibbonExpanded(true);
                 }
-                if (tab === "Home") setTool("home");
                 if (tab === "Draw") setTool("pen");
+                else setTool("home");
               }}
               className={`px-4 py-1 text-sm font-medium rounded-t-md transition-colors ${
                 activeTab === tab 
