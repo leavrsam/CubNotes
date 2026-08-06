@@ -244,10 +244,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     };
   }, [pan, zoom, setAudios]);
 
-  if (loading) {
-    return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
-  }
-
   const [isMiddleClickPanning, setIsMiddleClickPanning] = useState(false);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -296,6 +292,10 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       document.body.style.cursor = '';
     }
   }, [isMiddleClickPanning]);
+
+  if (loading) {
+    return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
+  }
 
   return (
     <div 
