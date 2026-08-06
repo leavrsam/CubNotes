@@ -135,7 +135,8 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
           className="flex bg-zinc-900 text-white rounded-md overflow-hidden shadow-lg border border-zinc-700 z-50"
         >
           <select
-            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300 [&>option]:bg-zinc-800"
+            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300"
+            style={{ colorScheme: 'dark' }}
             onChange={(e) => {
               if (e.target.value === "") {
                 editor.chain().focus().unsetFontFamily().run();
@@ -166,7 +167,8 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
           </select>
           
           <select
-            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300 [&>option]:bg-zinc-800"
+            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300"
+            style={{ colorScheme: 'dark' }}
             onChange={(e) => {
               if (e.target.value === "") {
                 (editor.chain().focus() as any).unsetFontSize().run();

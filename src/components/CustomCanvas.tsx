@@ -194,7 +194,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
                 <div className="flex items-center gap-1">
                   <select
-                    className="bg-transparent text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-28 text-zinc-700 dark:text-zinc-300 [&>option]:bg-zinc-100 dark:[&>option]:bg-zinc-900"
+                    className="bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-28 text-zinc-900 dark:text-zinc-300"
+                    style={{ colorScheme: 'dark' }}
                     onChange={(e) => {
                       if (!activeEditor) return;
                       if (e.target.value === "") {
@@ -227,7 +228,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   </select>
                   
                   <select
-                    className="bg-transparent text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-16 text-zinc-700 dark:text-zinc-300 [&>option]:bg-zinc-100 dark:[&>option]:bg-zinc-900"
+                    className="bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-16 text-zinc-900 dark:text-zinc-300"
+                    style={{ colorScheme: 'dark' }}
                     onChange={(e) => {
                       if (!activeEditor) return;
                       if (e.target.value === "") {
