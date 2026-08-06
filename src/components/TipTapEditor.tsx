@@ -135,7 +135,7 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
           className="flex bg-zinc-900 text-white rounded-md overflow-hidden shadow-lg border border-zinc-700 z-50"
         >
           <select
-            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
+            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300 [&>option]:bg-zinc-800"
             onChange={(e) => {
               if (e.target.value === "") {
                 editor.chain().focus().unsetFontFamily().run();
@@ -147,20 +147,26 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
           >
             <option value="">Font</option>
             <option value="Arial, sans-serif">Arial</option>
-            <option value="Helvetica, sans-serif">Helvetica</option>
-            <option value="Inter, sans-serif">Inter</option>
-            <option value="Verdana, sans-serif">Verdana</option>
-            <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
-            <option value="Georgia, serif">Georgia</option>
-            <option value="Times New Roman, serif">Times New Roman</option>
-            <option value="Garamond, serif">Garamond</option>
-            <option value="Menlo, monospace">Menlo</option>
-            <option value="Courier New, monospace">Courier New</option>
+            <option value="Calibri, sans-serif">Calibri</option>
+            <option value="Cambria, serif">Cambria</option>
             <option value="Comic Sans MS, cursive">Comic Sans MS</option>
+            <option value="Consolas, monospace">Consolas</option>
+            <option value="Courier New, monospace">Courier New</option>
+            <option value="Garamond, serif">Garamond</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="Helvetica, sans-serif">Helvetica</option>
+            <option value="Impact, sans-serif">Impact</option>
+            <option value="Inter, sans-serif">Inter</option>
+            <option value="Menlo, monospace">Menlo</option>
+            <option value="Palatino, serif">Palatino</option>
+            <option value="Roboto, sans-serif">Roboto</option>
+            <option value="Times New Roman, serif">Times New Roman</option>
+            <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
+            <option value="Verdana, sans-serif">Verdana</option>
           </select>
           
           <select
-            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none"
+            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300 [&>option]:bg-zinc-800"
             onChange={(e) => {
               if (e.target.value === "") {
                 (editor.chain().focus() as any).unsetFontSize().run();
@@ -171,14 +177,22 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
             value={editor.getAttributes('textStyle').fontSize || ""}
           >
             <option value="">Size</option>
-            <option value="12px">12px</option>
-            <option value="14px">14px</option>
-            <option value="16px">16px</option>
-            <option value="18px">18px</option>
-            <option value="20px">20px</option>
-            <option value="24px">24px</option>
-            <option value="30px">30px</option>
-            <option value="36px">36px</option>
+            <option value="8px">8</option>
+            <option value="9px">9</option>
+            <option value="10px">10</option>
+            <option value="11px">11</option>
+            <option value="12px">12</option>
+            <option value="14px">14</option>
+            <option value="16px">16</option>
+            <option value="18px">18</option>
+            <option value="20px">20</option>
+            <option value="22px">22</option>
+            <option value="24px">24</option>
+            <option value="26px">26</option>
+            <option value="28px">28</option>
+            <option value="36px">36</option>
+            <option value="48px">48</option>
+            <option value="72px">72</option>
           </select>
 
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />

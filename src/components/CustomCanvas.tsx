@@ -192,10 +192,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
-                {/* Text Formatting Tools */}
                 <div className="flex items-center gap-1">
                   <select
-                    className="bg-transparent text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-28 text-zinc-700 dark:text-zinc-300"
+                    className="bg-transparent text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-28 text-zinc-700 dark:text-zinc-300 [&>option]:bg-zinc-100 dark:[&>option]:bg-zinc-900"
                     onChange={(e) => {
                       if (!activeEditor) return;
                       if (e.target.value === "") {
@@ -209,20 +208,26 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   >
                     <option value="">Font</option>
                     <option value="Arial, sans-serif">Arial</option>
-                    <option value="Helvetica, sans-serif">Helvetica</option>
-                    <option value="Inter, sans-serif">Inter</option>
-                    <option value="Verdana, sans-serif">Verdana</option>
-                    <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
-                    <option value="Georgia, serif">Georgia</option>
-                    <option value="Times New Roman, serif">Times New Roman</option>
-                    <option value="Garamond, serif">Garamond</option>
-                    <option value="Menlo, monospace">Menlo</option>
-                    <option value="Courier New, monospace">Courier New</option>
+                    <option value="Calibri, sans-serif">Calibri</option>
+                    <option value="Cambria, serif">Cambria</option>
                     <option value="Comic Sans MS, cursive">Comic Sans MS</option>
+                    <option value="Consolas, monospace">Consolas</option>
+                    <option value="Courier New, monospace">Courier New</option>
+                    <option value="Garamond, serif">Garamond</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="Helvetica, sans-serif">Helvetica</option>
+                    <option value="Impact, sans-serif">Impact</option>
+                    <option value="Inter, sans-serif">Inter</option>
+                    <option value="Menlo, monospace">Menlo</option>
+                    <option value="Palatino, serif">Palatino</option>
+                    <option value="Roboto, sans-serif">Roboto</option>
+                    <option value="Times New Roman, serif">Times New Roman</option>
+                    <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
+                    <option value="Verdana, sans-serif">Verdana</option>
                   </select>
                   
                   <select
-                    className="bg-transparent text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-16 text-zinc-700 dark:text-zinc-300"
+                    className="bg-transparent text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-16 text-zinc-700 dark:text-zinc-300 [&>option]:bg-zinc-100 dark:[&>option]:bg-zinc-900"
                     onChange={(e) => {
                       if (!activeEditor) return;
                       if (e.target.value === "") {
@@ -235,14 +240,22 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     disabled={!activeEditor}
                   >
                     <option value="">Size</option>
+                    <option value="8px">8</option>
+                    <option value="9px">9</option>
+                    <option value="10px">10</option>
+                    <option value="11px">11</option>
                     <option value="12px">12</option>
                     <option value="14px">14</option>
                     <option value="16px">16</option>
                     <option value="18px">18</option>
                     <option value="20px">20</option>
+                    <option value="22px">22</option>
                     <option value="24px">24</option>
-                    <option value="30px">30</option>
+                    <option value="26px">26</option>
+                    <option value="28px">28</option>
                     <option value="36px">36</option>
+                    <option value="48px">48</option>
+                    <option value="72px">72</option>
                   </select>
                 </div>
 
