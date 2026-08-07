@@ -601,8 +601,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
       {/* Page Title overlay */}
       <div 
-        className="absolute left-16 z-40 pointer-events-none transition-all duration-300"
-        style={{ top: isRibbonExpanded ? '90px' : '50px' }}
+        className="absolute z-40 pointer-events-none"
+        style={{ 
+          transformOrigin: '0 0',
+          transform: `translate(${pan.x + 64 * zoom}px, ${pan.y + 100 * zoom}px) scale(${zoom})`
+        }}
       >
         <input
           type="text"
