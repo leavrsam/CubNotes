@@ -247,11 +247,17 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
 
           {/* Color Picker */}
-          <div className="flex px-1 gap-1 items-center">
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#000000').run()} className="w-4 h-4 rounded-full bg-black border border-zinc-600" title="Black" />
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#ef4444').run()} className="w-4 h-4 rounded-full bg-red-500" title="Red" />
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#3b82f6').run()} className="w-4 h-4 rounded-full bg-blue-500" title="Blue" />
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setColor('#22c55e').run()} className="w-4 h-4 rounded-full bg-green-500" title="Green" />
+          <div className="flex px-1 items-center">
+            <input
+              type="color"
+              className="w-5 h-5 p-0 border-0 rounded cursor-pointer bg-transparent"
+              value={editor.getAttributes('textStyle')?.color || '#000000'}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                editor.chain().focus().setColor(e.target.value).run();
+              }}
+              title="Text Color"
+            />
           </div>
 
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />

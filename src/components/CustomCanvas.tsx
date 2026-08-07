@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -90,6 +90,113 @@ export type DocumentState = {
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { Mic } from "lucide-react";
 import toast from "react-hot-toast";
+
+const FONT_OPTIONS = [
+  { value: "", label: "Font" },
+  { value: "Arial, sans-serif", label: "Arial" },
+  { value: "Calibri, sans-serif", label: "Calibri" },
+  { value: "Cambria, serif", label: "Cambria" },
+  { value: "Comic Sans MS, cursive", label: "Comic Sans MS" },
+  { value: "Consolas, monospace", label: "Consolas" },
+  { value: "Courier New, monospace", label: "Courier New" },
+  { value: "Garamond, serif", label: "Garamond" },
+  { value: "Georgia, serif", label: "Georgia" },
+  { value: "Helvetica, sans-serif", label: "Helvetica" },
+  { value: "Impact, sans-serif", label: "Impact" },
+  { value: "Inter, sans-serif", label: "Inter" },
+  { value: "Menlo, monospace", label: "Menlo" },
+  { value: "Palatino, serif", label: "Palatino" },
+  { value: "Roboto, sans-serif", label: "Roboto" },
+  { value: "Times New Roman, serif", label: "Times New Roman" },
+  { value: "Trebuchet MS, sans-serif", label: "Trebuchet MS" },
+  { value: "Verdana, sans-serif", label: "Verdana" },
+];
+
+const SIZE_OPTIONS = [
+  { value: "", label: "Size" },
+  { value: "8px", label: "8" },
+  { value: "9px", label: "9" },
+  { value: "10px", label: "10" },
+  { value: "11px", label: "11" },
+  { value: "12px", label: "12" },
+  { value: "14px", label: "14" },
+  { value: "16px", label: "16" },
+  { value: "18px", label: "18" },
+  { value: "20px", label: "20" },
+  { value: "22px", label: "22" },
+  { value: "24px", label: "24" },
+  { value: "26px", label: "26" },
+  { value: "28px", label: "28" },
+  { value: "36px", label: "36" },
+  { value: "48px", label: "48" },
+  { value: "72px", label: "72" },
+];
+
+function CustomSelect({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder, 
+  width,
+  disabled
+}: { 
+  value: string; 
+  onChange: (v: string) => void; 
+  options: { label: string, value: string }[];
+  placeholder: string;
+  width: string;
+  disabled: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(o => o.value === value);
+
+  return (
+    <div className={`relative ${width}`} ref={ref} onPointerDown={(e) => e.stopPropagation()}>
+      <button
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!disabled) setIsOpen(!isOpen);
+        }}
+        disabled={disabled}
+        className={`w-full flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none text-zinc-900 dark:text-zinc-300 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
+        <ChevronDown size={12} className="opacity-50 flex-shrink-0 ml-1" />
+      </button>
+      {isOpen && !disabled && (
+        <div className="absolute top-full mt-1 left-0 w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-2 py-1.5 text-xs hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors ${value === opt.value ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium' : 'text-zinc-700 dark:text-zinc-300'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: CustomCanvasProps) {
   const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
@@ -352,78 +459,44 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
                 <div className="flex items-center gap-1">
-                  <select
-                    className="bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-28 text-zinc-900 dark:text-zinc-300"
-                    style={{ colorScheme: 'dark' }}
-                    onChange={(e) => {
+                  <CustomSelect
+                    width="w-28"
+                    placeholder="Font"
+                    options={FONT_OPTIONS}
+                    disabled={!activeEditor}
+                    value={activeEditor?.getAttributes('textStyle')?.fontFamily || ""}
+                    onChange={(val) => {
                       if (!activeEditor) return;
-                      if (e.target.value === "") {
+                      if (val === "") {
                         activeEditor.chain().focus().unsetFontFamily().run();
                       } else {
-                        activeEditor.chain().focus().setFontFamily(e.target.value).run();
+                        activeEditor.chain().focus().setFontFamily(val).run();
                       }
                     }}
-                    value={activeEditor?.getAttributes('textStyle')?.fontFamily || ""}
-                    disabled={!activeEditor}
-                  >
-                    <option value="">Font</option>
-                    <option value="Arial, sans-serif">Arial</option>
-                    <option value="Calibri, sans-serif">Calibri</option>
-                    <option value="Cambria, serif">Cambria</option>
-                    <option value="Comic Sans MS, cursive">Comic Sans MS</option>
-                    <option value="Consolas, monospace">Consolas</option>
-                    <option value="Courier New, monospace">Courier New</option>
-                    <option value="Garamond, serif">Garamond</option>
-                    <option value="Georgia, serif">Georgia</option>
-                    <option value="Helvetica, sans-serif">Helvetica</option>
-                    <option value="Impact, sans-serif">Impact</option>
-                    <option value="Inter, sans-serif">Inter</option>
-                    <option value="Menlo, monospace">Menlo</option>
-                    <option value="Palatino, serif">Palatino</option>
-                    <option value="Roboto, sans-serif">Roboto</option>
-                    <option value="Times New Roman, serif">Times New Roman</option>
-                    <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
-                    <option value="Verdana, sans-serif">Verdana</option>
-                  </select>
+                  />
                   
-                  <select
-                    className="bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none w-16 text-zinc-900 dark:text-zinc-300"
-                    style={{ colorScheme: 'dark' }}
-                    onChange={(e) => {
+                  <CustomSelect
+                    width="w-16"
+                    placeholder="Size"
+                    options={SIZE_OPTIONS}
+                    disabled={!activeEditor}
+                    value={activeEditor?.getAttributes('textStyle')?.fontSize || ""}
+                    onChange={(val) => {
                       if (!activeEditor) return;
-                      if (e.target.value === "") {
+                      if (val === "") {
                         (activeEditor.chain().focus() as any).unsetFontSize().run();
                       } else {
-                        (activeEditor.chain().focus() as any).setFontSize(e.target.value).run();
+                        (activeEditor.chain().focus() as any).setFontSize(val).run();
                       }
                     }}
-                    value={activeEditor?.getAttributes('textStyle')?.fontSize || ""}
-                    disabled={!activeEditor}
-                  >
-                    <option value="">Size</option>
-                    <option value="8px">8</option>
-                    <option value="9px">9</option>
-                    <option value="10px">10</option>
-                    <option value="11px">11</option>
-                    <option value="12px">12</option>
-                    <option value="14px">14</option>
-                    <option value="16px">16</option>
-                    <option value="18px">18</option>
-                    <option value="20px">20</option>
-                    <option value="22px">22</option>
-                    <option value="24px">24</option>
-                    <option value="26px">26</option>
-                    <option value="28px">28</option>
-                    <option value="36px">36</option>
-                    <option value="48px">48</option>
-                    <option value="72px">72</option>
-                  </select>
+                  />
                 </div>
 
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
                 <div className="flex items-center">
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleBold().run()}
                     disabled={!activeEditor}
                     className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('bold') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
@@ -432,6 +505,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     <Bold size={14} />
                   </button>
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleItalic().run()}
                     disabled={!activeEditor}
                     className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('italic') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
@@ -440,6 +514,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     <Italic size={14} />
                   </button>
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleUnderline().run()}
                     disabled={!activeEditor}
                     className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('underline') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
@@ -448,6 +523,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     <UnderlineIcon size={14} />
                   </button>
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleHighlight().run()}
                     disabled={!activeEditor}
                     className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('highlight') ? 'bg-yellow-200 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-500' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
@@ -456,11 +532,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     <Highlighter size={14} />
                   </button>
 
-                  <div className="flex px-2 gap-1 items-center ml-1">
-                    <button onClick={() => activeEditor?.chain().focus().setColor('#000000').run()} className="w-3.5 h-3.5 rounded-full bg-black border border-zinc-300 dark:border-zinc-600" title="Black" />
-                    <button onClick={() => activeEditor?.chain().focus().setColor('#ef4444').run()} className="w-3.5 h-3.5 rounded-full bg-red-500" title="Red" />
-                    <button onClick={() => activeEditor?.chain().focus().setColor('#3b82f6').run()} className="w-3.5 h-3.5 rounded-full bg-blue-500" title="Blue" />
-                    <button onClick={() => activeEditor?.chain().focus().setColor('#22c55e').run()} className="w-3.5 h-3.5 rounded-full bg-green-500" title="Green" />
+                  <div className="flex px-2 items-center ml-1">
+                    <input
+                      type="color"
+                      disabled={!activeEditor}
+                      title={!activeEditor ? "Click inside a text block first" : "Text Color"}
+                      className={`w-6 h-6 p-0 border-0 rounded cursor-pointer bg-transparent transition-opacity ${!activeEditor ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
+                      value={activeEditor?.getAttributes('textStyle')?.color || '#000000'}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        if (activeEditor) {
+                          activeEditor.chain().focus().setColor(e.target.value).run();
+                        }
+                      }}
+                    />
                   </div>
                 </div>
 
@@ -468,6 +553,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
                 <div className="flex items-center">
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleBulletList().run()}
                     disabled={!activeEditor}
                     className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('bulletList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
@@ -476,6 +562,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     <List size={14} />
                   </button>
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleOrderedList().run()}
                     disabled={!activeEditor}
                     className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('orderedList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
@@ -529,6 +616,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
                 <div className="flex items-center h-full">
                   <button
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
                     disabled={!activeEditor}
                     className={`flex flex-col items-center justify-center h-full px-3 rounded ${activeEditor ? 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed'}`}
