@@ -327,7 +327,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               }}
               className={`px-4 py-1 text-sm font-medium rounded-t-md transition-colors ${
                 activeTab === tab 
-                  ? 'bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 border-t border-l border-r border-zinc-200 dark:border-zinc-800' 
+                  ? 'bg-white dark:bg-zinc-900 text-primary-600 dark:text-primary-400 border-t border-l border-r border-zinc-200 dark:border-zinc-800' 
                   : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50'
               }`}
             >
@@ -343,7 +343,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               <div className="flex items-center gap-2 h-full py-1">
                 <button
                   onClick={() => setTool("home")}
-                  className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "home" ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                  className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "home" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
                 >
                   <MousePointer2 size={16} strokeWidth={2} />
                   <span className="text-[10px] font-medium mt-0.5">Select</span>
@@ -546,14 +546,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="flex items-center h-full">
                   <button
                     onClick={() => setTool("pen")}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "pen" ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "pen" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
                   >
                     <Pen size={16} strokeWidth={2} />
                     <span className="text-[10px] font-medium mt-0.5">Pen</span>
                   </button>
                   <button
                     onClick={() => setTool("pan")}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "pan" ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "pan" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
                   >
                     <Hand size={16} strokeWidth={2} />
                     <span className="text-[10px] font-medium mt-0.5">Pan</span>

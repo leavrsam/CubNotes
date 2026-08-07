@@ -103,7 +103,7 @@ export function MediaOverlay({
           }}
           onClick={(e) => { e.stopPropagation(); setSelectedNodeId?.(img.id); }}
         >
-          <div className={`relative group border-2 ${selectedNodeId === img.id ? 'border-indigo-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'}`}>
+          <div className={`relative group border-2 ${selectedNodeId === img.id ? 'border-primary-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'}`}>
             <img src={img.url} alt="Canvas Image" className="max-w-[400px] object-contain select-none" draggable={false} />
             
             {tool === "home" && (
@@ -140,10 +140,10 @@ export function MediaOverlay({
           }}
           onClick={(e) => { e.stopPropagation(); setSelectedNodeId?.(file.id); }}
         >
-          <div className={`relative group bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-sm border-2 ${selectedNodeId === file.id ? 'border-indigo-500 shadow-md' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'} w-64 flex flex-col gap-2 items-center text-center`}>
-            <File size={32} className="text-indigo-500" />
+          <div className={`relative group bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-sm border-2 ${selectedNodeId === file.id ? 'border-primary-500 shadow-md' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'} w-64 flex flex-col gap-2 items-center text-center`}>
+            <File size={32} className="text-primary-500" />
             <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate w-full" title={file.filename}>{file.filename}</span>
-            <a href={file.url} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-2">
+            <a href={file.url} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-2">
               <Download size={14} /> Download
             </a>
             
@@ -181,7 +181,7 @@ export function MediaOverlay({
           }}
           onClick={(e) => { e.stopPropagation(); setSelectedNodeId?.(video.id); }}
         >
-          <div className={`relative group border-2 rounded ${selectedNodeId === video.id ? 'border-indigo-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'} bg-black overflow-hidden`}>
+          <div className={`relative group border-2 rounded ${selectedNodeId === video.id ? 'border-primary-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'} bg-black overflow-hidden`}>
             <iframe 
               width={video.width || 480} 
               height={video.height || 270} 

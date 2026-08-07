@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2 } from "lucide-react";
+import { Book, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 
 interface SidebarProps {
@@ -18,6 +18,7 @@ interface SidebarProps {
   onUpdatePage: (id: string, title: string) => void;
   onDeletePage: (id: string) => void;
   onClose?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function Sidebar({ 
@@ -25,7 +26,7 @@ export function Sidebar({
   onAddNotebook, onUpdateNotebook, onDeleteNotebook,
   onAddSection, onUpdateSection, onDeleteSection,
   onAddPage, onUpdatePage, onDeletePage,
-  onClose
+  onClose, onOpenSettings
 }: SidebarProps) {
   return (
     <aside className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800 flex-shrink-0">
@@ -62,6 +63,17 @@ export function Sidebar({
           </div>
         )}
       </div>
+      
+      {/* Settings Footer */}
+      <div className="p-4 border-t border-zinc-800 flex items-center justify-between mt-auto">
+        <button 
+          onClick={onOpenSettings}
+          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors w-full p-1.5 rounded-md hover:bg-zinc-800/50"
+        >
+          <Settings size={18} />
+          <span className="font-medium">Settings</span>
+        </button>
+      </div>
     </aside>
   );
 }
@@ -94,7 +106,7 @@ function EditableItem({
             if (e.key === 'Escape') onCancel();
           }}
           onBlur={() => onSave(val)}
-          className="flex-1 bg-zinc-900 border border-indigo-500 rounded px-1 text-sm text-zinc-100 outline-none"
+          className="flex-1 bg-zinc-900 border border-primary-500 rounded px-1 text-sm text-zinc-100 outline-none"
         />
       </div>
     );
@@ -137,7 +149,7 @@ function NotebookItem({
   return (
     <div className="space-y-1">
       <EditableItem 
-        icon={Book} title={notebook.title} isEditing={isEditing} iconColor="text-indigo-400"
+        icon={Book} title={notebook.title} isEditing={isEditing} iconColor="text-primary-400"
         onSave={(val) => { onUpdate(val); setIsEditing(false); }}
         onCancel={() => setIsEditing(false)}
       >
@@ -148,7 +160,7 @@ function NotebookItem({
           <div className="w-4 flex items-center justify-center">
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </div>
-          <Book size={16} className="text-indigo-400 flex-shrink-0" />
+          <Book size={16} className="text-primary-400 flex-shrink-0" />
           <span className="truncate flex-1 text-left">{notebook.title}</span>
           <ItemActions onEdit={() => setIsEditing(true)} onDelete={onDelete} onAdd={() => { setExpanded(true); onAddSection(); }} addTitle="Add Section" />
         </div>
@@ -246,7 +258,7 @@ function PageItem({ page, selected, onSelect, onUpdate, onDelete }: any) {
         onClick={onSelect}
         className={`group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
           selected
-            ? "bg-indigo-500/10 text-indigo-300 font-medium"
+            ? "bg-primary-500/10 text-primary-300 font-medium"
             : "hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200"
         }`}
       >

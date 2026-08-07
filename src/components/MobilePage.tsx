@@ -200,11 +200,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div key={block.id} className="relative w-full bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <File size={24} className="text-indigo-500 flex-shrink-0" />
+                    <File size={24} className="text-primary-500 flex-shrink-0" />
                     <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <a href={block.url} download target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 dark:text-indigo-400">
+                    <a href={block.url} download target="_blank" rel="noopener noreferrer" className="p-2 text-primary-600 dark:text-primary-400">
                       <Download size={18} />
                     </a>
                     <button onClick={() => setFiles(prev => prev.filter(n => n.id !== block.id))} className="p-2 text-red-500">
@@ -249,7 +249,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       <div className="absolute bottom-6 right-6 z-50">
         <button 
           onClick={addTextBlock}
-          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center hover:bg-indigo-700 transition-colors"
+          className="w-14 h-14 bg-primary-600 text-white rounded-full shadow-xl flex items-center justify-center hover:bg-primary-700 transition-colors"
         >
           <Plus size={24} />
         </button>

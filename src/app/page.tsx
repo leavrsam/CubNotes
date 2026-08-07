@@ -20,6 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Mic, Square, Menu, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
+import { SettingsModal } from "@/components/SettingsModal";
 
 export default function Home() {
   const { 
@@ -30,6 +31,8 @@ export default function Home() {
   } = useNotebooks();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   // Meeting Recording State
   const [isDesktopRecording, setIsDesktopRecording] = useState(false);
@@ -68,6 +71,7 @@ export default function Home() {
       if (!session) {
         router.push("/login");
       } else {
+        setUserEmail(session.user.email || "");
         setAuthChecking(false);
       }
     };
@@ -250,6 +254,11 @@ export default function Home() {
     );
   }
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   const isAnyRecording = isDesktopRecording || isWebRecording;
 
   let activePageTitle = "Untitled Page";
@@ -287,10 +296,11 @@ export default function Home() {
           onAddSection={(nbId) => addSection(nbId, "New Section")}
           onUpdateSection={updateSection}
           onDeleteSection={deleteSection}
-          onAddPage={(secId) => addPage(secId, "Untitled Page")}
+          onAddPage={addPage}
           onUpdatePage={updatePage}
           onDeletePage={deletePage}
-          onClose={() => setIsSidebarOpen(false)}
+          onClose={() => isMobile && setIsSidebarOpen(false)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       </div>
       
@@ -372,6 +382,12 @@ export default function Home() {
           </div>
         )}
       </div>
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+        userEmail={userEmail}
+        onSignOut={handleSignOut}
+      />
     </main>
   );
 }

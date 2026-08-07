@@ -7,18 +7,26 @@ export const metadata: Metadata = {
   description: "AI-powered infinite canvas workspace",
 };
 
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { AccentProvider } from "@/components/AccentProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // We remove className="dark" from HTML so next-themes can manage it
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body
         className="antialiased h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-50 flex"
       >
-        {children}
-        <Toaster position="bottom-right" />
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <AccentProvider>
+            {children}
+            <Toaster position="bottom-right" />
+          </AccentProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
