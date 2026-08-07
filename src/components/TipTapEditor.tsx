@@ -253,8 +253,8 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
               className="w-5 h-5 p-0 border-0 rounded cursor-pointer bg-transparent"
               value={editor.getAttributes('textStyle')?.color || '#000000'}
               onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                editor.chain().focus().setColor(e.target.value).run();
+              onInput={(e) => {
+                editor.chain().focus().setColor((e.target as HTMLInputElement).value).run();
               }}
               title="Text Color"
             />

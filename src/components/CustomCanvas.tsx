@@ -540,9 +540,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                       className={`w-6 h-6 p-0 border-0 rounded cursor-pointer bg-transparent transition-opacity ${!activeEditor ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
                       value={activeEditor?.getAttributes('textStyle')?.color || '#000000'}
                       onPointerDown={(e) => e.stopPropagation()}
-                      onChange={(e) => {
+                      onInput={(e) => {
                         if (activeEditor) {
-                          activeEditor.chain().focus().setColor(e.target.value).run();
+                          activeEditor.chain().focus().setColor((e.target as HTMLInputElement).value).run();
                         }
                       }}
                     />
