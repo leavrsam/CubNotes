@@ -101,11 +101,6 @@ export function RichTextOverlay({
   return (
     <div className="absolute inset-0 z-10 pointer-events-none">
       <div 
-        className={`absolute inset-0 ${tool === 'home' ? 'cursor-text pointer-events-auto' : 'pointer-events-none'}`} 
-        onClick={handleCanvasClick} 
-      />
-      
-      <div 
         className="absolute inset-0 pointer-events-none"
         style={{
           transformOrigin: '0 0',

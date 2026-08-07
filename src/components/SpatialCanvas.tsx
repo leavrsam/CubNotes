@@ -33,6 +33,7 @@ interface SpatialCanvasProps {
   activeSize: number;
   selectedNodeId?: string | null;
   setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
+  onCanvasClick?: (x: number, y: number) => void;
 }
 
 export function SpatialCanvas({ 
@@ -40,7 +41,8 @@ export function SpatialCanvas({
   pan, setPan, 
   zoom, setZoom, 
   tool, activeColor, activeSize,
-  selectedNodeId, setSelectedNodeId
+  selectedNodeId, setSelectedNodeId,
+  onCanvasClick
 }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
@@ -163,13 +165,19 @@ export function SpatialCanvas({
   };
 
   return (
-    <div className={`absolute inset-0 ${tool === 'pen' ? 'cursor-crosshair' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
+    <div className={`absolute inset-0 ${tool === 'pen' ? 'cursor-crosshair' : tool === 'home' ? 'cursor-text' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       <Stage
         width={typeof window !== 'undefined' ? window.innerWidth : 1000}
         height={typeof window !== 'undefined' ? window.innerHeight : 800}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onClick={(e) => {
+          if (tool === 'home' && e.target === stageRef.current) {
+            const pos = getPointerPos(e);
+            onCanvasClick?.(pos.x, pos.y);
+          }
+        }}
         onWheel={handleWheel}
         draggable={tool !== 'pen'}
         onDragStart={() => {
