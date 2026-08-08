@@ -74,7 +74,7 @@ function getSvgPathFromStroke(stroke: number[][]) {
 }
 
 // Render strokes attached to a block
-function AttachedStrokes({ strokes, blockBox }: { strokes: Stroke[], blockBox: any }) {
+function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[], blockBox: any, isStandalone?: boolean }) {
   if (!strokes || strokes.length === 0) return null;
 
   // We want to ensure we don't clip strokes that go slightly outside the block
@@ -94,17 +94,21 @@ function AttachedStrokes({ strokes, blockBox }: { strokes: Stroke[], blockBox: a
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
 
+  // For attached strokes, use the block's width as the reference.
+  // For standalone strokes, use a virtual desktop width (e.g. 800) so small scribbles don't become massive.
+  const referenceWidth = isStandalone ? 800 : blockBox.width;
+
   // Use percentages relative to the block width so strokes scale gracefully with text layout on mobile
-  const leftPercent = ((minX - blockBox.minX) / blockBox.width) * 100;
+  const leftPercent = isStandalone ? 0 : ((minX - blockBox.minX) / referenceWidth) * 100;
   
   return (
     <svg 
-      className="absolute pointer-events-none z-20"
+      className={`${isStandalone ? 'relative' : 'absolute'} pointer-events-none z-20`}
       style={{
-        left: `${leftPercent}%`, 
-        top: 0,
-        // Calculate proportional width relative to block box width, ensuring it never goes crazy for standalone drawings
-        width: `${Math.min((width / blockBox.width) * 100, 200)}%`,
+        left: isStandalone ? undefined : `${leftPercent}%`, 
+        top: isStandalone ? undefined : 0,
+        // Calculate proportional width relative to reference width
+        width: `${Math.min((width / referenceWidth) * 100, 200)}%`,
         height: 'auto',
       }}
       viewBox={`${minX} ${minY} ${width} ${height}`}
@@ -409,9 +413,17 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             } else if (block.type === 'drawing') {
               // Standalone drawing cluster
+              const blockBox = {
+                minX: block.minX,
+                minY: block.minY,
+                maxX: block.maxX,
+                maxY: block.maxY,
+                width: block.width
+              };
+
               return (
-                <div key={block.id} className="relative w-full min-h-[50px]">
-                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
+                <div key={block.id} className="w-full my-4">
+                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} isStandalone={true} />
                 </div>
               );
             }
