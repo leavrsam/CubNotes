@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus, File, Download } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Type, Image as ImageIcon, Mic, PenTool } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 
@@ -150,9 +150,10 @@ interface MobilePageProps {
   pageTitle: string;
   pageCreatedAt: string;
   onUpdatePageTitle: (title: string) => void;
+  onBack?: () => void;
 }
 
-export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: MobilePageProps) {
+export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack }: MobilePageProps) {
   const { loading, strokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
 
@@ -266,27 +267,48 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-zinc-50 dark:bg-zinc-950 relative">
-      <div className="flex-1 overflow-y-auto px-4 py-6 pt-16 pb-32 relative">
+    <div className="w-full h-full flex flex-col bg-white dark:bg-black relative">
+      
+      {/* Blurred Header */}
+      <div className="sticky top-0 z-50 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 transition-all">
+        <div className="flex items-center px-4 py-3">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="flex items-center text-primary-600 dark:text-yellow-500 font-medium mr-2"
+            >
+              <ChevronLeft size={24} className="-ml-2" />
+              Notes
+            </button>
+          )}
+          <div className="flex-1" />
+          <button className="p-1 text-primary-600 dark:text-yellow-500 rounded-full">
+            {/* Placeholder for more actions */}
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto relative scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
         
-        {/* Title */}
-        <input
-          type="text"
-          value={pageTitle}
-          onChange={(e) => onUpdatePageTitle(e.target.value)}
-          placeholder="Page Title"
-          className="bg-transparent text-3xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-full mb-2 relative z-10"
-        />
-        {/* Decorative OneNote-style underline */}
-        <div className="w-full h-[1px] bg-gradient-to-r from-zinc-300 to-transparent dark:from-zinc-700 mb-1"></div>
-        {pageCreatedAt && (
-          <div className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 whitespace-pre">
-            {format(new Date(pageCreatedAt), "EEEE, MMMM d, yyyy     h:mm a")}
-          </div>
-        )}
+        {/* Title area (scrolls with content) */}
+        <div className="px-5 pt-4 pb-6">
+          <input
+            type="text"
+            value={pageTitle}
+            onChange={(e) => onUpdatePageTitle(e.target.value)}
+            placeholder="Page Title"
+            className="bg-transparent text-4xl font-bold text-zinc-900 dark:text-white border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-full mb-1"
+          />
+          {pageCreatedAt && (
+            <div className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              {format(new Date(pageCreatedAt), "MMMM d, yyyy 'at' h:mm a")}
+            </div>
+          )}
+        </div>
 
         {/* Linear feed of blocks */}
-        <div className="flex flex-col gap-6 w-full relative z-10">
+        <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
           {sortedBlocks.map(block => {
             const blockBox = getBlockBoundingBox(block);
 
@@ -428,16 +450,35 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             }
           })}
+          
+          {/* Tap Zone at bottom to append text */}
+          <div 
+            className="flex-1 min-h-[200px] w-full cursor-text" 
+            onClick={addTextBlock}
+          />
         </div>
       </div>
 
-      {/* Floating Action Button */}
-      <div className="absolute bottom-6 right-6 z-50">
+      {/* Sticky Bottom Action Bar */}
+      <div className="sticky bottom-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 px-6 py-4 pb-safe flex items-center justify-between">
+        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+          <Type size={22} />
+        </button>
+        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+          <ImageIcon size={22} />
+        </button>
+        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+          <Mic size={22} />
+        </button>
+        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+          <PenTool size={22} />
+        </button>
+        <div className="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-2" />
         <button 
           onClick={addTextBlock}
-          className="w-14 h-14 bg-primary-600 text-white rounded-full shadow-xl flex items-center justify-center hover:bg-primary-700 transition-colors"
+          className="p-2 text-primary-600 dark:text-yellow-500"
         >
-          <Plus size={24} />
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
       </div>
     </div>
