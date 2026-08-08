@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
 import { Trash2, Plus, File, Download, ChevronLeft, Type, Image as ImageIcon, Mic, PenTool } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
+import { createClient } from "@/lib/supabase/client";
+import toast from "react-hot-toast";
 
 import { Stroke } from "./CustomCanvas";
 
@@ -151,11 +153,53 @@ interface MobilePageProps {
   pageCreatedAt: string;
   onUpdatePageTitle: (title: string) => void;
   onBack?: () => void;
+  isRecording?: boolean;
+  isProcessing?: boolean;
+  onToggleMeeting?: () => void;
 }
 
-export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack }: MobilePageProps) {
+export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting }: MobilePageProps) {
   const { loading, strokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
+  
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const supabase = createClient();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const toastId = toast.loading(`Uploading image...`);
+    try {
+      const ext = file.name.split('.').pop();
+      const filename = `${pageId}/${uuidv4()}.${ext}`;
+
+      const { data, error } = await supabase.storage
+        .from('recordings')
+        .upload(filename, file);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('recordings')
+        .getPublicUrl(filename);
+
+      setImages(prev => [...(prev || []), {
+        id: uuidv4(),
+        x: 50,
+        y: bottomY,
+        url: publicUrl
+      }]);
+      toast.success(`Image uploaded!`, { id: toastId });
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`, { id: toastId });
+    } finally {
+      e.target.value = ''; // Reset input
+    }
+  };
 
   // Group blocks and strokes
   const sortedBlocks = useMemo(() => {
@@ -461,16 +505,34 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
       {/* Sticky Bottom Action Bar */}
       <div className="sticky bottom-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 px-6 py-4 pb-safe flex items-center justify-between">
-        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+        <input 
+          type="file" 
+          ref={imageInputRef} 
+          onChange={handleFileUpload} 
+          accept="image/*" 
+          className="hidden" 
+        />
+        <button onClick={addTextBlock} className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
           <Type size={22} />
         </button>
-        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+        <button onClick={() => imageInputRef.current?.click()} className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
           <ImageIcon size={22} />
         </button>
-        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+        <button 
+          onClick={onToggleMeeting}
+          disabled={isProcessing}
+          className={`p-2 transition-colors ${
+            isRecording 
+              ? 'text-red-500 animate-pulse' 
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white'
+          }`}
+        >
           <Mic size={22} />
         </button>
-        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+        <button 
+          onClick={() => toast.success("Native drawing is coming soon! For now, view your desktop drawings here.")}
+          className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
+        >
           <PenTool size={22} />
         </button>
         <div className="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-2" />
