@@ -56,6 +56,23 @@ function getIntersectionArea(box1: any, box2: any) {
   return overlapX * overlapY;
 }
 
+import { getStroke } from "perfect-freehand";
+
+// Utility to convert perfect-freehand points to an SVG path string
+function getSvgPathFromStroke(stroke: number[][]) {
+  if (!stroke.length) return "";
+  const d = stroke.reduce(
+    (acc, [x0, y0], i, arr) => {
+      const [x1, y1] = arr[(i + 1) % arr.length];
+      acc.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+      return acc;
+    },
+    ["M", ...stroke[0], "Q"]
+  );
+  d.push("Z");
+  return d.join(" ");
+}
+
 // Render strokes attached to a block
 function AttachedStrokes({ strokes, blockBox }: { strokes: Stroke[], blockBox: any }) {
   if (!strokes || strokes.length === 0) return null;
@@ -74,10 +91,10 @@ function AttachedStrokes({ strokes, blockBox }: { strokes: Stroke[], blockBox: a
     maxY = Math.max(maxY, box.maxY);
   });
 
-  const width = maxX - minX;
-  const height = maxY - minY;
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
 
-  // Position relative to block
+  // Use percentages relative to the block width so strokes scale gracefully with text layout on mobile
   const leftPercent = ((minX - blockBox.minX) / blockBox.width) * 100;
   
   return (
@@ -85,8 +102,9 @@ function AttachedStrokes({ strokes, blockBox }: { strokes: Stroke[], blockBox: a
       className="absolute pointer-events-none z-20"
       style={{
         left: `${leftPercent}%`, 
-        top: 0, // Align top
-        width: `${(width / blockBox.width) * 100}%`,
+        top: 0,
+        // Calculate proportional width relative to block box width, ensuring it never goes crazy for standalone drawings
+        width: `${Math.min((width / blockBox.width) * 100, 200)}%`,
         height: 'auto',
       }}
       viewBox={`${minX} ${minY} ${width} ${height}`}
@@ -95,26 +113,27 @@ function AttachedStrokes({ strokes, blockBox }: { strokes: Stroke[], blockBox: a
       {strokes.map((stroke) => {
         if (!stroke.points || stroke.points.length === 0) return null;
         
+        // Use perfect-freehand just like SpatialCanvas
+        const strokeData = getStroke(stroke.points, {
+          size: stroke.size,
+          thinning: 0.5,
+          smoothing: 0.5,
+          streamline: 0.5,
+        });
+        const pathData = getSvgPathFromStroke(strokeData);
+
         // Apply transformations if they exist
         const sX = stroke.scaleX || 1;
         const sY = stroke.scaleY || 1;
         const tX = stroke.x || 0;
         const tY = stroke.y || 0;
 
-        let d = `M ${stroke.points[0][0] * sX + tX} ${stroke.points[0][1] * sY + tY}`;
-        for (let i = 1; i < stroke.points.length; i++) {
-          d += ` L ${stroke.points[i][0] * sX + tX} ${stroke.points[i][1] * sY + tY}`;
-        }
-
         return (
           <path
             key={stroke.id}
-            d={d}
-            stroke={stroke.color}
-            strokeWidth={stroke.size * Math.max(sX, sY)}
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            d={pathData}
+            fill={stroke.color}
+            transform={`translate(${tX}, ${tY}) scale(${sX}, ${sY})`}
           />
         );
       })}
@@ -244,7 +263,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
   return (
     <div className="w-full h-full flex flex-col bg-zinc-50 dark:bg-zinc-950 relative">
-      <div className="flex-1 overflow-y-auto px-4 py-6 pb-32 relative">
+      <div className="flex-1 overflow-y-auto px-4 py-6 pt-16 pb-32 relative">
         
         {/* Title */}
         <input

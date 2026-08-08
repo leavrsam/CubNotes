@@ -105,7 +105,7 @@ export function AudioOverlay({
             <div 
               key={node.id}
               onPointerDown={(e) => {
-                if (tool === 'select') {
+                if (tool === 'home') {
                   e.stopPropagation();
                   setSelectedNodeId?.(node.id);
                 }

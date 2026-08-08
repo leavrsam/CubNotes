@@ -296,7 +296,7 @@ export default function Home() {
           onAddSection={(nbId) => addSection(nbId, "New Section")}
           onUpdateSection={updateSection}
           onDeleteSection={deleteSection}
-          onAddPage={addPage}
+          onAddPage={(secId) => addPage(secId, "New Page")}
           onUpdatePage={updatePage}
           onDeletePage={deletePage}
           onClose={() => isMobile && setIsSidebarOpen(false)}
