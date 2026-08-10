@@ -249,9 +249,9 @@ export function SpatialCanvas({
           }
         }}
         onWheel={handleWheel}
-        draggable={tool !== 'pen'}
+        draggable={tool === 'pan' || tool === 'home'}
         onDragStart={() => {
-          if (tool !== 'pen') {
+          if (tool === 'pan' || tool === 'home') {
             document.body.style.cursor = 'grabbing';
           }
         }}
@@ -261,8 +261,8 @@ export function SpatialCanvas({
           }
         }}
         onDragEnd={(e) => {
-          if (tool !== 'pen') {
-            document.body.style.cursor = 'default';
+          if (tool === 'pan' || tool === 'home') {
+            document.body.style.cursor = tool === 'pan' ? 'grab' : 'text';
           }
           if (e.target === stageRef.current) {
             setPan({ x: e.target.x(), y: e.target.y() });
