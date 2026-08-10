@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
+import { HexColorPicker } from "react-colorful";
 
 export type ColorPickerType = 'text' | 'drawing' | 'page';
 
@@ -46,22 +47,51 @@ const PAGE_COLORS = [
 ]; // 4x4 dark tinted colors
 
 export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }: ColorPickerMenuProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isMoreColorsMode, setIsMoreColorsMode] = useState(false);
 
   if (!isOpen) return null;
 
   const handleMoreColors = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    setIsMoreColorsMode(true);
+  };
+
+  const handleClose = () => {
+    setIsMoreColorsMode(false);
+    onClose();
   };
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-40" onClick={handleClose} />
       <div className="absolute top-full left-0 mt-1 bg-[#2c2c2c] border border-[#444] rounded shadow-xl z-50 p-3 min-w-[200px] flex flex-col gap-3 font-sans text-sm text-zinc-200" onClick={e => e.stopPropagation()}>
         
-        {type === 'drawing' && (
+        {isMoreColorsMode ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-xs text-zinc-100">Custom Color</span>
+              <button 
+                onClick={() => setIsMoreColorsMode(false)}
+                className="text-xs text-zinc-400 hover:text-zinc-100 flex items-center gap-1"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                Back
+              </button>
+            </div>
+            <HexColorPicker 
+              color={activeColor !== 'default' ? activeColor : '#ffffff'} 
+              onChange={onChange} 
+              style={{ width: '100%', height: '150px' }} 
+            />
+            <button 
+              className="mt-1 w-full bg-[#3c3c3c] hover:bg-[#4a4a4a] text-white py-1.5 rounded text-xs font-medium"
+              onClick={handleClose}
+            >
+              Done
+            </button>
+          </div>
+        ) : (
+          <>
+            {type === 'drawing' && (
           <>
             <div className="flex flex-col gap-1.5">
               <span className="font-semibold text-xs text-zinc-100">Recent Colors</span>
@@ -152,26 +182,17 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
           </>
         )}
 
-        <div className="w-full h-px bg-[#444]" />
-        
-        <button 
-          className="flex items-center gap-2 hover:bg-[#3c3c3c] px-2 py-1 rounded -mx-1"
-          onClick={handleMoreColors}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
-          <span>More Colors...</span>
-        </button>
-
-        <input 
-          type="color" 
-          ref={fileInputRef} 
-          className="hidden" 
-          value={activeColor !== 'default' ? activeColor : '#ffffff'} 
-          onChange={(e) => {
-            onChange(e.target.value);
-            onClose();
-          }} 
-        />
+            <div className="w-full h-px bg-[#444]" />
+            
+            <button 
+              className="flex items-center gap-2 hover:bg-[#3c3c3c] px-2 py-1 rounded -mx-1"
+              onClick={handleMoreColors}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+              <span>More Colors...</span>
+            </button>
+          </>
+        )}
       </div>
     </>
   );
