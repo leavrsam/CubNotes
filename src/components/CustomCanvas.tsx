@@ -76,7 +76,9 @@ export type VideoNode = {
   height?: number;
 };
 
-export type ToolType = "home" | "pen" | "pan" | "eraser" | "lasso";
+import { ColorPickerMenu } from "./ColorPickerMenu";
+
+export type ToolType = "pan" | "home" | "pen" | "eraser" | "lasso";
 export type RibbonTab = "Home" | "Insert" | "Draw" | "View";
 
 export type ToolPreset = {
@@ -214,6 +216,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   // View state
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid'>('none');
   const [pageColor, setPageColor] = useState<string>('default');
+  const [openColorMenu, setOpenColorMenu] = useState<'text' | 'drawing' | 'page' | null>(null);
 
   const PAGE_COLORS = ['default', '#fef9c3', '#dcfce7', '#e0f2fe', '#f3e8ff', '#fce7f3'];
   const [presets, setPresets] = useState<ToolPreset[]>([
@@ -557,17 +560,25 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     <Highlighter size={14} />
                   </button>
 
-                  <div className="flex px-2 items-center ml-1">
-                    <input
-                      type="color"
+                  <div className="flex px-2 items-center ml-1 relative">
+                    <button
                       disabled={!activeEditor}
                       title={!activeEditor ? "Click inside a text block first" : "Text Color"}
-                      className={`w-6 h-6 p-0 border-0 rounded cursor-pointer bg-transparent transition-opacity ${!activeEditor ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
-                      value={activeEditor?.getAttributes('textStyle')?.color || '#000000'}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onInput={(e) => {
+                      className={`w-6 h-6 p-0 border-0 rounded flex items-center justify-center transition-opacity relative ${!activeEditor ? 'opacity-50 cursor-not-allowed' : 'opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                      style={{ color: activeEditor?.getAttributes('textStyle')?.color || '#000000' }}
+                      onClick={() => setOpenColorMenu(openColorMenu === 'text' ? null : 'text')}
+                    >
+                      <div className="font-serif text-sm font-bold leading-none">A</div>
+                      <div className="absolute bottom-0.5 left-1 right-1 h-[3px]" style={{ backgroundColor: activeEditor?.getAttributes('textStyle')?.color || '#000000' }}></div>
+                    </button>
+                    <ColorPickerMenu 
+                      isOpen={openColorMenu === 'text'} 
+                      onClose={() => setOpenColorMenu(null)} 
+                      type="text" 
+                      activeColor={activeEditor?.getAttributes('textStyle')?.color || '#000000'}
+                      onChange={(color) => {
                         if (activeEditor) {
-                          activeEditor.chain().focus().setColor((e.target as HTMLInputElement).value).run();
+                          activeEditor.chain().focus().setColor(color).run();
                         }
                       }}
                     />
@@ -748,19 +759,23 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
                 <div className="flex flex-col gap-1 justify-center h-full">
-                  <div className="flex items-center">
-                    <input 
-                      type="color"
-                      className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent"
-                      value={presets.find(p => p.id === activePresetId)?.color || '#000000'}
-                      onChange={(e) => {
-                        setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, color: e.target.value } : p));
+                  <div className="flex items-center relative">
+                    <button 
+                      className="w-7 h-7 p-0 border-0 rounded flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      onClick={() => setOpenColorMenu(openColorMenu === 'drawing' ? null : 'drawing')}
+                      title="Preset Color"
+                    >
+                      <div className="w-4 h-4 rounded-full border border-black/10 dark:border-white/10" style={{ backgroundColor: presets.find(p => p.id === activePresetId)?.color || '#000000' }}></div>
+                    </button>
+                    <ColorPickerMenu 
+                      isOpen={openColorMenu === 'drawing'} 
+                      onClose={() => setOpenColorMenu(null)} 
+                      type="drawing" 
+                      activeColor={presets.find(p => p.id === activePresetId)?.color || '#000000'}
+                      onChange={(color) => {
+                        setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, color } : p));
                         setTool("pen");
                       }}
-                      onInput={(e) => {
-                        setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, color: (e.target as HTMLInputElement).value } : p));
-                      }}
-                      title="Preset Color"
                     />
                   </div>
                 </div>
@@ -849,16 +864,24 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
                 <div className="flex flex-col gap-1 justify-center h-full">
-                  <div className="flex items-center gap-1 px-1">
-                    {PAGE_COLORS.map(color => (
-                      <button
-                        key={color}
-                        onClick={() => setPageColor(color)}
-                        className={`w-5 h-5 rounded-full border transition-transform ${pageColor === color ? 'scale-125 shadow-sm ring-1 ring-zinc-400 dark:ring-zinc-500' : 'hover:scale-110'} ${color === 'default' ? 'bg-[#fafafa] dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700' : 'border-black/10 dark:border-white/10'}`}
-                        style={{ backgroundColor: color === 'default' ? undefined : color }}
-                        title={color === 'default' ? 'Default' : 'Color'}
-                      />
-                    ))}
+                  <div className="flex items-center relative">
+                    <button
+                      onClick={() => setOpenColorMenu(openColorMenu === 'page' ? null : 'page')}
+                      className={`flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
+                    >
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded border border-zinc-300 dark:border-zinc-700" style={{ backgroundColor: pageColor === 'default' ? 'transparent' : pageColor }}></div>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                      </div>
+                      <span className="text-[10px] font-medium leading-none mt-1">Page Color</span>
+                    </button>
+                    <ColorPickerMenu 
+                      isOpen={openColorMenu === 'page'} 
+                      onClose={() => setOpenColorMenu(null)} 
+                      type="page" 
+                      activeColor={pageColor}
+                      onChange={(color) => setPageColor(color)}
+                    />
                   </div>
                 </div>
               </div>
