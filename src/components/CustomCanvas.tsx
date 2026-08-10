@@ -213,8 +213,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   // View state
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid'>('none');
+  const [pageColor, setPageColor] = useState<string>('default');
 
-  // Drawing state
+  const PAGE_COLORS = ['default', '#fef9c3', '#dcfce7', '#e0f2fe', '#f3e8ff', '#fce7f3'];
   const [presets, setPresets] = useState<ToolPreset[]>([
     { id: '1', type: 'pen', color: '#3f3f46', size: 4 }, // zinc-700
     { id: '2', type: 'pen', color: '#ef4444', size: 4 }, // red-500
@@ -430,8 +431,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   return (
     <div 
-      className="w-full h-full relative overflow-hidden bg-[#fafafa] dark:bg-zinc-900"
-      style={{ touchAction: 'none' }}
+      className={`w-full h-full relative overflow-hidden ${pageColor === 'default' ? 'bg-[#fafafa] dark:bg-zinc-900' : ''}`}
+      style={{ touchAction: 'none', backgroundColor: pageColor === 'default' ? undefined : pageColor }}
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -843,6 +844,22 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     </div>
                     <span className="text-[10px] font-medium leading-none">Grid</span>
                   </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+
+                <div className="flex flex-col gap-1 justify-center h-full">
+                  <div className="flex items-center gap-1 px-1">
+                    {PAGE_COLORS.map(color => (
+                      <button
+                        key={color}
+                        onClick={() => setPageColor(color)}
+                        className={`w-5 h-5 rounded-full border transition-transform ${pageColor === color ? 'scale-125 shadow-sm ring-1 ring-zinc-400 dark:ring-zinc-500' : 'hover:scale-110'} ${color === 'default' ? 'bg-[#fafafa] dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700' : 'border-black/10 dark:border-white/10'}`}
+                        style={{ backgroundColor: color === 'default' ? undefined : color }}
+                        title={color === 'default' ? 'Default' : 'Color'}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
