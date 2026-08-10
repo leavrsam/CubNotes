@@ -31,6 +31,8 @@ interface SpatialCanvasProps {
   tool: ToolType;
   activeColor: string;
   activeSize: number;
+  activePresetType?: 'pen' | 'highlighter';
+  eraserType?: 'stroke' | 'point';
   selectedNodeId?: string | null;
   setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
   onCanvasClick?: (x: number, y: number) => void;
@@ -40,12 +42,13 @@ export function SpatialCanvas({
   strokes, setStrokes, 
   pan, setPan, 
   zoom, setZoom, 
-  tool, activeColor, activeSize,
+  tool, activeColor, activeSize, activePresetType, eraserType,
   selectedNodeId, setSelectedNodeId,
   onCanvasClick
 }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
+  const [lassoPath, setLassoPath] = useState<number[][]>([]);
 
   const stageRef = useRef<any>(null);
   const transformerRef = useRef<any>(null);
@@ -92,6 +95,19 @@ export function SpatialCanvas({
     };
   };
 
+  const eraseStrokesAtPoint = (x: number, y: number, radius: number) => {
+    setStrokes(prev => prev.filter(stroke => {
+      for (const p of stroke.points) {
+        const dx = p[0] - x;
+        const dy = p[1] - y;
+        if (Math.sqrt(dx*dx + dy*dy) <= radius + (stroke.size/2)) {
+          return false; // Erase this stroke
+        }
+      }
+      return true; // Keep
+    }));
+  };
+
   const handlePointerDown = (e: any) => {
     if (e.evt.button === 1 || tool === "pan") {
       // Middle click or pan tool
@@ -110,18 +126,51 @@ export function SpatialCanvas({
     setIsDrawing(true);
     const pos = getPointerPos(e);
     
+    if (tool === "lasso") {
+      setLassoPath([[pos.x, pos.y]]);
+      return;
+    }
+
+    if (tool === "eraser") {
+      if (eraserType === 'stroke') {
+        eraseStrokesAtPoint(pos.x, pos.y, 10);
+      } else {
+        setCurrentStroke({
+          id: uuidv4(),
+          points: [[pos.x, pos.y, pos.pressure]],
+          color: "white",
+          size: activeSize,
+          type: 'eraser'
+        });
+      }
+      return;
+    }
+
     setCurrentStroke({
       id: uuidv4(),
       points: [[pos.x, pos.y, pos.pressure]],
       color: activeColor,
-      size: activeSize
+      size: activeSize,
+      type: activePresetType
     });
   };
 
   const handlePointerMove = (e: any) => {
-    if (!isDrawing || !currentStroke) return;
-    
+    if (!isDrawing) return;
     const pos = getPointerPos(e);
+
+    if (tool === 'lasso') {
+      setLassoPath(prev => [...prev, [pos.x, pos.y]]);
+      return;
+    }
+
+    if (tool === 'eraser' && eraserType === 'stroke') {
+      eraseStrokesAtPoint(pos.x, pos.y, 10);
+      return;
+    }
+
+    if (!currentStroke) return;
+    
     setCurrentStroke(prev => {
       if (!prev) return null;
       return {
@@ -132,8 +181,29 @@ export function SpatialCanvas({
   };
 
   const handlePointerUp = () => {
-    if (isDrawing && currentStroke) {
-      setStrokes(prev => [...prev, currentStroke]);
+    if (isDrawing) {
+      if (tool === 'lasso') {
+        if (lassoPath.length > 2) {
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+          for (const p of lassoPath) {
+            if (p[0] < minX) minX = p[0];
+            if (p[0] > maxX) maxX = p[0];
+            if (p[1] < minY) minY = p[1];
+            if (p[1] > maxY) maxY = p[1];
+          }
+          
+          const selectedIds = strokes.filter(stroke => {
+            return stroke.points.some(p => p[0] >= minX && p[0] <= maxX && p[1] >= minY && p[1] <= maxY);
+          }).map(s => s.id);
+          
+          if (selectedIds.length > 0) {
+            setSelectedNodeId?.(selectedIds[0]);
+          }
+        }
+        setLassoPath([]);
+      } else if (currentStroke) {
+        setStrokes(prev => [...prev, currentStroke]);
+      }
     }
     setIsDrawing(false);
     setCurrentStroke(null);
@@ -215,9 +285,12 @@ export function SpatialCanvas({
             return (
               <Path
                 key={stroke.id}
+                id={stroke.id}
                 ref={isSelected ? selectedNodeRef : undefined}
                 data={pathData}
-                fill={stroke.color}
+                fill={stroke.type === 'eraser' ? 'white' : stroke.color}
+                opacity={stroke.type === 'highlighter' ? 0.4 : 1}
+                globalCompositeOperation={stroke.type === 'eraser' ? 'destination-out' : stroke.type === 'highlighter' ? 'multiply' : 'source-over'}
                 x={stroke.x || 0}
                 y={stroke.y || 0}
                 scaleX={stroke.scaleX || 1}
@@ -269,13 +342,27 @@ export function SpatialCanvas({
           
           {currentStroke && (
             <Path
-              data={getSvgPathFromStroke(getStroke(currentStroke.points, {
-                size: currentStroke.size,
-                thinning: 0.5,
-                smoothing: 0.5,
-                streamline: 0.5,
-              }))}
-              fill={currentStroke.color}
+              data={getSvgPathFromStroke(
+                getStroke(currentStroke.points, {
+                  size: currentStroke.size,
+                  thinning: 0.5,
+                  smoothing: 0.5,
+                  streamline: 0.5,
+                })
+              )}
+              fill={currentStroke.type === 'eraser' ? 'white' : currentStroke.color}
+              opacity={currentStroke.type === 'highlighter' ? 0.4 : 1}
+              globalCompositeOperation={currentStroke.type === 'eraser' ? 'destination-out' : currentStroke.type === 'highlighter' ? 'multiply' : 'source-over'}
+            />
+          )}
+
+          {lassoPath.length > 0 && (
+            <Path
+              data={"M " + lassoPath.map(p => `${p[0]} ${p[1]}`).join(" L ")}
+              stroke="#3b82f6"
+              strokeWidth={2 / zoom}
+              dash={[10 / zoom, 5 / zoom]}
+              fill="rgba(59, 130, 246, 0.1)"
             />
           )}
 

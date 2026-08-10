@@ -24,10 +24,11 @@ export type Stroke = {
   points: number[][]; // [x, y, pressure][]
   color: string;
   size: number;
+  type?: 'highlighter' | 'eraser';
   x?: number;
   y?: number;
-  scaleX?: number;
-  scaleY?: number;
+  width?: number;
+  height?: number;
 };
 
 export type TextNode = {
@@ -75,8 +76,17 @@ export type VideoNode = {
   height?: number;
 };
 
-export type ToolType = "home" | "pen" | "pan";
+export type ToolType = "home" | "pen" | "pan" | "eraser" | "lasso";
 export type RibbonTab = "Home" | "Insert" | "Draw" | "View";
+
+export type ToolPreset = {
+  id: string;
+  type: 'pen' | 'highlighter';
+  color: string;
+  size: number;
+};
+
+export type EraserType = 'stroke' | 'point';
 
 export type DocumentState = {
   strokes: Stroke[];
@@ -201,9 +211,23 @@ function CustomSelect({
 export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: CustomCanvasProps) {
   const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
 
+  // View state
+  const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid'>('none');
+
   // Drawing state
-  const [activeColor, setActiveColor] = useState("#3f3f46"); // zinc-700
-  const [activeSize, setActiveSize] = useState(4);
+  const [presets, setPresets] = useState<ToolPreset[]>([
+    { id: '1', type: 'pen', color: '#3f3f46', size: 4 }, // zinc-700
+    { id: '2', type: 'pen', color: '#ef4444', size: 4 }, // red-500
+    { id: '3', type: 'pen', color: '#3b82f6', size: 4 }, // blue-500
+    { id: '4', type: 'highlighter', color: '#eab308', size: 16 } // yellow-500
+  ]);
+  const [activePresetId, setActivePresetId] = useState<string>('1');
+  const activePreset = presets.find(p => p.id === activePresetId) || presets[0];
+  const activeColor = activePreset.color;
+  const activeSize = activePreset.size;
+
+  const [eraserType, setEraserType] = useState<EraserType>('stroke');
+  const [isEraserMenuOpen, setIsEraserMenuOpen] = useState(false);
 
   // Selection state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -630,66 +654,218 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
             )}
 
             {activeTab === "Draw" && (
-              <div className="flex items-center gap-4 h-full py-1">
-                <div className="flex items-center h-full">
+              <div className="flex items-center gap-2 h-full py-1">
+                <div className="flex items-center h-full gap-1 border-r border-zinc-200 dark:border-zinc-700 pr-2 mr-1">
                   <button
-                    onClick={() => setTool("pen")}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "pen" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    onClick={() => setTool("lasso")}
+                    className={`flex flex-col items-center justify-center h-full px-2 rounded ${tool === "lasso" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    title="Lasso Select"
                   >
-                    <Pen size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Pen</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5">
+                      <path d="M9.6 20H15a2 2 0 0 0 2-2v-1.5" />
+                      <path d="M17 12v-1.5a2 2 0 0 0-2-2h-1.5" />
+                      <path d="M9.6 4H7.5a2 2 0 0 0-2 2v1.5" />
+                      <path d="M5.5 12v1.5a2 2 0 0 0 2 2H9.6" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span className="text-[10px] font-medium leading-none">Lasso</span>
                   </button>
+                  
+                  <div className="relative h-full flex items-center">
+                    <button
+                      onClick={() => setTool("eraser")}
+                      className={`flex flex-col items-center justify-center h-full px-2 rounded-l ${tool === "eraser" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                      title="Eraser"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5">
+                        <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                        <path d="M22 21H7" />
+                        <path d="m5 11 9 9" />
+                      </svg>
+                      <span className="text-[10px] font-medium leading-none">Eraser</span>
+                    </button>
+                    <button 
+                      className={`flex items-center justify-center h-full px-1 rounded-r border-l border-zinc-200 dark:border-zinc-700/50 ${tool === "eraser" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600'} ${isEraserMenuOpen ? 'bg-zinc-200 dark:bg-zinc-700' : ''}`}
+                      onClick={() => setIsEraserMenuOpen(!isEraserMenuOpen)}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+
+                    {isEraserMenuOpen && (
+                      <div className="absolute top-full mt-1 left-0 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded shadow-lg z-50 flex flex-col py-1">
+                        <button 
+                          className="text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-between"
+                          onClick={() => { setEraserType('stroke'); setTool('eraser'); setIsEraserMenuOpen(false); }}
+                        >
+                          <span>Stroke Eraser</span>
+                          {eraserType === 'stroke' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                        </button>
+                        <button 
+                          className="text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-between"
+                          onClick={() => { setEraserType('point'); setTool('eraser'); setIsEraserMenuOpen(false); }}
+                        >
+                          <span>Point Eraser</span>
+                          {eraserType === 'point' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center h-full overflow-x-auto custom-scrollbar pr-2">
+                  {presets.map(preset => (
+                    <button
+                      key={preset.id}
+                      onClick={() => { setActivePresetId(preset.id); setTool("pen"); }}
+                      className={`flex flex-col items-center justify-center h-full px-2 rounded min-w-[40px] relative transition-colors ${activePresetId === preset.id && tool === "pen" ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    >
+                      {preset.type === 'pen' ? (
+                        <Pen size={18} strokeWidth={2} color={preset.color} />
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={preset.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-80"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+                      )}
+                      <div 
+                        className="absolute bottom-1 w-4 h-1 rounded-full" 
+                        style={{ backgroundColor: preset.color, height: Math.max(2, preset.size / 2) + 'px' }}
+                      />
+                    </button>
+                  ))}
                   <button
-                    onClick={() => setTool("pan")}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "pan" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    onClick={() => {
+                      const newId = String(Date.now());
+                      setPresets([...presets, { id: newId, type: 'pen', color: '#000000', size: 4 }]);
+                      setActivePresetId(newId);
+                      setTool("pen");
+                    }}
+                    className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 ml-1"
+                    title="Add Preset"
                   >
-                    <Hand size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Pan</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </button>
                 </div>
 
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
                 <div className="flex flex-col gap-1 justify-center h-full">
                   <div className="flex items-center">
                     <input 
                       type="color"
                       className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent"
-                      value={activeColor}
+                      value={presets.find(p => p.id === activePresetId)?.color || '#000000'}
                       onChange={(e) => {
-                        setActiveColor(e.target.value);
+                        setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, color: e.target.value } : p));
                         setTool("pen");
                       }}
                       onInput={(e) => {
-                        setActiveColor((e.target as HTMLInputElement).value);
+                        setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, color: (e.target as HTMLInputElement).value } : p));
                       }}
-                      title="Drawing Color"
+                      title="Preset Color"
                     />
                   </div>
                 </div>
                 
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
-                <div className="flex items-center gap-2 h-full">
-                  {[2, 4, 8, 12].map(size => (
+                <div className="flex items-center gap-1 h-full">
+                  {[2, 4, 8, 12, 16, 24].map(size => (
                     <button
                       key={size}
-                      onClick={() => { setActiveSize(size); setTool("pen"); }}
-                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${activeSize === size && tool === "pen" ? 'bg-zinc-200 dark:bg-zinc-700' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                      title={`Thickness: ${size}`}
+                      onClick={() => { 
+                        setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, size: size } : p));
+                        setTool("pen"); 
+                      }}
+                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${presets.find(p => p.id === activePresetId)?.size === size && tool === "pen" ? 'bg-zinc-200 dark:bg-zinc-700' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
                     >
-                      <div 
-                        className="rounded-full bg-current text-zinc-900 dark:text-zinc-100" 
-                        style={{ width: size, height: size }} 
-                      />
+                      <div className="bg-current rounded-full" style={{ width: Math.max(2, size/2), height: Math.max(2, size/2) }} />
                     </button>
                   ))}
+                </div>
+              </div>
+            {activeTab === "View" && (
+              <div className="flex items-center gap-4 h-full py-1">
+                <div className="flex items-center h-full gap-1">
+                  <button
+                    onClick={() => setZoom(z => Math.min(5, z * 1.2))}
+                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+                    title="Zoom In"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                    <span className="text-[10px] font-medium leading-none mt-0.5">Zoom In</span>
+                  </button>
+                  <button
+                    onClick={() => setZoom(z => Math.max(0.1, z / 1.2))}
+                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+                    title="Zoom Out"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                    <span className="text-[10px] font-medium leading-none mt-0.5">Zoom Out</span>
+                  </button>
+                  <button
+                    onClick={() => setZoom(1)}
+                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+                    title="Zoom to 100%"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 10.5 12 7l3 3.5"/><path d="M9 13.5 12 17l3-3.5"/></svg>
+                    <span className="text-[10px] font-medium leading-none mt-0.5">100%</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+
+                <div className="flex items-center h-full gap-1">
+                  <button
+                    onClick={() => setBackgroundStyle('none')}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${backgroundStyle === 'none' ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                  >
+                    <div className="w-4 h-4 border border-zinc-400 rounded-sm bg-white dark:bg-zinc-900 mb-1"></div>
+                    <span className="text-[10px] font-medium leading-none">None</span>
+                  </button>
+                  <button
+                    onClick={() => setBackgroundStyle('ruled')}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${backgroundStyle === 'ruled' ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                  >
+                    <div className="w-4 h-4 border border-zinc-400 rounded-sm bg-white dark:bg-zinc-900 mb-1 flex flex-col justify-evenly px-0.5">
+                      <div className="w-full h-[1px] bg-zinc-300 dark:bg-zinc-600"></div>
+                      <div className="w-full h-[1px] bg-zinc-300 dark:bg-zinc-600"></div>
+                      <div className="w-full h-[1px] bg-zinc-300 dark:bg-zinc-600"></div>
+                    </div>
+                    <span className="text-[10px] font-medium leading-none">Ruled</span>
+                  </button>
+                  <button
+                    onClick={() => setBackgroundStyle('grid')}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${backgroundStyle === 'grid' ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                  >
+                    <div className="w-4 h-4 border border-zinc-400 rounded-sm bg-white dark:bg-zinc-900 mb-1 grid grid-cols-3 grid-rows-3 gap-px bg-zinc-300 dark:bg-zinc-600">
+                      <div className="bg-white dark:bg-zinc-900"></div><div className="bg-white dark:bg-zinc-900"></div><div className="bg-white dark:bg-zinc-900"></div>
+                      <div className="bg-white dark:bg-zinc-900"></div><div className="bg-white dark:bg-zinc-900"></div><div className="bg-white dark:bg-zinc-900"></div>
+                      <div className="bg-white dark:bg-zinc-900"></div><div className="bg-white dark:bg-zinc-900"></div><div className="bg-white dark:bg-zinc-900"></div>
+                    </div>
+                    <span className="text-[10px] font-medium leading-none">Grid</span>
+                  </button>
                 </div>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Dynamic Background Pattern */}
+      {backgroundStyle !== 'none' && (
+        <div 
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: backgroundStyle === 'ruled' 
+              ? `linear-gradient(transparent 0px, transparent calc(32px * ${zoom} - 1px), var(--line-color) calc(32px * ${zoom} - 1px), var(--line-color) calc(32px * ${zoom}))`
+              : `linear-gradient(to right, var(--line-color) 1px, transparent 1px), linear-gradient(to bottom, var(--line-color) 1px, transparent 1px)`,
+            backgroundSize: backgroundStyle === 'ruled'
+              ? `100% calc(32px * ${zoom})`
+              : `calc(32px * ${zoom}) calc(32px * ${zoom})`,
+            backgroundPosition: `${pan.x}px ${pan.y}px`,
+            ['--line-color' as string]: 'var(--tw-prose-hr, rgba(161, 161, 170, 0.2))',
+            zIndex: 1
+          }}
+        />
+      )}
 
       {/* Page Title overlay */}
       <div 
@@ -726,6 +902,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           tool={tool}
           activeColor={activeColor}
           activeSize={activeSize}
+          activePresetType={activePreset.type}
+          eraserType={eraserType}
           selectedNodeId={selectedNodeId}
           setSelectedNodeId={setSelectedNodeId}
           onCanvasClick={handleCanvasClick}
