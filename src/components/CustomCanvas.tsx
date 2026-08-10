@@ -340,6 +340,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
     if (foundIds.length > 0) {
       setSelectedIds(foundIds);
+      setTool('home'); // Switch to home tool so selection UI becomes visible and interactable
     } else {
       setSelectedIds([]);
     }
@@ -831,9 +832,15 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   
                   <div className="relative h-full flex items-center">
                     <button
-                      onClick={() => setTool("eraser")}
+                      onClick={() => {
+                        if (tool === "eraser") {
+                          setIsEraserMenuOpen(!isEraserMenuOpen);
+                        } else {
+                          setTool("eraser");
+                        }
+                      }}
                       className={`flex flex-col items-center justify-center h-full px-2 rounded-l ${tool === "eraser" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
-                      title="Eraser"
+                      title="Eraser (Click again for options)"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5">
                         <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
