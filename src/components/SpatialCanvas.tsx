@@ -125,12 +125,12 @@ export function SpatialCanvas({
     if (tool === "home") {
       // If we clicked on empty space, deselect
       if (e.target === stageRef.current) {
-        setSelectedNodeId?.(null);
+        setSelectedIds?.([]);
       }
       return;
     }
     
-    if (setSelectedNodeId) setSelectedNodeId(null);
+    if (setSelectedIds) setSelectedIds([]);
     setIsDrawing(true);
     const pos = getPointerPos(e);
     
@@ -301,7 +301,7 @@ export function SpatialCanvas({
                 onPointerDown={(e) => {
                   if (tool === 'home') {
                     e.cancelBubble = true;
-                    setSelectedNodeId?.(stroke.id);
+                    setSelectedIds?.([stroke.id]);
                   }
                 }}
                 onDragStart={(e) => {
