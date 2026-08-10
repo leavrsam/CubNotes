@@ -106,7 +106,7 @@ export function RichTextOverlay({
         }}
       >
         {texts.map(node => {
-          const isSelected = selectedNodeId === node.id;
+          const isSelected = selectedIds.includes(node.id);
           return (
             <div 
               key={node.id}
