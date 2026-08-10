@@ -405,17 +405,12 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
           {sortedBlocks.map(block => {
             const blockBox = getBlockBoundingBox(block);
-            const isActive = activeBlockId === block.id;
-            const activeClasses = isActive 
-              ? 'overflow-x-auto ring-1 ring-zinc-200 dark:ring-zinc-800 rounded-lg p-2 -mx-2 bg-white dark:bg-zinc-900 shadow-sm z-20 custom-scrollbar' 
-              : 'overflow-x-hidden z-10';
 
             if (block.type === 'text') {
               return (
                 <div 
                   key={block.id} 
-                  className={`w-full min-h-[50px] relative transition-all duration-300 ${activeClasses}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                  className="w-full min-h-[50px] relative z-10 overflow-x-hidden"
                 >
                   <TipTapEditor 
                     content={block.content}
@@ -433,8 +428,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
-                  className={`w-full relative transition-all duration-300 bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 ${activeClasses}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                  className="w-full relative bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 z-10 overflow-x-hidden"
                 >
                   <div className="flex justify-between items-center mb-2">
                     <input 
@@ -484,8 +478,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
-                  className={`relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-all duration-300 ${activeClasses}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-white dark:bg-zinc-900 z-10"
                 >
                   <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
                   <button 
@@ -501,8 +494,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
-                  className={`relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between transition-all duration-300 ${activeClasses}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                  className="relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between z-10 overflow-x-hidden"
                 >
                   <div className="flex items-center gap-3 overflow-hidden relative z-30">
                     <File size={24} className="text-primary-500 flex-shrink-0" />
@@ -531,8 +523,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
-                  className={`relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black aspect-video transition-all duration-300 ${activeClasses}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black aspect-video overflow-hidden z-10"
                 >
                   <iframe 
                     src={embedUrl} 
@@ -560,6 +551,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 maxY: block.maxY,
                 width: block.width
               };
+
+              const isActive = activeBlockId === block.id;
+              const activeClasses = isActive 
+                ? 'overflow-x-auto ring-1 ring-zinc-200 dark:ring-zinc-800 rounded-lg p-2 -mx-2 bg-white dark:bg-zinc-900 shadow-sm z-20 custom-scrollbar' 
+                : 'overflow-x-hidden z-10';
 
               return (
                 <div 
