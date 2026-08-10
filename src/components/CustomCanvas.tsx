@@ -211,7 +211,11 @@ function CustomSelect({
 }
 
 export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: CustomCanvasProps) {
-  const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
+  const { 
+    loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
+    images, setImages, files, setFiles, videos, setVideos,
+    undo, redo, canUndo, canRedo 
+  } = useCanvasData(pageId);
 
   // View state
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid'>('none');
@@ -428,6 +432,28 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   }, [isMiddleClickPanning]);
 
+  // Keyboard Shortcuts for Undo/Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.ProseMirror')) {
+          e.preventDefault();
+          undo();
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.ProseMirror')) {
+          e.preventDefault();
+          redo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
   if (loading) {
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
   }
@@ -445,30 +471,51 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       
       {/* Top Ribbon Container */}
       <div className="absolute top-0 left-0 w-full bg-[#f3f2f1] dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 z-50 flex flex-col pointer-events-auto">
-        {/* Tab Headers */}
-        <div className="flex px-2 pt-1 gap-1">
-          {(["Home", "Insert", "Draw", "View"] as RibbonTab[]).map(tab => (
+        {/* Tab Headers and Quick Access Toolbar */}
+        <div className="flex items-end justify-between px-2 pt-1">
+          <div className="flex gap-1">
+            {(["Home", "Insert", "Draw", "View"] as RibbonTab[]).map(tab => (
+              <button
+                key={tab}
+                onClick={() => {
+                  if (activeTab === tab) {
+                    setIsRibbonExpanded(!isRibbonExpanded);
+                  } else {
+                    setActiveTab(tab);
+                    setIsRibbonExpanded(true);
+                  }
+                  if (tab === "Draw") setTool("pen");
+                  else setTool("home");
+                }}
+                className={`px-4 py-1.5 text-sm rounded-t-md transition-colors ${
+                  activeTab === tab 
+                    ? 'bg-white dark:bg-[#202020] text-zinc-900 dark:text-zinc-100 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] border-t border-l border-r border-transparent dark:border-zinc-800 relative z-10' 
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 border-t border-l border-r border-transparent'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1 mb-1 mr-2">
             <button
-              key={tab}
-              onClick={() => {
-                if (activeTab === tab) {
-                  setIsRibbonExpanded(!isRibbonExpanded);
-                } else {
-                  setActiveTab(tab);
-                  setIsRibbonExpanded(true);
-                }
-                if (tab === "Draw") setTool("pen");
-                else setTool("home");
-              }}
-              className={`px-4 py-1 text-sm font-medium rounded-t-md transition-colors ${
-                activeTab === tab 
-                  ? 'bg-white dark:bg-zinc-900 text-primary-600 dark:text-primary-400 border-t border-l border-r border-zinc-200 dark:border-zinc-800' 
-                  : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50'
-              }`}
+              onClick={undo}
+              disabled={!canUndo}
+              className={`p-1.5 rounded-md transition-colors ${canUndo ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed'}`}
+              title="Undo (Ctrl+Z)"
             >
-              {tab}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
             </button>
-          ))}
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              className={`p-1.5 rounded-md transition-colors ${canRedo ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed'}`}
+              title="Redo (Ctrl+Y)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+            </button>
+          </div>
         </div>
         
         {/* Ribbon Content */}
