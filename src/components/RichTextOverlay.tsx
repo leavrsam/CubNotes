@@ -14,17 +14,21 @@ interface RichTextOverlayProps {
   zoom: number;
   onCanvasClick: (x: number, y: number) => void;
   tool: ToolType;
-  selectedNodeId?: string | null;
-  setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
+  selectedIds?: string[];
+  setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
   setActiveEditor?: (editor: Editor | null) => void;
   onEditorUpdate?: () => void;
+  onDragSelectionStart?: (id: string) => void;
+  onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
+  onDragSelectionEnd?: () => void;
 }
 
 export function RichTextOverlay({ 
   texts, setTexts, 
   pan, zoom, onCanvasClick, tool,
-  selectedNodeId, setSelectedNodeId,
-  setActiveEditor, onEditorUpdate
+  selectedIds = [], setSelectedIds,
+  setActiveEditor, onEditorUpdate,
+  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
 }: RichTextOverlayProps) {
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -56,16 +60,7 @@ export function RichTextOverlay({
     if (draggingId && dragStartRef.current) {
       const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
       const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
-      setTexts(prev => prev.map(t => {
-        if (t.id === draggingId && dragStartRef.current) {
-          return {
-            ...t,
-            x: dragStartRef.current.nodeX + deltaX,
-            y: dragStartRef.current.nodeY + deltaY
-          };
-        }
-        return t;
-      }));
+      onDragSelectionMove?.(deltaX, deltaY);
     } else if (resizingId && resizeStartRef.current) {
       const deltaX = (e.clientX - resizeStartRef.current.x) / zoom;
       setTexts(prev => prev.map(t => {
@@ -81,11 +76,14 @@ export function RichTextOverlay({
   }, [draggingId, resizingId, setTexts, zoom]);
 
   const handlePointerUp = useCallback(() => {
+    if (draggingId) {
+      onDragSelectionEnd?.();
+    }
     setDraggingId(null);
     dragStartRef.current = null;
     setResizingId(null);
     resizeStartRef.current = null;
-  }, []);
+  }, [draggingId, onDragSelectionEnd]);
 
   React.useEffect(() => {
     if (draggingId || resizingId) {
@@ -122,7 +120,7 @@ export function RichTextOverlay({
               onClick={(e) => e.stopPropagation()}
               className={`absolute pointer-events-auto group bg-transparent transition-colors border ${
                 (tool === 'home' && node.content !== '<p></p>') 
-                  ? ((draggingId === node.id || resizingId === node.id)
+                  ? ((selectedIds.includes(node.id) || draggingId === node.id || resizingId === node.id)
                       ? 'border-zinc-300 dark:border-zinc-700'
                       : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus-within:border-zinc-300 dark:focus-within:border-zinc-700')
                   : 'border-transparent'
@@ -138,13 +136,14 @@ export function RichTextOverlay({
                   {/* Drag Handle (Top Bar) */}
                   <div 
                     className={`absolute -top-[10px] left-[-1px] right-[-1px] h-[10px] cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-[#2b2b2b] transition-opacity z-20 flex items-center justify-between pl-1 border border-b-0 ${
-                      (draggingId === node.id || resizingId === node.id)
+                      (selectedIds.includes(node.id) || draggingId === node.id || resizingId === node.id)
                         ? 'opacity-100 border-zinc-300 dark:border-zinc-700'
                         : 'opacity-0 border-transparent group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700'
                     }`}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      onDragSelectionStart?.(node.id);
                       setDraggingId(node.id);
                       dragStartRef.current = {
                         x: e.clientX,

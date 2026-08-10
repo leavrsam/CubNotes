@@ -33,18 +33,24 @@ interface SpatialCanvasProps {
   activeSize: number;
   activePresetType?: 'pen' | 'highlighter';
   eraserType?: 'stroke' | 'point';
-  selectedNodeId?: string | null;
-  setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
+  eraserSize?: number;
+  selectedIds?: string[];
+  setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
   onCanvasClick?: (x: number, y: number) => void;
+  onDragSelectionStart?: () => void;
+  onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
+  onDragSelectionEnd?: () => void;
+  onLassoComplete?: (minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => void;
 }
 
 export function SpatialCanvas({ 
   strokes, setStrokes, 
   pan, setPan, 
   zoom, setZoom, 
-  tool, activeColor, activeSize, activePresetType, eraserType,
-  selectedNodeId, setSelectedNodeId,
-  onCanvasClick
+  tool, activeColor, activeSize, activePresetType, eraserType, eraserSize = 10,
+  selectedIds = [], setSelectedIds,
+  onCanvasClick, onLassoComplete,
+  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
 }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
@@ -55,9 +61,11 @@ export function SpatialCanvas({
   const selectedNodeRef = useRef<any>(null);
 
   useEffect(() => {
-    if (selectedNodeId && transformerRef.current && selectedNodeRef.current) {
-      // Check if the selected node is actually a stroke in this canvas
-      if (strokes.some(s => s.id === selectedNodeId)) {
+    if (selectedIds.length > 0 && transformerRef.current) {
+      // For MVP, we only attach the transformer to the first selected stroke if it exists.
+      // A full multi-node transformer would require a <Group> or an array of node refs.
+      const firstStrokeId = selectedIds.find(id => strokes.some(s => s.id === id));
+      if (firstStrokeId && selectedNodeRef.current && selectedNodeRef.current.id() === firstStrokeId) {
         transformerRef.current.nodes([selectedNodeRef.current]);
         transformerRef.current.getLayer().batchDraw();
       } else {
@@ -66,7 +74,7 @@ export function SpatialCanvas({
     } else if (transformerRef.current) {
       transformerRef.current.nodes([]);
     }
-  }, [selectedNodeId, strokes]);
+  }, [selectedIds, strokes]);
 
   const getPointerPos = (e?: any) => {
     const stage = stageRef.current;
@@ -165,7 +173,7 @@ export function SpatialCanvas({
     }
 
     if (tool === 'eraser' && eraserType === 'stroke') {
-      eraseStrokesAtPoint(pos.x, pos.y, 10);
+      eraseStrokesAtPoint(pos.x, pos.y, eraserSize);
       return;
     }
 
@@ -192,13 +200,7 @@ export function SpatialCanvas({
             if (p[1] > maxY) maxY = p[1];
           }
           
-          const selectedIds = strokes.filter(stroke => {
-            return stroke.points.some(p => p[0] >= minX && p[0] <= maxX && p[1] >= minY && p[1] <= maxY);
-          }).map(s => s.id);
-          
-          if (selectedIds.length > 0) {
-            setSelectedNodeId?.(selectedIds[0]);
-          }
+          onLassoComplete?.(minX, maxX, minY, maxY, lassoPath);
         }
         setLassoPath([]);
       } else if (currentStroke) {

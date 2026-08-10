@@ -235,10 +235,115 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const activeSize = activePreset.size;
 
   const [eraserType, setEraserType] = useState<EraserType>('stroke');
+  const [eraserSize, setEraserSize] = useState<number>(10);
   const [isEraserMenuOpen, setIsEraserMenuOpen] = useState(false);
 
   // Selection state
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Selection dragging state
+  const originalSelectionRef = useRef<{
+    strokes: any[];
+    texts: any[];
+    images: any[];
+    videos: any[];
+    files: any[];
+    audios: any[];
+  } | null>(null);
+
+  const handleDragSelectionStart = useCallback((draggedId: string) => {
+    const activeIds = selectedIds.includes(draggedId) ? selectedIds : [draggedId];
+    if (!selectedIds.includes(draggedId)) {
+      setSelectedIds([draggedId]);
+    }
+
+    originalSelectionRef.current = {
+      strokes: strokes.filter(s => activeIds.includes(s.id)),
+      texts: texts.filter(t => activeIds.includes(t.id)),
+      images: images.filter(i => activeIds.includes(i.id)),
+      videos: videos.filter(v => activeIds.includes(v.id)),
+      files: files.filter(f => activeIds.includes(f.id)),
+      audios: audios.filter(a => activeIds.includes(a.id))
+    };
+  }, [selectedIds, strokes, texts, images, videos, files, audios]);
+
+  const handleDragSelectionMove = useCallback((deltaX: number, deltaY: number) => {
+    const orig = originalSelectionRef.current;
+    if (!orig) return;
+
+    if (orig.strokes.length > 0) {
+      setStrokes(prev => prev.map(s => {
+        const origStroke = orig.strokes.find(os => os.id === s.id);
+        if (origStroke) {
+          return { ...origStroke, points: origStroke.points.map((p: any) => [p[0] + deltaX, p[1] + deltaY, p[2]]) };
+        }
+        return s;
+      }));
+    }
+    
+    if (orig.texts.length > 0) setTexts(prev => prev.map(t => orig.texts.find(ot => ot.id === t.id) ? { ...t, x: orig.texts.find(ot => ot.id === t.id).x + deltaX, y: orig.texts.find(ot => ot.id === t.id).y + deltaY } : t));
+    if (orig.images.length > 0) setImages(prev => prev.map(i => orig.images.find(oi => oi.id === i.id) ? { ...i, x: orig.images.find(oi => oi.id === i.id).x + deltaX, y: orig.images.find(oi => oi.id === i.id).y + deltaY } : i));
+    if (orig.videos.length > 0) setVideos(prev => prev.map(v => orig.videos.find(ov => ov.id === v.id) ? { ...v, x: orig.videos.find(ov => ov.id === v.id).x + deltaX, y: orig.videos.find(ov => ov.id === v.id).y + deltaY } : v));
+    if (orig.files.length > 0) setFiles(prev => prev.map(f => orig.files.find(of => of.id === f.id) ? { ...f, x: orig.files.find(of => of.id === f.id).x + deltaX, y: orig.files.find(of => of.id === f.id).y + deltaY } : f));
+    if (orig.audios.length > 0) setAudios(prev => prev.map(a => orig.audios.find(oa => oa.id === a.id) ? { ...a, x: orig.audios.find(oa => oa.id === a.id).x + deltaX, y: orig.audios.find(oa => oa.id === a.id).y + deltaY } : a));
+  }, [setStrokes, setTexts, setImages, setVideos, setFiles, setAudios]);
+
+  const handleDragSelectionEnd = useCallback(() => {
+    originalSelectionRef.current = null;
+  }, []);
+
+  const handleLassoComplete = useCallback((minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => {
+    const foundIds: string[] = [];
+
+    // Find strokes
+    strokes.forEach(stroke => {
+      if (stroke.points.some((p: any) => p[0] >= minX && p[0] <= maxX && p[1] >= minY && p[1] <= maxY)) {
+        foundIds.push(stroke.id);
+      }
+    });
+
+    // Find texts
+    texts.forEach(t => {
+      // Approximate bounding box center for selection
+      if (t.x >= minX && t.x <= maxX && t.y >= minY && t.y <= maxY) {
+        foundIds.push(t.id);
+      }
+    });
+
+    // Find images
+    images?.forEach(i => {
+      if (i.x >= minX && i.x <= maxX && i.y >= minY && i.y <= maxY) {
+        foundIds.push(i.id);
+      }
+    });
+
+    // Find videos
+    videos?.forEach(v => {
+      if (v.x >= minX && v.x <= maxX && v.y >= minY && v.y <= maxY) {
+        foundIds.push(v.id);
+      }
+    });
+
+    // Find files
+    files?.forEach(f => {
+      if (f.x >= minX && f.x <= maxX && f.y >= minY && f.y <= maxY) {
+        foundIds.push(f.id);
+      }
+    });
+
+    // Find audios
+    audios?.forEach(a => {
+      if (a.x >= minX && a.x <= maxX && a.y >= minY && a.y <= maxY) {
+        foundIds.push(a.id);
+      }
+    });
+
+    if (foundIds.length > 0) {
+      setSelectedIds(foundIds);
+    } else {
+      setSelectedIds([]);
+    }
+  }, [strokes, texts, images, videos, files, audios]);
 
   // Active Tool and Ribbon
   const [tool, setTool] = useState<ToolType>("home");
@@ -753,13 +858,18 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                           <span>Stroke Eraser</span>
                           {eraserType === 'stroke' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                         </button>
-                        <button 
-                          className="text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-between"
-                          onClick={() => { setEraserType('point'); setTool('eraser'); setIsEraserMenuOpen(false); }}
-                        >
-                          <span>Point Eraser</span>
-                          {eraserType === 'point' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
-                        </button>
+                        <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-1"></div>
+                        <div className="px-3 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Point Size</div>
+                        {[10, 20, 40].map(size => (
+                          <button 
+                            key={size}
+                            className="text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-between"
+                            onClick={() => { setEraserSize(size); setEraserType('point'); setTool('eraser'); setIsEraserMenuOpen(false); }}
+                          >
+                            <span>{size === 10 ? 'Small' : size === 20 ? 'Medium' : 'Large'}</span>
+                            {eraserType === 'point' && eraserSize === size && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -986,9 +1096,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           activeSize={activeSize}
           activePresetType={activePreset.type}
           eraserType={eraserType}
-          selectedNodeId={selectedNodeId}
-          setSelectedNodeId={setSelectedNodeId}
+          eraserSize={eraserSize}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
           onCanvasClick={handleCanvasClick}
+          onDragSelectionStart={handleDragSelectionStart}
+          onDragSelectionMove={handleDragSelectionMove}
+          onDragSelectionEnd={handleDragSelectionEnd}
+          onLassoComplete={handleLassoComplete}
         />
       </div>
 
@@ -1000,10 +1115,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           zoom={zoom}
           onCanvasClick={handleCanvasClick}
           tool={tool}
-          selectedNodeId={selectedNodeId}
-          setSelectedNodeId={setSelectedNodeId}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
           setActiveEditor={setActiveEditor}
           onEditorUpdate={() => setEditorUpdateTick(t => t + 1)}
+          onDragSelectionStart={handleDragSelectionStart}
+          onDragSelectionMove={handleDragSelectionMove}
+          onDragSelectionEnd={handleDragSelectionEnd}
         />
       </div>
 
@@ -1014,8 +1132,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           pan={pan}
           zoom={zoom}
           tool={tool}
-          selectedNodeId={selectedNodeId}
-          setSelectedNodeId={setSelectedNodeId}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
+          onDragSelectionStart={handleDragSelectionStart}
+          onDragSelectionMove={handleDragSelectionMove}
+          onDragSelectionEnd={handleDragSelectionEnd}
         />
         <MediaOverlay
           images={images || []}
@@ -1027,8 +1148,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           pan={pan}
           zoom={zoom}
           tool={tool}
-          selectedNodeId={selectedNodeId}
-          setSelectedNodeId={setSelectedNodeId}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
+          onDragSelectionStart={handleDragSelectionStart}
+          onDragSelectionMove={handleDragSelectionMove}
+          onDragSelectionEnd={handleDragSelectionEnd}
         />
       </div>
     </div>

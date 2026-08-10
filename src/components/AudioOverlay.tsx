@@ -12,14 +12,17 @@ interface AudioOverlayProps {
   pan: { x: number; y: number };
   zoom: number;
   tool: ToolType;
-  selectedNodeId?: string | null;
-  setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
+  selectedIds?: string[];
+  setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  onDragSelectionStart?: (id: string) => void;
+  onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
+  onDragSelectionEnd?: () => void;
 }
 
-export function AudioOverlay({ 
   audios, setAudios, 
   pan, zoom, tool,
-  selectedNodeId, setSelectedNodeId 
+  selectedIds = [], setSelectedIds,
+  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
 }: AudioOverlayProps) {
   
   const [editingId, setEditingId] = useState<{ id: string, field: 'summary' | 'transcript' } | null>(null);
@@ -48,16 +51,7 @@ export function AudioOverlay({
     if (draggingId && dragStartRef.current) {
       const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
       const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
-      setAudios(prev => prev.map(a => {
-        if (a.id === draggingId && dragStartRef.current) {
-          return {
-            ...a,
-            x: dragStartRef.current.nodeX + deltaX,
-            y: dragStartRef.current.nodeY + deltaY
-          };
-        }
-        return a;
-      }));
+      onDragSelectionMove?.(deltaX, deltaY);
     } else if (resizingId && resizeStartRef.current) {
       const deltaX = (e.clientX - resizeStartRef.current.x) / zoom;
       setAudios(prev => prev.map(a => {
@@ -73,11 +67,14 @@ export function AudioOverlay({
   }, [draggingId, resizingId, setAudios, zoom]);
 
   const handlePointerUp = useCallback(() => {
+    if (draggingId) {
+      onDragSelectionEnd?.();
+    }
     setDraggingId(null);
     dragStartRef.current = null;
     setResizingId(null);
     resizeStartRef.current = null;
-  }, []);
+  }, [draggingId, onDragSelectionEnd]);
 
   React.useEffect(() => {
     if (draggingId || resizingId) {
@@ -100,14 +97,14 @@ export function AudioOverlay({
         }}
       >
         {audios.map(node => {
-          const isSelected = selectedNodeId === node.id;
+          const isSelected = selectedIds.includes(node.id);
           return (
             <div 
               key={node.id}
               onPointerDown={(e) => {
                 if (tool === 'home') {
                   e.stopPropagation();
-                  setSelectedNodeId?.(node.id);
+                  setSelectedIds?.([node.id]);
                 }
               }}
               className={`absolute pointer-events-auto group transition-colors rounded-xl`}
@@ -124,6 +121,7 @@ export function AudioOverlay({
                     className="absolute -top-5 left-[-1px] right-[-1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
                     onPointerDown={(e) => {
                       e.stopPropagation();
+                      onDragSelectionStart?.(node.id);
                       setDraggingId(node.id);
                       dragStartRef.current = {
                         x: e.clientX,

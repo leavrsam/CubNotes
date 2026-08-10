@@ -14,8 +14,11 @@ interface MediaOverlayProps {
   pan: { x: number; y: number };
   zoom: number;
   tool: ToolType;
-  selectedNodeId?: string | null;
-  setSelectedNodeId?: React.Dispatch<React.SetStateAction<string | null>>;
+  selectedIds?: string[];
+  setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  onDragSelectionStart?: (id: string) => void;
+  onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
+  onDragSelectionEnd?: () => void;
 }
 
 type DragType = 'image' | 'file' | 'video';
@@ -25,7 +28,8 @@ export function MediaOverlay({
   files, setFiles,
   videos, setVideos,
   pan, zoom, tool,
-  selectedNodeId, setSelectedNodeId 
+  selectedIds = [], setSelectedIds,
+  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
 }: MediaOverlayProps) {
   
   const [dragging, setDragging] = useState<{ id: string, type: DragType } | null>(null);
@@ -35,24 +39,17 @@ export function MediaOverlay({
     if (dragging && dragStartRef.current) {
       const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
       const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
-      
-      const newX = dragStartRef.current.nodeX + deltaX;
-      const newY = dragStartRef.current.nodeY + deltaY;
-
-      if (dragging.type === 'image') {
-        setImages(prev => prev.map(n => n.id === dragging.id ? { ...n, x: newX, y: newY } : n));
-      } else if (dragging.type === 'file') {
-        setFiles(prev => prev.map(n => n.id === dragging.id ? { ...n, x: newX, y: newY } : n));
-      } else if (dragging.type === 'video') {
-        setVideos(prev => prev.map(n => n.id === dragging.id ? { ...n, x: newX, y: newY } : n));
-      }
+      onDragSelectionMove?.(deltaX, deltaY);
     }
-  }, [dragging, zoom, setImages, setFiles, setVideos]);
+  }, [dragging, zoom, onDragSelectionMove]);
 
   const handlePointerUp = useCallback(() => {
+    if (dragging) {
+      onDragSelectionEnd?.();
+    }
     setDragging(null);
     dragStartRef.current = null;
-  }, []);
+  }, [dragging, onDragSelectionEnd]);
 
   useEffect(() => {
     if (dragging) {
@@ -68,6 +65,7 @@ export function MediaOverlay({
   const onDragStart = (e: React.PointerEvent, id: string, type: DragType, currentX: number, currentY: number) => {
     e.stopPropagation();
     if (tool !== "home") return;
+    onDragSelectionStart?.(id);
     setDragging({ id, type });
     dragStartRef.current = {
       x: e.clientX,
@@ -75,7 +73,6 @@ export function MediaOverlay({
       nodeX: currentX,
       nodeY: currentY
     };
-    setSelectedNodeId?.(id);
   };
 
   const getEmbedUrl = (url: string) => {
@@ -99,11 +96,11 @@ export function MediaOverlay({
             transform: `translate(${img.x * zoom + pan.x}px, ${img.y * zoom + pan.y}px) scale(${zoom})`,
             transformOrigin: "0 0",
             pointerEvents: tool === "home" ? "auto" : "none",
-            zIndex: selectedNodeId === img.id ? 50 : 10,
+            zIndex: selectedIds.includes(img.id) ? 50 : 10,
           }}
-          onClick={(e) => { e.stopPropagation(); setSelectedNodeId?.(img.id); }}
+          onClick={(e) => { e.stopPropagation(); setSelectedIds?.([img.id]); }}
         >
-          <div className={`relative group border-2 ${selectedNodeId === img.id ? 'border-primary-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'}`}>
+          <div className={`relative group border-2 ${selectedIds.includes(img.id) ? 'border-primary-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'}`}>
             <img src={img.url} alt="Canvas Image" className="max-w-[400px] object-contain select-none" draggable={false} />
             
             {tool === "home" && (
@@ -136,11 +133,11 @@ export function MediaOverlay({
             transform: `translate(${file.x * zoom + pan.x}px, ${file.y * zoom + pan.y}px) scale(${zoom})`,
             transformOrigin: "0 0",
             pointerEvents: tool === "home" ? "auto" : "none",
-            zIndex: selectedNodeId === file.id ? 50 : 10,
+            zIndex: selectedIds.includes(file.id) ? 50 : 10,
           }}
-          onClick={(e) => { e.stopPropagation(); setSelectedNodeId?.(file.id); }}
+          onClick={(e) => { e.stopPropagation(); setSelectedIds?.([file.id]); }}
         >
-          <div className={`relative group bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-sm border-2 ${selectedNodeId === file.id ? 'border-primary-500 shadow-md' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'} w-64 flex flex-col gap-2 items-center text-center`}>
+          <div className={`relative group bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-sm border-2 ${selectedIds.includes(file.id) ? 'border-primary-500 shadow-md' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'} w-64 flex flex-col gap-2 items-center text-center`}>
             <File size={32} className="text-primary-500" />
             <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate w-full" title={file.filename}>{file.filename}</span>
             <a href={file.url} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-2">
@@ -177,11 +174,11 @@ export function MediaOverlay({
             transform: `translate(${video.x * zoom + pan.x}px, ${video.y * zoom + pan.y}px) scale(${zoom})`,
             transformOrigin: "0 0",
             pointerEvents: tool === "home" ? "auto" : "none",
-            zIndex: selectedNodeId === video.id ? 50 : 10,
+            zIndex: selectedIds.includes(video.id) ? 50 : 10,
           }}
-          onClick={(e) => { e.stopPropagation(); setSelectedNodeId?.(video.id); }}
+          onClick={(e) => { e.stopPropagation(); setSelectedIds?.([video.id]); }}
         >
-          <div className={`relative group border-2 rounded ${selectedNodeId === video.id ? 'border-primary-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'} bg-black overflow-hidden`}>
+          <div className={`relative group border-2 rounded ${selectedIds.includes(video.id) ? 'border-primary-500 shadow-xl' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'} bg-black overflow-hidden`}>
             <iframe 
               width={video.width || 480} 
               height={video.height || 270} 
