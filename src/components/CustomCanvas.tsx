@@ -360,6 +360,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const getCanvasCenter = useCallback(() => {
     const screenCenterX = window.innerWidth / 2;
@@ -370,7 +371,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     };
   }, [pan, zoom]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'file' | 'image') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'file' | 'image' | 'audio') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -397,6 +398,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           x: center.x - 200, // Approximate centering for a 400px image
           y: center.y - 150,
           url: publicUrl
+        }]);
+      } else if (type === 'audio') {
+        setAudios(prev => [...(prev || []), {
+          id: uuidv4(),
+          x: center.x - 160, // 320px wide player
+          y: center.y - 40,
+          url: publicUrl,
+          title: file.name
         }]);
       } else {
         setFiles(prev => [...(prev || []), {
@@ -781,12 +790,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               <div className="flex items-center gap-4 h-full py-1">
                 <input type="file" ref={imageInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} />
                 <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => handleFileUpload(e, 'file')} />
+                <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio')} />
                 
                 <div className="flex items-center h-full">
                   <button
-                    onClick={() => {
-                      toast.success("To record audio, use the mic icon in the main sidebar.", { icon: '🎙️' });
-                    }}
+                    onClick={() => audioInputRef.current?.click()}
                     className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
                   >
                     <Mic size={16} strokeWidth={2} />
