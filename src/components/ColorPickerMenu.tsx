@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HexColorPicker } from "react-colorful";
+import { HexColorPicker, HexColorInput } from "react-colorful";
 
 export type ColorPickerType = 'text' | 'drawing' | 'page';
 
@@ -82,6 +82,15 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
               onChange={onChange} 
               style={{ width: '100%', height: '150px' }} 
             />
+            <div className="flex items-center gap-2 bg-[#3c3c3c] border border-[#444] rounded px-2 py-1">
+              <span className="text-zinc-400 font-mono text-sm">#</span>
+              <HexColorInput 
+                color={activeColor !== 'default' ? activeColor : '#ffffff'} 
+                onChange={onChange} 
+                className="bg-transparent border-none outline-none w-full text-zinc-200 font-mono text-sm uppercase tracking-wider" 
+                prefixed={false}
+              />
+            </div>
             <button 
               className="mt-1 w-full bg-[#3c3c3c] hover:bg-[#4a4a4a] text-white py-1.5 rounded text-xs font-medium"
               onClick={handleClose}
