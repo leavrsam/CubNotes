@@ -336,7 +336,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto relative scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden relative scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
         
         {/* Title area (scrolls with content) */}
         <div className="px-5 pt-4 pb-6">
