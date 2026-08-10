@@ -781,6 +781,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   ))}
                 </div>
               </div>
+            )}
             {activeTab === "View" && (
               <div className="flex items-center gap-4 h-full py-1">
                 <div className="flex items-center h-full gap-1">
