@@ -42,7 +42,10 @@ export function MobileNavigation({
     return (
       <div className="flex flex-col w-full h-full bg-zinc-50 dark:bg-black">
         {/* Blurred Header */}
-        <div className="sticky top-0 z-10 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800">
+        <div 
+          className="sticky top-0 z-10 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800"
+          style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+        >
           <div className="flex items-center justify-between px-4 py-3">
             <button 
               onClick={onBackToFolders}
@@ -92,7 +95,10 @@ export function MobileNavigation({
   return (
     <div className="flex flex-col w-full h-full bg-zinc-50 dark:bg-black">
       {/* Blurred Header */}
-      <div className="sticky top-0 z-10 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800">
+      <div 
+        className="sticky top-0 z-10 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+      >
         <div className="flex items-center justify-between px-4 py-3">
           <div className="w-6" /> {/* Spacer */}
           <button onClick={onAddNotebook} className="text-primary-600 dark:text-yellow-500">

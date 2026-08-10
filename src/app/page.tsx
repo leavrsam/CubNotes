@@ -403,6 +403,9 @@ export default function Home() {
                 pageCreatedAt={activePageCreatedAt}
                 onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
                 onBack={() => setSelectedPageId(null)}
+                isRecording={isAnyRecording}
+                isProcessing={isProcessing}
+                onToggleMeeting={handleToggleMeeting}
               />
             </div>
           )}

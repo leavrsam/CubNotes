@@ -314,7 +314,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     <div className="w-full h-full flex flex-col bg-white dark:bg-black relative">
       
       {/* Blurred Header */}
-      <div className="sticky top-0 z-50 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 transition-all">
+      <div 
+        className="sticky top-0 z-50 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 transition-all"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+      >
         <div className="flex items-center px-4 py-3">
           {onBack && (
             <button 
