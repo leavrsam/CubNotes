@@ -283,12 +283,12 @@ export function SpatialCanvas({
               streamline: 0.5,
             });
             const pathData = getSvgPathFromStroke(strokeData);
-            const isSelected = stroke.id === selectedNodeId;
+            const isFirstSelected = selectedIds.length > 0 && stroke.id === selectedIds.find(id => strokes.some(s => s.id === id));
             return (
               <Path
                 key={stroke.id}
                 id={stroke.id}
-                ref={isSelected ? selectedNodeRef : undefined}
+                ref={isFirstSelected ? selectedNodeRef : undefined}
                 data={pathData}
                 fill={stroke.type === 'eraser' ? 'white' : stroke.color}
                 opacity={stroke.type === 'highlighter' ? 0.4 : 1}
@@ -369,7 +369,7 @@ export function SpatialCanvas({
           )}
 
           {/* Attach Transformer for selected node */}
-          {tool === 'home' && selectedNodeId && strokes.some(s => s.id === selectedNodeId) && (
+          {tool === 'home' && selectedIds.length > 0 && strokes.some(s => selectedIds.includes(s.id)) && (
             <Transformer
               ref={transformerRef}
               boundBoxFunc={(oldBox, newBox) => {
