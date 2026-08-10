@@ -61,16 +61,12 @@ export function SpatialCanvas({
   const selectedNodeRef = useRef<any>(null);
 
   useEffect(() => {
-    if (selectedIds.length > 0 && transformerRef.current) {
-      // For MVP, we only attach the transformer to the first selected stroke if it exists.
-      // A full multi-node transformer would require a <Group> or an array of node refs.
-      const firstStrokeId = selectedIds.find(id => strokes.some(s => s.id === id));
-      if (firstStrokeId && selectedNodeRef.current && selectedNodeRef.current.id() === firstStrokeId) {
-        transformerRef.current.nodes([selectedNodeRef.current]);
-        transformerRef.current.getLayer().batchDraw();
-      } else {
-        transformerRef.current.nodes([]);
-      }
+    if (selectedIds.length > 0 && transformerRef.current && stageRef.current) {
+      const selectedNodes = selectedIds
+        .map(id => stageRef.current.findOne('#' + id))
+        .filter(Boolean);
+      transformerRef.current.nodes(selectedNodes);
+      transformerRef.current.getLayer()?.batchDraw();
     } else if (transformerRef.current) {
       transformerRef.current.nodes([]);
     }
@@ -301,19 +297,54 @@ export function SpatialCanvas({
                 onPointerDown={(e) => {
                   if (tool === 'home') {
                     e.cancelBubble = true;
-                    setSelectedIds?.([stroke.id]);
+                    if (!selectedIds.includes(stroke.id)) {
+                      setSelectedIds?.([stroke.id]);
+                    }
                   }
                 }}
                 onDragStart={(e) => {
                   e.cancelBubble = true;
                 }}
+                onDragMove={(e) => {
+                  if (selectedIds.includes(stroke.id) && selectedIds.length > 1) {
+                    const node = e.target;
+                    const deltaX = node.x() - (stroke.x || 0);
+                    const deltaY = node.y() - (stroke.y || 0);
+                    
+                    selectedIds.forEach(id => {
+                      if (id !== stroke.id) {
+                        const otherNode = stageRef.current?.findOne('#' + id);
+                        if (otherNode) {
+                          const origStroke = strokes.find(s => s.id === id);
+                          if (origStroke) {
+                            otherNode.x((origStroke.x || 0) + deltaX);
+                            otherNode.y((origStroke.y || 0) + deltaY);
+                          }
+                        }
+                      }
+                    });
+                  }
+                }}
                 onDragEnd={(e) => {
                   e.cancelBubble = true;
-                  const newX = e.target.x();
-                  const newY = e.target.y();
-                  setStrokes(prev => prev.map(s => 
-                    s.id === stroke.id ? { ...s, x: newX, y: newY } : s
-                  ));
+                  if (selectedIds.includes(stroke.id) && selectedIds.length > 1) {
+                    const node = e.target;
+                    const deltaX = node.x() - (stroke.x || 0);
+                    const deltaY = node.y() - (stroke.y || 0);
+                    
+                    setStrokes(prev => prev.map(s => {
+                      if (selectedIds.includes(s.id)) {
+                        return { ...s, x: (s.x || 0) + deltaX, y: (s.y || 0) + deltaY };
+                      }
+                      return s;
+                    }));
+                  } else {
+                    const newX = e.target.x();
+                    const newY = e.target.y();
+                    setStrokes(prev => prev.map(s => 
+                      s.id === stroke.id ? { ...s, x: newX, y: newY } : s
+                    ));
+                  }
                 }}
                 onTransformEnd={(e) => {
                   const node = e.target;
