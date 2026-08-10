@@ -161,6 +161,7 @@ interface MobilePageProps {
 export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting }: MobilePageProps) {
   const { loading, strokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
+  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   
   const imageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
@@ -336,7 +337,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden relative scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div 
+        className="flex-1 overflow-y-auto overflow-x-hidden relative scroll-smooth" 
+        style={{ WebkitOverflowScrolling: 'touch' }}
+        onClick={() => setActiveBlockId(null)}
+      >
         
         {/* Title area (scrolls with content) */}
         <div className="px-5 pt-4 pb-6">
@@ -358,10 +363,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
           {sortedBlocks.map(block => {
             const blockBox = getBlockBoundingBox(block);
+            const isActive = activeBlockId === block.id;
+            const activeClasses = isActive 
+              ? 'overflow-x-auto ring-1 ring-zinc-200 dark:ring-zinc-800 rounded-lg p-2 -mx-2 bg-white dark:bg-zinc-900 shadow-sm z-20 custom-scrollbar' 
+              : 'overflow-x-hidden z-10';
 
             if (block.type === 'text') {
               return (
-                <div key={block.id} className="w-full min-h-[50px] relative">
+                <div 
+                  key={block.id} 
+                  className={`w-full min-h-[50px] relative transition-all duration-300 ${activeClasses}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                >
                   <TipTapEditor 
                     content={block.content}
                     onChange={(content) => {
@@ -376,7 +389,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             } else if (block.type === 'audio') {
               return (
-                <div key={block.id} className="w-full relative bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800">
+                <div 
+                  key={block.id} 
+                  className={`w-full relative transition-all duration-300 bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 ${activeClasses}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                >
                   <div className="flex justify-between items-center mb-2">
                     <input 
                       type="text"
@@ -423,7 +440,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             } else if (block.type === 'image') {
               return (
-                <div key={block.id} className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-white dark:bg-zinc-900">
+                <div 
+                  key={block.id} 
+                  className={`relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-all duration-300 ${activeClasses}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                >
                   <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
                   <button 
                     onClick={() => setImages(prev => prev.filter(n => n.id !== block.id))}
@@ -436,7 +457,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             } else if (block.type === 'file') {
               return (
-                <div key={block.id} className="relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div 
+                  key={block.id} 
+                  className={`relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between transition-all duration-300 ${activeClasses}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                >
                   <div className="flex items-center gap-3 overflow-hidden relative z-30">
                     <File size={24} className="text-primary-500 flex-shrink-0" />
                     <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
@@ -462,7 +487,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : block.url;
 
               return (
-                <div key={block.id} className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-black aspect-video">
+                <div 
+                  key={block.id} 
+                  className={`relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black aspect-video transition-all duration-300 ${activeClasses}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                >
                   <iframe 
                     src={embedUrl} 
                     title="YouTube video player" 
@@ -491,7 +520,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               };
 
               return (
-                <div key={block.id} className="w-full my-4">
+                <div 
+                  key={block.id} 
+                  className={`w-full my-4 transition-all duration-300 ${activeClasses}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                >
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} isStandalone={true} />
                 </div>
               );
