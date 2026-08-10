@@ -19,6 +19,7 @@ interface AudioOverlayProps {
   onDragSelectionEnd?: () => void;
 }
 
+export function AudioOverlay({ 
   audios, setAudios, 
   pan, zoom, tool,
   selectedIds = [], setSelectedIds,
