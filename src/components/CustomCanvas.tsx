@@ -860,13 +860,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                         </button>
                         <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-1"></div>
                         <div className="px-3 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Point Size</div>
-                        {[10, 20, 40].map(size => (
+                        {[5, 10, 20, 40, 80].map(size => (
                           <button 
                             key={size}
                             className="text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-between"
                             onClick={() => { setEraserSize(size); setEraserType('point'); setTool('eraser'); setIsEraserMenuOpen(false); }}
                           >
-                            <span>{size === 10 ? 'Small' : size === 20 ? 'Medium' : 'Large'}</span>
+                            <span>{size === 5 ? 'Extra Small' : size === 10 ? 'Small' : size === 20 ? 'Medium' : size === 40 ? 'Large' : 'Extra Large'}</span>
                             {eraserType === 'point' && eraserSize === size && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                           </button>
                         ))}
