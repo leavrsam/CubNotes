@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -362,6 +362,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
+  // Audio Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const getCanvasCenter = useCallback(() => {
     const screenCenterX = window.innerWidth / 2;
     const screenCenterY = window.innerHeight / 2;
@@ -422,6 +430,118 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     } finally {
       e.target.value = ''; // Reset input
     }
+  };
+
+  // Recording Logic
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await uploadAndTranscribeRecording(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      toast.error("Could not access microphone.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    }
+  };
+
+  const uploadAndTranscribeRecording = async (audioBlob: Blob) => {
+    const toastId = toast.loading("Saving meeting recording...");
+    setIsTranscribing(true);
+    try {
+      const filename = `${pageId}/${uuidv4()}_meeting.webm`;
+      
+      const { data, error } = await supabase.storage
+        .from('recordings')
+        .upload(filename, audioBlob);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('recordings')
+        .getPublicUrl(filename);
+
+      // Create initial audio node
+      const center = getCanvasCenter();
+      const nodeId = uuidv4();
+      
+      setAudios(prev => [...(prev || []), {
+        id: nodeId,
+        x: center.x - 200,
+        y: center.y - 100,
+        width: 400,
+        url: publicUrl,
+        title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+        summary: "Transcribing and summarizing your meeting using Gemini AI...",
+        transcript: ""
+      }]);
+
+      toast.loading("Generating rich summary with Gemini...", { id: toastId });
+
+      // Call Gemini API Route
+      const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioUrl: publicUrl })
+      });
+
+      if (!res.ok) {
+        throw new Error("Transcription failed");
+      }
+
+      const { transcript, summary } = await res.json();
+
+      setAudios(prev => prev.map(audio => {
+        if (audio.id === nodeId) {
+          return { ...audio, transcript, summary };
+        }
+        return audio;
+      }));
+
+      toast.success("Meeting note generated!", { id: toastId });
+
+    } catch (error: any) {
+      toast.error(`Recording failed: ${error.message}`, { id: toastId });
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
   };
 
   const handleInsertVideo = () => {
@@ -794,11 +914,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 
                 <div className="flex items-center h-full">
                   <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${isRecording ? 'text-red-500' : 'text-zinc-600 dark:text-zinc-300'}`}
+                  >
+                    {isRecording ? <Square size={16} strokeWidth={2} className="fill-current animate-pulse" /> : <Mic size={16} strokeWidth={2} />}
+                    <span className="text-[10px] font-medium mt-0.5">
+                      {isRecording ? formatTime(recordingDuration) : 'Record'}
+                    </span>
+                  </button>
+                  <button
                     onClick={() => audioInputRef.current?.click()}
                     className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
                   >
-                    <Mic size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Audio</span>
+                    <FileIcon size={16} strokeWidth={2} />
+                    <span className="text-[10px] font-medium mt-0.5">Audio File</span>
                   </button>
                   <button
                     onClick={() => imageInputRef.current?.click()}

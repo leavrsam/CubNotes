@@ -157,13 +157,13 @@ export function AudioOverlay({
                 </>
               )}
 
-              <div className="w-full flex flex-col gap-3 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md p-4 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 max-h-[80vh] overflow-y-auto overflow-x-hidden">
+              <div className="w-full flex flex-col gap-3 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl p-5 rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 max-h-[85vh] overflow-y-auto overflow-x-hidden">
                 <div className="flex justify-between items-center px-1">
                   <input 
                     type="text"
-                    value={node.title || "Meeting Recording"}
+                    value={node.title || "Audio File"}
                     onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-                    className={`text-sm font-bold text-zinc-800 dark:text-zinc-100 bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-1 py-0.5 rounded transition-colors w-full`}
+                    className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-colors w-full tracking-tight`}
                     placeholder="Recording Name..."
                   />
                   <button 
@@ -206,11 +206,14 @@ export function AudioOverlay({
                         <textarea 
                           value={node.summary}
                           onChange={(e) => updateAudioField(node.id, 'summary', e.target.value)}
-                          className="w-full h-40 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
+                          className="w-full h-40 p-3 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y transition-shadow"
                         />
                       ) : (
-                        <div className="text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 overflow-hidden">
-                          <ReactMarkdown>{node.summary}</ReactMarkdown>
+                        <div className={`text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 overflow-hidden ${node.summary?.includes('Transcribing and summarizing') ? 'animate-pulse text-indigo-500 dark:text-indigo-400 font-medium flex items-center gap-2' : ''}`}>
+                          {node.summary?.includes('Transcribing and summarizing') && (
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          )}
+                          <ReactMarkdown>{node.summary || ""}</ReactMarkdown>
                         </div>
                       )}
                     </div>
@@ -243,10 +246,10 @@ export function AudioOverlay({
                         <textarea 
                           value={node.transcript}
                           onChange={(e) => updateAudioField(node.id, 'transcript', e.target.value)}
-                          className="w-full h-64 p-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
+                          className="w-full h-64 p-3 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y transition-shadow"
                         />
                       ) : (
-                        <div className="text-sm text-zinc-600 dark:text-zinc-400 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar whitespace-pre-wrap leading-relaxed">
+                        <div className="text-sm text-zinc-600 dark:text-zinc-400 max-h-[300px] overflow-y-auto pr-3 custom-scrollbar whitespace-pre-wrap leading-loose font-mono text-[13px] bg-black/5 dark:bg-white/5 p-4 rounded-xl border border-zinc-200/50 dark:border-zinc-700/50">
                           {node.transcript}
                         </div>
                       )}
