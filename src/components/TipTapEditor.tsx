@@ -87,7 +87,9 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        history: false,
+      }),
       Underline,
       TextStyle,
       Color,
@@ -126,6 +128,17 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
       editor.commands.focus();
     }
   }, [editor, content]);
+
+  // Sync external content changes (e.g. from global Undo/Redo)
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      const { from, to } = editor.state.selection;
+      editor.commands.setContent(content, false);
+      try {
+        editor.commands.setTextSelection({ from, to });
+      } catch (e) {}
+    }
+  }, [content, editor]);
 
   if (!editor) {
     return null;

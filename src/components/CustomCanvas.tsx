@@ -436,18 +436,12 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
-        const target = e.target as HTMLElement;
-        if (!target.closest('.ProseMirror')) {
-          e.preventDefault();
-          undo();
-        }
+        e.preventDefault();
+        undo();
       }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
-        const target = e.target as HTMLElement;
-        if (!target.closest('.ProseMirror')) {
-          e.preventDefault();
-          redo();
-        }
+        e.preventDefault();
+        redo();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
