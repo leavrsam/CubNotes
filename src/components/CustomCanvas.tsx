@@ -651,16 +651,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
 
                 <div className="flex flex-col gap-1 justify-center h-full">
-                  <div className="flex items-center gap-1">
-                    {['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#3f3f46', '#ffffff'].map(color => (
-                      <button
-                        key={color}
-                        onClick={() => { setActiveColor(color); setTool("pen"); }}
-                        className={`w-5 h-5 rounded-full border border-zinc-200 dark:border-zinc-700 transition-transform ${activeColor === color && tool === "pen" ? 'scale-125 shadow-sm ring-1 ring-zinc-400 dark:ring-zinc-500' : 'hover:scale-110'}`}
-                        style={{ backgroundColor: color }}
-                        title={`Color: ${color}`}
-                      />
-                    ))}
+                  <div className="flex items-center">
+                    <input 
+                      type="color"
+                      className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent"
+                      value={activeColor}
+                      onChange={(e) => {
+                        setActiveColor(e.target.value);
+                        setTool("pen");
+                      }}
+                      onInput={(e) => {
+                        setActiveColor((e.target as HTMLInputElement).value);
+                      }}
+                      title="Drawing Color"
+                    />
                   </div>
                 </div>
                 
