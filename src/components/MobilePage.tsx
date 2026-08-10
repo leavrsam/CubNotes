@@ -293,6 +293,48 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     }
   }, [sortedBlocks]);
 
+  useEffect(() => {
+    const handleInjectSummary = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string, summary: string, transcript: string }>;
+      const { id, summary, transcript } = customEvent.detail;
+      
+      setAudios(prev => prev.map(audio => {
+        if (audio.id === id) {
+          return { ...audio, summary, transcript };
+        }
+        return audio;
+      }));
+    };
+
+    const handleInjectAudio = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string, url: string }>;
+      const { id, url } = customEvent.detail;
+      
+      const newAudio = {
+        id: id || uuidv4(),
+        x: 50,
+        y: bottomY,
+        width: 400,
+        url,
+        title: "Meeting Recording"
+      };
+      
+      setAudios(prev => [...(prev || []), newAudio as any]);
+      
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
+    };
+
+    window.addEventListener('inject-summary', handleInjectSummary);
+    window.addEventListener('inject-audio', handleInjectAudio);
+    
+    return () => {
+      window.removeEventListener('inject-summary', handleInjectSummary);
+      window.removeEventListener('inject-audio', handleInjectAudio);
+    };
+  }, [bottomY, setAudios]);
+
   const addTextBlock = () => {
     const newNode = {
       id: uuidv4(),
