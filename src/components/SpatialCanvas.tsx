@@ -293,6 +293,7 @@ export function SpatialCanvas({
                 y={stroke.y || 0}
                 scaleX={stroke.scaleX || 1}
                 scaleY={stroke.scaleY || 1}
+                hitStrokeWidth={tool === 'home' ? Math.max(20, stroke.size + 10) : stroke.size}
                 draggable={tool === 'home'}
                 onPointerDown={(e) => {
                   if (tool === 'home') {

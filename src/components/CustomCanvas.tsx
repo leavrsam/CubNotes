@@ -538,9 +538,29 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   }, [isMiddleClickPanning]);
 
-  // Keyboard Shortcuts for Undo/Redo
+  // Keyboard Shortcuts for Undo/Redo and Deletion
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        (activeEl as HTMLElement).isContentEditable
+      );
+
+      if (!isInputFocused && (e.key === 'Delete' || e.key === 'Backspace')) {
+        if (selectedIds.length > 0) {
+          e.preventDefault();
+          setStrokes(prev => prev.filter(s => !selectedIds.includes(s.id)));
+          setTexts(prev => prev.filter(t => !selectedIds.includes(t.id)));
+          if (setImages) setImages(prev => prev.filter(i => !selectedIds.includes(i.id)));
+          if (setVideos) setVideos(prev => prev.filter(v => !selectedIds.includes(v.id)));
+          if (setFiles) setFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
+          if (setAudios) setAudios(prev => prev.filter(a => !selectedIds.includes(a.id)));
+          setSelectedIds([]);
+        }
+      }
+
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         undo();
@@ -552,7 +572,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, [undo, redo, selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds]);
 
   if (loading) {
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
