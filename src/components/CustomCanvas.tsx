@@ -100,7 +100,6 @@ export type DocumentState = {
 };
 
 import { useCanvasData } from "@/hooks/useCanvasData";
-import { Mic } from "lucide-react";
 import toast from "react-hot-toast";
 
 const FONT_OPTIONS = [
