@@ -11,6 +11,7 @@ import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
 import { AudioOverlay } from "./AudioOverlay";
 import { MediaOverlay } from "./MediaOverlay";
+import { Minimap } from "./Minimap";
 
 interface CustomCanvasProps {
   pageId: string;
@@ -616,6 +617,111 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       window.removeEventListener('inject-audio', handleInjectAudio);
     };
   }, [pan, zoom, setAudios]);
+
+  const getSelectionBounds = useCallback(() => {
+    if (selectedIds.length === 0) return null;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    const updateBounds = (x: number, y: number, w: number, h: number) => {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
+    };
+
+    selectedIds.forEach(id => {
+      const stroke = strokes?.find(s => s.id === id);
+      if (stroke) {
+        let sMinX = Infinity;
+        let sMinY = Infinity;
+        let sMaxX = -Infinity;
+        let sMaxY = -Infinity;
+        stroke.points.forEach(p => {
+          if (p[0] < sMinX) sMinX = p[0];
+          if (p[1] < sMinY) sMinY = p[1];
+          if (p[0] > sMaxX) sMaxX = p[0];
+          if (p[1] > sMaxY) sMaxY = p[1];
+        });
+        updateBounds(sMinX + (stroke.x || 0), sMinY + (stroke.y || 0), sMaxX - sMinX, sMaxY - sMinY);
+      }
+      
+      const text = texts?.find(t => t.id === id);
+      if (text) updateBounds(text.x, text.y, text.width || 200, 100);
+
+      const image = images?.find(i => i.id === id);
+      if (image) updateBounds(image.x, image.y, image.width || 400, image.height || 300);
+      
+      const file = files?.find(f => f.id === id);
+      if (file) updateBounds(file.x, file.y, 256, 100);
+      
+      const audio = audios?.find(a => a.id === id);
+      if (audio) updateBounds(audio.x, audio.y, audio.width || 400, 100);
+      
+      const video = videos?.find(v => v.id === id);
+      if (video) updateBounds(video.x, video.y, video.width || 480, video.height || 270);
+    });
+
+    if (minX === Infinity) return null;
+
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }, [selectedIds, strokes, texts, images, files, audios, videos]);
+
+  const handleOrganize = async () => {
+    if (selectedIds.length < 2) return;
+    
+    const toastId = toast.loading("Organizing chaos...");
+    try {
+      // Gather data
+      const selectedTexts = texts.filter(t => selectedIds.includes(t.id));
+      const selectedAudios = audios.filter(a => selectedIds.includes(a.id));
+      
+      const promptData = {
+        textNodes: selectedTexts.map(t => t.content),
+        audioSummaries: selectedAudios.map(a => a.summary)
+      };
+
+      if (promptData.textNodes.length === 0 && promptData.audioSummaries.length === 0) {
+        toast.error("Select at least one text or audio block to organize.", { id: toastId });
+        return;
+      }
+
+      const res = await fetch('/api/organize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(promptData)
+      });
+
+      if (!res.ok) throw new Error("Failed to organize");
+      const { organizedHtml } = await res.json();
+
+      // Replace selected texts and audios with one big text node
+      const bounds = getSelectionBounds();
+      
+      const newTextNode: TextNode = {
+        id: uuidv4(),
+        x: bounds ? bounds.x : window.innerWidth / 2,
+        y: bounds ? bounds.y : window.innerHeight / 2,
+        width: Math.max(bounds ? bounds.width : 400, 400),
+        content: organizedHtml
+      };
+
+      // Remove the old ones
+      setTexts(prev => prev.filter(t => !selectedIds.includes(t.id)));
+      setAudios(prev => prev.filter(a => !selectedIds.includes(a.id)));
+      setStrokes(prev => prev.filter(s => !selectedIds.includes(s.id))); // Clear associated scribbles
+
+      setTexts(prev => [...prev, newTextNode]);
+      setSelectedIds([newTextNode.id]); // Select the new node
+      
+      toast.success("Chaos organized!", { id: toastId });
+    } catch (err) {
+      toast.error("Failed to organize chaos.", { id: toastId });
+    }
+  };
 
   const [isMiddleClickPanning, setIsMiddleClickPanning] = useState(false);
 
@@ -1318,6 +1424,41 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionEnd={handleDragSelectionEnd}
         />
       </div>
+
+      {selectedIds.length > 1 && getSelectionBounds() && (() => {
+        const bounds = getSelectionBounds()!;
+        const screenX = (bounds.x * zoom) + pan.x;
+        const screenY = (bounds.y * zoom) + pan.y;
+        
+        return (
+          <div 
+            className="absolute z-50 pointer-events-auto"
+            style={{ 
+              left: screenX, 
+              top: screenY - 50,
+            }}
+          >
+            <button
+              onClick={() => handleOrganize()}
+              className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-full shadow-xl font-medium transition-transform active:scale-95"
+            >
+              <span>✨ Organize Chaos</span>
+            </button>
+          </div>
+        );
+      })()}
+
+      <Minimap
+        strokes={strokes || []}
+        texts={texts || []}
+        images={images || []}
+        files={files || []}
+        videos={videos || []}
+        audios={audios || []}
+        pan={pan}
+        zoom={zoom}
+        setPan={setPan}
+      />
     </div>
   );
 }
