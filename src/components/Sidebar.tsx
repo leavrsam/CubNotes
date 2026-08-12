@@ -67,13 +67,6 @@ export function Sidebar({
           >
             <Plus size={16} />
           </button>
-          <button 
-            onClick={onClose}
-            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors md:hidden lg:block"
-            title="Collapse Sidebar"
-          >
-            <PanelLeftClose size={16} />
-          </button>
         </div>
       </div>
 

@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
@@ -395,11 +396,23 @@ export default function Home() {
                     {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
                   </button>
                   <button
-                    onClick={() => {
-                      if (!document.fullscreenElement) {
-                        document.documentElement.requestFullscreen().catch(err => console.error(err));
-                      } else {
-                        document.exitFullscreen().catch(err => console.error(err));
+                    onClick={async () => {
+                      const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+                      try {
+                        if (isDesktop) {
+                          const appWindow = getCurrentWindow();
+                          const isFs = await appWindow.isFullscreen();
+                          await appWindow.setFullscreen(!isFs);
+                          setIsFullscreen(!isFs);
+                        } else {
+                          if (!document.fullscreenElement) {
+                            await document.documentElement.requestFullscreen();
+                          } else {
+                            await document.exitFullscreen();
+                          }
+                        }
+                      } catch (err) {
+                        console.error(err);
                       }
                     }}
                     className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
