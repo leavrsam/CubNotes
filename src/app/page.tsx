@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
-import { Mic, Square, Menu, X } from "lucide-react";
+import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -50,6 +50,30 @@ export default function Home() {
   // Mobile navigation state
   const [mobileView, setMobileView] = useState<'folders' | 'notes'>('folders');
   const [mobileSectionId, setMobileSectionId] = useState<string | null>(null);
+  
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Fullscreen & Keyboard shortcuts
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle sidebar on Cmd+B / Ctrl+B
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      }
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Responsive state
   useEffect(() => {
