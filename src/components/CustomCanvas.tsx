@@ -211,7 +211,7 @@ function CustomSelect({
   );
 }
 
-export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle }: CustomCanvasProps) {
+export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls }: CustomCanvasProps) {
   const { 
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
     images, setImages, files, setFiles, videos, setVideos,
