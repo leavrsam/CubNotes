@@ -117,15 +117,78 @@ export function useCanvasData(pageId: string) {
     [pageId, supabase]
   );
 
+  // Save version snapshot to DB (less frequently)
+  const saveVersionToSupabase = useCallback(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    debounce(async (
+      newStrokes: Stroke[], newTexts: TextNode[], newAudios: AudioNode[],
+      newImages: ImageNode[], newFiles: FileNode[], newVideos: VideoNode[]
+    ) => {
+      const state: DocumentState = { 
+        strokes: newStrokes, texts: newTexts, audios: newAudios,
+        images: newImages, files: newFiles, videos: newVideos
+      };
+      
+      // Don't save empty states as versions
+      if (newStrokes.length === 0 && newTexts.length === 0 && newImages.length === 0 && newFiles.length === 0 && newVideos.length === 0 && newAudios.length === 0) {
+        return;
+      }
+      
+      try {
+        await supabase
+          .from('page_versions')
+          .insert({ page_id: pageId, document_state: state });
+      } catch (e) {
+        // Silently fail if table doesn't exist yet
+        console.warn("Could not save page version:", e);
+      }
+    }, 60000), // Save version after 1 minute of inactivity
+    [pageId, supabase]
+  );
+
   useEffect(() => {
     if (!loading) {
       saveToSupabase(strokes, texts, audios, images, files, videos);
+      saveVersionToSupabase(strokes, texts, audios, images, files, videos);
     }
     
     return () => {
       saveToSupabase.flush();
+      saveVersionToSupabase.flush();
     };
-  }, [strokes, texts, audios, images, files, videos, loading, saveToSupabase]);
+  }, [strokes, texts, audios, images, files, videos, loading, saveToSupabase, saveVersionToSupabase]);
+
+  // Fetch Page Versions
+  const [pageVersions, setPageVersions] = useState<any[]>([]);
+  
+  const fetchVersions = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('page_versions')
+      .select('id, created_at, document_state')
+      .eq('page_id', pageId)
+      .order('created_at', { ascending: false });
+      
+    if (!error && data) {
+      setPageVersions(data);
+    }
+  }, [pageId, supabase]);
+
+  const restoreVersion = useCallback((versionState: DocumentState) => {
+    // Push current state to past before restoring, so we can undo the restore
+    const currentState: DocumentState = { strokes, texts, audios, images, files, videos };
+    setPast(prev => [...prev, currentState]);
+    lastSavedStateRef.current = versionState;
+    setFuture([]);
+    
+    setStrokes(versionState.strokes || []);
+    setTexts(versionState.texts || []);
+    setAudios(versionState.audios || []);
+    setImages(versionState.images || []);
+    setFiles(versionState.files || []);
+    setVideos(versionState.videos || []);
+    
+    isUndoingRef.current = true;
+  }, [strokes, texts, audios, images, files, videos]);
 
   const undo = useCallback(() => {
     const currentState: DocumentState = { strokes, texts, audios, images, files, videos };
@@ -190,5 +253,8 @@ export function useCanvasData(pageId: string) {
     undo, redo,
     canUndo: past.length > 0 || (lastSavedStateRef.current !== null && JSON.stringify({ strokes, texts, audios, images, files, videos }) !== JSON.stringify(lastSavedStateRef.current)),
     canRedo: future.length > 0,
+    pageVersions,
+    fetchVersions,
+    restoreVersion
   };
 }

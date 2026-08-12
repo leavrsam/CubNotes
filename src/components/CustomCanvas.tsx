@@ -80,7 +80,7 @@ export type VideoNode = {
 import { ColorPickerMenu } from "./ColorPickerMenu";
 
 export type ToolType = "pan" | "home" | "pen" | "eraser" | "lasso";
-export type RibbonTab = "Home" | "Insert" | "Draw" | "View";
+export type RibbonTab = "Home" | "Insert" | "Draw" | "History" | "View";
 
 export type ToolPreset = {
   id: string;
@@ -214,7 +214,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const { 
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
     images, setImages, files, setFiles, videos, setVideos,
-    undo, redo, canUndo, canRedo 
+    undo, redo, canUndo, canRedo,
+    pageVersions, fetchVersions, restoreVersion
   } = useCanvasData(pageId);
 
   // View state
@@ -240,6 +241,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isVersionsMenuOpen, setIsVersionsMenuOpen] = useState(false);
 
   // Selection dragging state
   const originalSelectionRef = useRef<{
@@ -369,6 +371,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [showMinimap, setShowMinimap] = useState(true);
 
   const getCanvasCenter = useCallback(() => {
     const screenCenterX = window.innerWidth / 2;
@@ -529,6 +533,18 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         return audio;
       }));
 
+      // Sync embedding for semantic search
+      fetch('/api/sync-embedding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: nodeId, 
+          content: summary + "\n\n" + transcript, 
+          type: 'meeting_summary',
+          metadata: { pageId, x: center.x - 200, y: center.y - 100 }
+        })
+      }).catch(err => console.error("Failed to sync audio embedding", err));
+
       toast.success("Meeting note generated!", { id: toastId });
 
     } catch (error: any) {
@@ -596,25 +612,39 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       // Offset by half the width of the audio player (approx 160px) to truly center it
       const worldX = (screenCenterX - 160 - pan.x) / zoom;
       const worldY = (screenCenterY - pan.y) / zoom;
-
-      const newAudio: AudioNode = {
-        id: id || uuidv4(),
+      
+      setAudios(prev => [...(prev || []), {
+        id,
+        url,
         x: worldX,
         y: worldY,
-        width: 400,
-        url,
-        title: "Meeting Recording"
-      };
+        title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+        summary: "Transcribing and summarizing your meeting using Gemini AI...",
+        transcript: ""
+      }]);
+    };
+
+    const handleJumpToCoordinates = (e: Event) => {
+      const customEvent = e as CustomEvent<{ x: number, y: number }>;
+      const { x, y } = customEvent.detail;
       
-      setAudios(prev => [...prev, newAudio]);
+      const screenCenterX = window.innerWidth / 2;
+      const screenCenterY = window.innerHeight / 2;
+      
+      setPan({
+        x: screenCenterX - x * zoom,
+        y: screenCenterY - y * zoom
+      });
     };
 
     window.addEventListener('inject-summary', handleInjectSummary);
     window.addEventListener('inject-audio', handleInjectAudio);
+    window.addEventListener('jump-to-coordinates', handleJumpToCoordinates);
     
     return () => {
       window.removeEventListener('inject-summary', handleInjectSummary);
       window.removeEventListener('inject-audio', handleInjectAudio);
+      window.removeEventListener('jump-to-coordinates', handleJumpToCoordinates);
     };
   }, [pan, zoom, setAudios]);
 
@@ -717,6 +747,18 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       setTexts(prev => [...prev, newTextNode]);
       setSelectedIds([newTextNode.id]); // Select the new node
       
+      // Sync embedding for semantic search
+      fetch('/api/sync-embedding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: newTextNode.id, 
+          content: newTextNode.content, 
+          type: 'text',
+          metadata: { pageId, x: newTextNode.x, y: newTextNode.y }
+        })
+      }).catch(err => console.error("Failed to sync organized text embedding", err));
+
       toast.success("Chaos organized!", { id: toastId });
     } catch (err) {
       toast.error("Failed to organize chaos.", { id: toastId });
@@ -828,7 +870,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         {/* Tab Headers and Quick Access Toolbar */}
         <div className="flex items-end px-2 pt-1 gap-4">
           <div className="flex gap-1">
-            {(["Home", "Insert", "Draw", "View"] as RibbonTab[]).map(tab => (
+            {(["Home", "Insert", "Draw", "History", "View"] as RibbonTab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => {
@@ -1020,11 +1062,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="flex items-center h-full">
                   <button
                     onClick={isRecording ? stopRecording : startRecording}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${isRecording ? 'text-red-500' : 'text-zinc-600 dark:text-zinc-300'}`}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${isRecording ? 'text-red-500 bg-red-50 dark:bg-red-900/20' : 'text-indigo-600 dark:text-indigo-400 font-semibold'}`}
                   >
                     {isRecording ? <Square size={16} strokeWidth={2} className="fill-current animate-pulse" /> : <Mic size={16} strokeWidth={2} />}
-                    <span className="text-[10px] font-medium mt-0.5">
-                      {isRecording ? formatTime(recordingDuration) : 'Record'}
+                    <span className="text-[10px] font-bold mt-0.5 flex items-center gap-1">
+                      {isRecording ? formatTime(recordingDuration) : 'AI Meeting'} ✨
                     </span>
                   </button>
                   <button
@@ -1218,6 +1260,52 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 </div>
               </div>
             )}
+            {activeTab === "History" && (
+              <div className="flex items-center gap-4 h-full py-1">
+                <div className="flex items-center h-full relative">
+                  <button
+                    onClick={() => {
+                      if (!isVersionsMenuOpen) {
+                        fetchVersions();
+                      }
+                      setIsVersionsMenuOpen(!isVersionsMenuOpen);
+                    }}
+                    className={`flex flex-col items-center justify-center h-full px-3 rounded transition-colors ${isVersionsMenuOpen ? 'bg-zinc-200 dark:bg-zinc-800' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'} text-zinc-600 dark:text-zinc-300`}
+                    title="Page Versions"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span className="text-[10px] font-medium mt-0.5 flex items-center gap-1">Page Versions <ChevronDown size={10} /></span>
+                  </button>
+                  
+                  {isVersionsMenuOpen && (
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+                      <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+                        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Version History</span>
+                      </div>
+                      <div className="p-1 flex flex-col">
+                        {pageVersions.length === 0 ? (
+                          <div className="px-3 py-4 text-xs text-zinc-500 text-center">No versions found.</div>
+                        ) : (
+                          pageVersions.map((version) => (
+                            <button
+                              key={version.id}
+                              onClick={() => {
+                                restoreVersion(version.document_state);
+                                setIsVersionsMenuOpen(false);
+                                toast.success("Restored previous version. (You can Undo if this was a mistake)");
+                              }}
+                              className="text-left px-3 py-2 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded flex flex-col gap-1 transition-colors"
+                            >
+                              <span className="font-medium text-zinc-800 dark:text-zinc-200">{format(new Date(version.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             {activeTab === "View" && (
               <div className="flex items-center gap-4 h-full py-1">
                 <div className="flex items-center h-full gap-1">
@@ -1302,6 +1390,21 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                       activeColor={pageColor}
                       onChange={(color) => setPageColor(color)}
                     />
+                  </div>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+
+                <div className="flex flex-col gap-1 justify-center h-full">
+                  <div className="flex items-center relative">
+                    <button
+                      onClick={() => setShowMinimap(!showMinimap)}
+                      className={`flex flex-col items-center justify-center h-full px-3 rounded ${showMinimap ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                      title="Toggle Minimap"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="M15 15h6"/></svg>
+                      <span className="text-[10px] font-medium leading-none mt-1">Minimap</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1391,6 +1494,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionStart={handleDragSelectionStart}
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
+          onBlurText={(id, text, x, y) => {
+            fetch('/api/sync-embedding', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id, content: text, type: 'text', metadata: { pageId, x, y } })
+            }).catch(err => console.error("Failed to sync text embedding", err));
+          }}
         />
       </div>
 
@@ -1448,17 +1558,19 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         );
       })()}
 
-      <Minimap
-        strokes={strokes || []}
-        texts={texts || []}
-        images={images || []}
-        files={files || []}
-        videos={videos || []}
-        audios={audios || []}
-        pan={pan}
-        zoom={zoom}
-        setPan={setPan}
-      />
+      {showMinimap && (
+        <Minimap
+          strokes={strokes || []}
+          texts={texts || []}
+          images={images || []}
+          files={files || []}
+          videos={videos || []}
+          audios={audios || []}
+          pan={pan}
+          zoom={zoom}
+          setPan={setPan}
+        />
+      )}
     </div>
   );
 }

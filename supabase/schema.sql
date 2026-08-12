@@ -155,3 +155,41 @@ USING (
         AND notebooks.user_id = auth.uid()
     )
 );
+
+
+-- Page Versions Table
+CREATE TABLE page_versions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    page_id UUID NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    document_state JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE page_versions ENABLE ROW LEVEL SECURITY;
+
+-- Page Versions Policies
+CREATE POLICY "Users can view versions of their pages" 
+ON page_versions FOR SELECT 
+USING (
+    EXISTS (
+        SELECT 1 FROM pages
+        JOIN sections ON pages.section_id = sections.id
+        JOIN notebooks ON sections.notebook_id = notebooks.id
+        WHERE pages.id = page_versions.page_id 
+        AND notebooks.user_id = auth.uid()
+    )
+);
+
+CREATE POLICY "Users can insert versions of their pages" 
+ON page_versions FOR INSERT 
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM pages
+        JOIN sections ON pages.section_id = sections.id
+        JOIN notebooks ON sections.notebook_id = notebooks.id
+        WHERE pages.id = page_versions.page_id 
+        AND notebooks.user_id = auth.uid()
+    )
+);
+
