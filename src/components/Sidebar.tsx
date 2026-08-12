@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings } from "lucide-react";
+import { Book, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 
 interface SidebarProps {
@@ -19,6 +19,8 @@ interface SidebarProps {
   onDeletePage: (id: string) => void;
   onClose?: () => void;
   onOpenSettings?: () => void;
+  onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
+  user?: any;
 }
 
 export function Sidebar({ 
@@ -26,20 +28,101 @@ export function Sidebar({
   onAddNotebook, onUpdateNotebook, onDeleteNotebook,
   onAddSection, onUpdateSection, onDeleteSection,
   onAddPage, onUpdatePage, onDeletePage,
-  onClose, onOpenSettings
+  onClose, onOpenSettings, onJumpToCoordinates, user
 }: SidebarProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      setIsSearching(true);
+      try {
+        const res = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: searchQuery })
+        });
+        const data = await res.json();
+        setSearchResults(data.matches || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSearching(false);
+      }
+    }
+  };
+
   return (
     <aside className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800 flex-shrink-0">
       <div className="p-4 border-b border-zinc-800 flex items-center justify-between group">
-        <h1 className="text-lg font-bold text-zinc-100 tracking-tight">CubNotes</h1>
-        <button 
-          onClick={onAddNotebook}
-          className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
-          title="New Notebook"
-        >
-          <Plus size={18} />
-        </button>
+        <h1 className="text-lg font-bold text-zinc-100 tracking-tight flex items-center gap-2">
+          <span>✨</span> CubNotes
+        </h1>
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={onAddNotebook}
+            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
+            title="New Notebook"
+          >
+            <Plus size={16} />
+          </button>
+          <button 
+            onClick={onClose}
+            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors md:hidden lg:block"
+            title="Collapse Sidebar"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        </div>
       </div>
+
+      <div className="p-3 border-b border-zinc-800">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-2.5 text-zinc-500" />
+          <input
+            type="text"
+            placeholder="Semantic search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearch}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-200 placeholder:text-zinc-600"
+          />
+          {isSearching && (
+            <Loader2 size={14} className="absolute right-2.5 top-2.5 text-zinc-500 animate-spin" />
+          )}
+        </div>
+      </div>
+
+      {searchResults.length > 0 && (
+        <div className="max-h-48 overflow-y-auto border-b border-zinc-800 p-2 space-y-1 bg-zinc-900/50">
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Top Matches</span>
+            <button onClick={() => setSearchResults([])} className="text-xs text-zinc-400 hover:text-zinc-200">Clear</button>
+          </div>
+          {searchResults.map((res: any) => {
+            // strip html tags for preview
+            const preview = res.content.replace(/<[^>]+>/g, '').substring(0, 40) + '...';
+            return (
+              <div 
+                key={res.id} 
+                className="px-2 py-1.5 rounded hover:bg-zinc-800 cursor-pointer"
+                onClick={() => {
+                  if (res.metadata?.pageId && res.metadata?.x != null && res.metadata?.y != null) {
+                    onJumpToCoordinates?.(res.metadata.pageId, res.metadata.x, res.metadata.y);
+                  } else if (res.metadata?.pageId) {
+                    onSelectPage(res.metadata.pageId);
+                  }
+                }}
+              >
+                <div className="text-xs text-indigo-400 mb-0.5">{(res.similarity * 100).toFixed(1)}% match</div>
+                <div className="text-sm text-zinc-300 truncate">{preview}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {notebooks.map((nb) => (
           <NotebookItem
@@ -68,10 +151,19 @@ export function Sidebar({
       <div className="p-4 border-t border-zinc-800 flex items-center justify-between mt-auto">
         <button 
           onClick={onOpenSettings}
-          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors w-full p-1.5 rounded-md hover:bg-zinc-800/50"
+          className="flex items-center gap-3 text-sm text-zinc-400 hover:text-zinc-100 transition-colors w-full p-2 rounded-md hover:bg-zinc-800/50 text-left"
         >
-          <Settings size={18} />
-          <span className="font-medium">Settings</span>
+          {user?.user_metadata?.avatar_url ? (
+             <img src={user.user_metadata.avatar_url} alt="Avatar" className="w-8 h-8 rounded-full object-cover bg-zinc-800" />
+          ) : (
+             <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
+                <Settings size={18} />
+             </div>
+          )}
+          <div className="flex flex-col flex-1 overflow-hidden">
+             <span className="font-medium text-zinc-200 truncate">{user?.user_metadata?.full_name || "Settings"}</span>
+             {user?.user_metadata?.full_name && <span className="text-xs text-zinc-500 truncate">Settings</span>}
+          </div>
         </button>
       </div>
     </aside>

@@ -18,17 +18,27 @@ interface RichTextOverlayProps {
   setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
   setActiveEditor?: (editor: Editor | null) => void;
   onEditorUpdate?: () => void;
-  onDragSelectionStart?: (id: string) => void;
-  onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
-  onDragSelectionEnd?: () => void;
+  onDragSelectionStart: (e: React.MouseEvent | React.TouchEvent, type: 'text' | 'image' | 'file' | 'audio' | 'video', id: string) => void;
+  onDragSelectionMove: (e: React.MouseEvent | React.TouchEvent) => void;
+  onDragSelectionEnd: () => void;
+  onBlurText?: (id: string, text: string, x: number, y: number) => void;
 }
 
 export function RichTextOverlay({ 
-  texts, setTexts, 
-  pan, zoom, onCanvasClick, tool,
-  selectedIds = [], setSelectedIds,
-  setActiveEditor, onEditorUpdate,
-  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
+  texts, 
+  setTexts,
+  pan, 
+  zoom, 
+  onCanvasClick,
+  tool,
+  selectedIds = [], 
+  setSelectedIds,
+  setActiveEditor, 
+  onEditorUpdate,
+  onDragSelectionStart, 
+  onDragSelectionMove, 
+  onDragSelectionEnd,
+  onBlurText
 }: RichTextOverlayProps) {
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -197,10 +207,18 @@ export function RichTextOverlay({
                 </>
               )}
               
-              <TipTapEditor 
-                content={node.content} 
-                onChange={(content) => updateTextNode(node.id, content)}
-                onDelete={() => deleteTextNode(node.id)}
+              <TipTapEditor
+                id={node.id}
+                content={node.content}
+                onChange={(content) => {
+                  setTexts(prev => prev.map(t => t.id === node.id ? { ...t, content } : t));
+                }}
+                onDelete={() => {
+                  setTexts(prev => prev.filter(t => t.id !== node.id));
+                  setSelectedIds?.(prev => prev.filter(id => id !== node.id));
+                }}
+                onBlurText={(text) => onBlurText?.(node.id, text, node.x, node.y)}
+                isFocused={selectedIds.includes(node.id)}
                 setActiveEditor={setActiveEditor}
                 onEditorUpdate={onEditorUpdate}
               />

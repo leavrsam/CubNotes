@@ -18,6 +18,7 @@ interface CustomCanvasProps {
   pageTitle: string;
   pageCreatedAt: string;
   onUpdatePageTitle: (title: string) => void;
+  headerControls?: React.ReactNode;
 }
 
 export type Stroke = {
@@ -686,8 +687,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       if (image) updateBounds(image.x, image.y, image.width || 400, image.height || 300);
       
       const file = files?.find(f => f.id === id);
-      if (file) updateBounds(file.x, file.y, 256, 100);
-      
       const audio = audios?.find(a => a.id === id);
       if (audio) updateBounds(audio.x, audio.y, audio.width || 400, 100);
       
@@ -869,6 +868,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       <div className="absolute top-0 left-0 w-full bg-[#f3f2f1] dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 z-50 flex flex-col pointer-events-auto">
         {/* Tab Headers and Quick Access Toolbar */}
         <div className="flex items-end px-2 pt-1 gap-4">
+          
+          {/* Inject headerControls here on the left */}
+          {headerControls && (
+            <div className="flex items-center pb-1 mr-2 gap-1 border-r border-zinc-300 dark:border-zinc-700 pr-2">
+              {headerControls}
+            </div>
+          )}
+
           <div className="flex gap-1">
             {(["Home", "Insert", "Draw", "History", "View"] as RibbonTab[]).map(tab => (
               <button

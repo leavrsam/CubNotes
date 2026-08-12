@@ -74,15 +74,17 @@ const TabIndent = Extension.create({
 });
 
 interface TipTapEditorProps {
+  id: string;
   content: string;
   onChange: (content: string) => void;
   onDelete: () => void;
   isFocused?: boolean;
   setActiveEditor?: (editor: Editor | null) => void;
   onEditorUpdate?: () => void;
+  onBlurText?: (text: string) => void;
 }
 
-export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onEditorUpdate }: TipTapEditorProps) {
+export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor, onEditorUpdate, onBlurText }: TipTapEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
@@ -115,9 +117,10 @@ export function TipTapEditor({ content, onChange, onDelete, setActiveEditor, onE
       setActiveEditor?.(editor);
     },
     onBlur: ({ editor }) => {
-      // Clean up empty text boxes when they lose focus
       if (editor.isEmpty) {
         onDelete();
+      } else {
+        onBlurText?.(editor.getText());
       }
     },
   });

@@ -56,14 +56,14 @@ serve(async (req) => {
 
     const ai = new GoogleGenerativeAI(geminiKey);
     const model = ai.getGenerativeModel({ 
-      model: "gemini-3.5-flash-lite",
+      model: "gemini-1.5-flash",
       generationConfig: {
         responseMimeType: "application/json"
       }
     });
     
     const result = await model.generateContent([
-      "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript'. Then, summarize it into key takeaways, action items, and decisions as 'summary' (formatted in clean markdown). Return a JSON object with two string keys: 'summary' and 'transcript'.",
+      "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript', and YOU MUST identify and separate different speakers (e.g., Speaker 1: ..., Speaker 2: ...). Then, summarize the meeting into key takeaways, action items, and decisions as 'summary' (formatted in clean, rich markdown). Return a JSON object with two string keys: 'summary' and 'transcript'.",
       {
         inlineData: {
           data: audioBase64,

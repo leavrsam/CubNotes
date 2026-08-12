@@ -33,6 +33,7 @@ export default function Home() {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   // Meeting Recording State
@@ -77,6 +78,7 @@ export default function Home() {
         router.push("/login");
       } else {
         setUserEmail(session.user.email || "");
+        setCurrentUser(session.user);
         setAuthChecking(false);
       }
     };
@@ -87,6 +89,9 @@ export default function Home() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
         router.push("/login");
+      } else {
+        setUserEmail(session.user.email || "");
+        setCurrentUser(session.user);
       }
     });
 
@@ -306,8 +311,12 @@ export default function Home() {
             onAddPage={(secId) => addPage(secId, "New Page")}
             onUpdatePage={updatePage}
             onDeletePage={deletePage}
-            onClose={() => isMobile && setIsSidebarOpen(false)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
+            onClose={() => setIsSidebarOpen(false)}
+            onOpenSettings={() => {
+              setIsSidebarOpen(false);
+              setIsSettingsOpen(true);
+            }}
+            user={currentUser}
           />
         </div>
       )}
@@ -315,42 +324,35 @@ export default function Home() {
       {/* Desktop Main Content */}
       {!isMobile && (
         <div className="flex-1 h-full relative bg-zinc-900 transition-all duration-300">
-          {/* Toggle Sidebar Button */}
-          <div className="absolute top-4 left-4 z-50">
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded-lg shadow-lg border border-zinc-700 transition-colors flex items-center justify-center"
-              title="Toggle Sidebar"
-            >
-              {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-          </div>
-          {/* Floating Meeting Toggle */}
-          <div className="absolute top-4 right-4 z-50">
-            <button
-              onClick={handleToggleMeeting}
-              disabled={isProcessing}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-lg text-sm font-medium transition-all ${
-                isAnyRecording 
-                  ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 animate-pulse' 
-                  : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
-              }`}
-            >
-              {isProcessing ? (
-                <span>Processing Audio...</span>
-              ) : isAnyRecording ? (
-                <>
-                  <Square size={16} fill="currentColor" />
-                  Stop Meeting
-                </>
-              ) : (
-                <>
-                  <Mic size={16} />
-                  Start Meeting
-                </>
-              )}
-            </button>
-          </div>
+          
+          {/* Floating Meeting Toggle (Only show if no page selected, else it's in ribbon) */}
+          {!selectedPageId && (
+            <div className="absolute top-4 right-4 z-50">
+              <button
+                onClick={handleToggleMeeting}
+                disabled={isProcessing}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-lg text-sm font-medium transition-all ${
+                  isAnyRecording 
+                    ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 animate-pulse' 
+                    : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
+                }`}
+              >
+                {isProcessing ? (
+                  <span>Processing...</span>
+                ) : isAnyRecording ? (
+                  <>
+                    <Square size={16} fill="currentColor" />
+                    Stop Meeting
+                  </>
+                ) : (
+                  <>
+                    <Mic size={16} />
+                    Start Meeting
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
           {selectedPageId ? (
             <CustomCanvas 
@@ -359,6 +361,30 @@ export default function Home() {
               pageTitle={activePageTitle}
               pageCreatedAt={activePageCreatedAt}
               onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
+              headerControls={
+                <>
+                  <button
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
+                    title="Toggle Sidebar (Cmd+B)"
+                  >
+                    {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen().catch(err => console.error(err));
+                      } else {
+                        document.exitFullscreen().catch(err => console.error(err));
+                      }
+                    }}
+                    className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
+                    title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen"}
+                  >
+                    {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                  </button>
+                </>
+              }
             />
           ) : (
             <div className="flex flex-col gap-4 items-center justify-center w-full h-full text-zinc-500">
@@ -416,6 +442,7 @@ export default function Home() {
         isOpen={isSettingsOpen} 
         onClose={() => setIsSettingsOpen(false)} 
         userEmail={userEmail}
+        user={currentUser}
         onSignOut={handleSignOut}
       />
     </main>
