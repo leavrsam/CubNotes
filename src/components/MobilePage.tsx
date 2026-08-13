@@ -117,33 +117,53 @@ function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[
       viewBox={`${minX} ${minY} ${width} ${height}`}
       preserveAspectRatio="xMinYMin meet"
     >
-      {strokes.map((stroke) => {
-        if (!stroke.points || stroke.points.length === 0) return null;
-        
-        // Use perfect-freehand just like SpatialCanvas
-        const strokeData = getStroke(stroke.points, {
-          size: stroke.size,
-          thinning: 0.5,
-          smoothing: 0.5,
-          streamline: 0.5,
-        });
-        const pathData = getSvgPathFromStroke(strokeData);
+      <defs>
+        <mask id={`mask-${strokes[0]?.id || 'empty'}`}>
+          <rect x={minX} y={minY} width={width} height={height} fill="white" />
+          {strokes.filter(s => s.type === 'eraser').map(stroke => {
+            if (!stroke.points || stroke.points.length === 0) return null;
+            const strokeData = getStroke(stroke.points, { size: stroke.size, thinning: 0.5, smoothing: 0.5, streamline: 0.5 });
+            const pathData = getSvgPathFromStroke(strokeData);
+            const sX = stroke.scaleX || 1;
+            const sY = stroke.scaleY || 1;
+            const tX = stroke.x || 0;
+            const tY = stroke.y || 0;
+            return <path key={stroke.id} d={pathData} fill="black" transform={`translate(${tX}, ${tY}) scale(${sX}, ${sY})`} />;
+          })}
+        </mask>
+      </defs>
+      <g mask={`url(#mask-${strokes[0]?.id || 'empty'})`}>
+        {strokes.filter(s => s.type !== 'eraser').map((stroke) => {
+          if (!stroke.points || stroke.points.length === 0) return null;
+          
+          const strokeData = getStroke(stroke.points, {
+            size: stroke.size,
+            thinning: 0.5,
+            smoothing: 0.5,
+            streamline: 0.5,
+          });
+          const pathData = getSvgPathFromStroke(strokeData);
 
-        // Apply transformations if they exist
-        const sX = stroke.scaleX || 1;
-        const sY = stroke.scaleY || 1;
-        const tX = stroke.x || 0;
-        const tY = stroke.y || 0;
+          const sX = stroke.scaleX || 1;
+          const sY = stroke.scaleY || 1;
+          const tX = stroke.x || 0;
+          const tY = stroke.y || 0;
 
-        return (
-          <path
-            key={stroke.id}
-            d={pathData}
-            fill={stroke.color}
-            transform={`translate(${tX}, ${tY}) scale(${sX}, ${sY})`}
-          />
-        );
-      })}
+          // Apply opacity for highlighter
+          const opacity = stroke.type === 'highlighter' ? 0.4 : 1;
+
+          return (
+            <path
+              key={stroke.id}
+              d={pathData}
+              fill={stroke.color}
+              opacity={opacity}
+              transform={`translate(${tX}, ${tY}) scale(${sX}, ${sY})`}
+              style={stroke.type === 'highlighter' ? { mixBlendMode: 'multiply' } : undefined}
+            />
+          );
+        })}
+      </g>
     </svg>
   );
 }

@@ -142,7 +142,7 @@ export function SpatialCanvas({
         setCurrentStroke({
           id: uuidv4(),
           points: [[pos.x, pos.y, pos.pressure]],
-          color: "white",
+          color: "white", // Or match background if dark mode
           size: eraserSize,
           type: 'eraser'
         });
