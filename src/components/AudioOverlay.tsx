@@ -185,7 +185,10 @@ export function AudioOverlay({
                   </div>
 
                   {/* Scrollable Content Section */}
-                  <div className="p-5 pt-2 flex flex-col gap-3">
+                  <div 
+                    className="p-5 pt-2 flex flex-col gap-3"
+                    onWheel={(e) => e.stopPropagation()}
+                  >
 
                 {node.summary && (
                   <details open className="mt-2 group/details">
