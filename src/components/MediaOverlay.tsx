@@ -19,6 +19,7 @@ interface MediaOverlayProps {
   onDragSelectionStart?: (id: string) => void;
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
+  onAnnotate?: (id: string) => void;
 }
 
 type DragType = 'image' | 'file' | 'video';
@@ -29,7 +30,8 @@ export function MediaOverlay({
   videos, setVideos,
   pan, zoom, tool,
   selectedIds = [], setSelectedIds,
-  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
+  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
+  onAnnotate
 }: MediaOverlayProps) {
   
   const [dragging, setDragging] = useState<{ id: string, type: DragType } | null>(null);
@@ -111,6 +113,16 @@ export function MediaOverlay({
                 <GripVertical size={16} />
               </div>
             )}
+
+            {tool === "home" && (
+              <button 
+                className="absolute -top-4 left-6 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 z-10"
+                onClick={(e) => { e.stopPropagation(); onAnnotate?.(img.id); }}
+                title="Annotate Image"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+              </button>
+            )}
             
             {tool === "home" && (
               <button 
@@ -151,6 +163,16 @@ export function MediaOverlay({
               >
                 <GripVertical size={12} />
               </div>
+            )}
+
+            {tool === "home" && (
+              <button 
+                className="absolute -top-3 left-5 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 z-10"
+                onClick={(e) => { e.stopPropagation(); onAnnotate?.(file.id); }}
+                title="Annotate File"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+              </button>
             )}
             
             {tool === "home" && (
@@ -197,6 +219,16 @@ export function MediaOverlay({
               >
                 <GripVertical size={16} />
               </div>
+            )}
+
+            {tool === "home" && (
+              <button 
+                className="absolute -top-4 left-6 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 z-10"
+                onClick={(e) => { e.stopPropagation(); onAnnotate?.(video.id); }}
+                title="Annotate Video"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+              </button>
             )}
             
             {tool === "home" && (

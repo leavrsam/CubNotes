@@ -22,6 +22,7 @@ interface RichTextOverlayProps {
   onDragSelectionMove: (e: React.MouseEvent | React.TouchEvent) => void;
   onDragSelectionEnd: () => void;
   onBlurText?: (id: string, text: string, x: number, y: number) => void;
+  onAnnotate?: (id: string) => void;
 }
 
 export function RichTextOverlay({ 
@@ -38,7 +39,8 @@ export function RichTextOverlay({
   onDragSelectionStart, 
   onDragSelectionMove, 
   onDragSelectionEnd,
-  onBlurText
+  onBlurText,
+  onAnnotate
 }: RichTextOverlayProps) {
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -163,7 +165,17 @@ export function RichTextOverlay({
                       };
                     }}
                   >
-                    <div className="w-4" /> {/* Spacer to center the dots */}
+                    <button
+                      className="flex gap-[1px] text-[10px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full px-1 hover:text-indigo-500 transition-colors pointer-events-auto"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onAnnotate?.(node.id);
+                      }}
+                      title="Annotate this block"
+                    >
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+                    </button>
                     
                     <div className="flex gap-[2px] text-zinc-500 dark:text-zinc-400">
                       <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />

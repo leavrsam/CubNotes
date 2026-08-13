@@ -32,6 +32,7 @@ export type Stroke = {
   y?: number;
   width?: number;
   height?: number;
+  blockId?: string; // Links local strokes to specific blocks
 };
 
 export type TextNode = {
@@ -263,6 +264,16 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isVersionsMenuOpen, setIsVersionsMenuOpen] = useState(false);
+  const [annotateBlockId, setAnnotateBlockId] = useState<string | null>(null);
+
+  const blockOffsetMap = useMemo(() => {
+    const map: Record<string, {x: number, y: number}> = {};
+    const allBlocks = [...(texts || []), ...(audios || []), ...(images || []), ...(videos || []), ...(files || [])];
+    allBlocks.forEach(b => {
+      map[b.id] = { x: b.x, y: b.y };
+    });
+    return map;
+  }, [texts, audios, images, videos, files]);
 
   // Selection dragging state
   const originalSelectionRef = useRef<{
@@ -374,6 +385,18 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [activeTab, setActiveTab] = useState<RibbonTab>("Home");
   const [isRibbonExpanded, setIsRibbonExpanded] = useState(true);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+
+  const handleAnnotateBlock = useCallback((id: string) => {
+    setAnnotateBlockId(id);
+    setTool('pen');
+    setActiveTab('Draw');
+  }, []);
+
+  useEffect(() => {
+    if (tool !== 'pen' && tool !== 'highlighter' && tool !== 'eraser') {
+      setAnnotateBlockId(null);
+    }
+  }, [tool]);
   const [editorUpdateTick, setEditorUpdateTick] = useState(0);
 
   // Viewport state
@@ -1637,6 +1660,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
           onLassoComplete={handleLassoComplete}
+          annotateBlockId={annotateBlockId}
+          blockOffsetMap={blockOffsetMap}
         />
       </div>
 
@@ -1655,6 +1680,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionStart={handleDragSelectionStart}
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
+          onAnnotate={handleAnnotateBlock}
           onBlurText={(id, text, x, y) => {
             fetch('/api/sync-embedding', {
               method: 'POST',
@@ -1693,6 +1719,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionStart={handleDragSelectionStart}
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
+          onAnnotate={handleAnnotateBlock}
         />
       </div>
 

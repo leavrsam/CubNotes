@@ -19,6 +19,7 @@ interface AudioOverlayProps {
   onDragSelectionStart?: (id: string) => void;
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
+  onAnnotate?: (id: string) => void;
 }
 
 type TabType = 'notes' | 'enhanced' | 'transcript' | 'summary' | 'chat';
@@ -34,7 +35,8 @@ function AudioNodeCard({
   dragStartRef,
   setResizingId,
   resizeStartRef,
-  onDragSelectionStart
+  onDragSelectionStart,
+  onAnnotate
 }: {
   node: AudioNode;
   tool: ToolType;
@@ -47,6 +49,7 @@ function AudioNodeCard({
   setResizingId: (id: string | null) => void;
   resizeStartRef: React.MutableRefObject<{ x: number, nodeWidth: number } | null>;
   onDragSelectionStart?: (id: string) => void;
+  onAnnotate?: (id: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabType>('summary');
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -112,7 +115,7 @@ function AudioNodeCard({
         <>
           {/* Drag Handle (Move) */}
           <div 
-            className="absolute -top-5 left-[1px] right-[1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
+            className="absolute -top-5 left-[1px] right-[1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-between px-2 border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
             onPointerDown={(e) => {
               e.stopPropagation();
               onDragSelectionStart?.(node.id);
@@ -120,7 +123,18 @@ function AudioNodeCard({
               dragStartRef.current = { x: e.clientX, y: e.clientY, nodeX: node.x, nodeY: node.y };
             }}
           >
-            <div className="flex gap-1">
+            <button
+              className="flex gap-[1px] text-[10px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full hover:text-indigo-500 transition-colors pointer-events-auto"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onAnnotate?.(node.id);
+              }}
+              title="Annotate this block"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+            </button>
+            <div className="flex gap-1 absolute left-1/2 -translate-x-1/2">
               <div className="w-1 h-1 bg-zinc-500 rounded-full" />
               <div className="w-1 h-1 bg-zinc-500 rounded-full" />
               <div className="w-1 h-1 bg-zinc-500 rounded-full" />
@@ -414,6 +428,7 @@ export function AudioOverlay({
             dragStartRef={dragStartRef}
             setResizingId={setResizingId}
             resizeStartRef={resizeStartRef}
+            onAnnotate={onAnnotate}
             onDragSelectionStart={(id) => {
               if (tool === 'home') {
                 setSelectedIds?.([id]);

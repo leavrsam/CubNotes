@@ -41,6 +41,8 @@ interface SpatialCanvasProps {
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
   onLassoComplete?: (minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => void;
+  annotateBlockId?: string | null;
+  blockOffsetMap?: Record<string, {x: number, y: number}>;
 }
 
 export function SpatialCanvas({ 
@@ -50,7 +52,8 @@ export function SpatialCanvas({
   tool, activeColor, activeSize, activePresetType, eraserType, eraserSize = 10,
   selectedIds = [], setSelectedIds,
   onCanvasClick, onLassoComplete,
-  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
+  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
+  annotateBlockId, blockOffsetMap
 }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
@@ -128,10 +131,14 @@ export function SpatialCanvas({
     
     if (setSelectedIds) setSelectedIds([]);
     setIsDrawing(true);
-    const pos = getPointerPos(e);
+    const rawPos = getPointerPos(e);
+    
+    const offsetX = annotateBlockId && blockOffsetMap && blockOffsetMap[annotateBlockId] ? blockOffsetMap[annotateBlockId].x : 0;
+    const offsetY = annotateBlockId && blockOffsetMap && blockOffsetMap[annotateBlockId] ? blockOffsetMap[annotateBlockId].y : 0;
+    const pos = { x: rawPos.x - offsetX, y: rawPos.y - offsetY, pressure: rawPos.pressure };
     
     if (tool === "lasso") {
-      setLassoPath([[pos.x, pos.y]]);
+      setLassoPath([[rawPos.x, rawPos.y]]);
       return;
     }
 
@@ -155,21 +162,26 @@ export function SpatialCanvas({
       points: [[pos.x, pos.y, pos.pressure]],
       color: activeColor,
       size: activeSize,
-      type: activePresetType
+      type: activePresetType,
+      blockId: annotateBlockId || undefined
     });
   };
 
   const handlePointerMove = (e: any) => {
     if (!isDrawing) return;
-    const pos = getPointerPos(e);
+    const rawPos = getPointerPos(e);
+    
+    const offsetX = annotateBlockId && blockOffsetMap && blockOffsetMap[annotateBlockId] ? blockOffsetMap[annotateBlockId].x : 0;
+    const offsetY = annotateBlockId && blockOffsetMap && blockOffsetMap[annotateBlockId] ? blockOffsetMap[annotateBlockId].y : 0;
+    const pos = { x: rawPos.x - offsetX, y: rawPos.y - offsetY, pressure: rawPos.pressure };
 
     if (tool === 'lasso') {
-      setLassoPath(prev => [...prev, [pos.x, pos.y]]);
+      setLassoPath(prev => [...prev, [rawPos.x, rawPos.y]]);
       return;
     }
 
     if (tool === 'eraser' && eraserType === 'stroke') {
-      eraseStrokesAtPoint(pos.x, pos.y, eraserSize);
+      eraseStrokesAtPoint(rawPos.x, rawPos.y, eraserSize);
       return;
     }
 
@@ -279,6 +291,8 @@ export function SpatialCanvas({
               streamline: 0.5,
             });
             const pathData = getSvgPathFromStroke(strokeData);
+            const offsetX = stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].x : 0;
+            const offsetY = stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].y : 0;
             const isFirstSelected = selectedIds.length > 0 && stroke.id === selectedIds.find(id => strokes.some(s => s.id === id));
             return (
               <Path
@@ -289,8 +303,8 @@ export function SpatialCanvas({
                 fill={stroke.type === 'eraser' ? 'white' : stroke.color}
                 opacity={stroke.type === 'highlighter' ? 0.4 : 1}
                 globalCompositeOperation={stroke.type === 'eraser' ? 'destination-out' : stroke.type === 'highlighter' ? 'multiply' : 'source-over'}
-                x={stroke.x || 0}
-                y={stroke.y || 0}
+                x={(stroke.x || 0) + offsetX}
+                y={(stroke.y || 0) + offsetY}
                 scaleX={stroke.scaleX || 1}
                 scaleY={stroke.scaleY || 1}
                 hitStrokeWidth={tool === 'home' ? Math.max(20, stroke.size + 10) : stroke.size}
@@ -309,8 +323,8 @@ export function SpatialCanvas({
                 onDragMove={(e) => {
                   if (selectedIds.includes(stroke.id) && selectedIds.length > 1) {
                     const node = e.target;
-                    const deltaX = node.x() - (stroke.x || 0);
-                    const deltaY = node.y() - (stroke.y || 0);
+                    const deltaX = node.x() - ((stroke.x || 0) + offsetX);
+                    const deltaY = node.y() - ((stroke.y || 0) + offsetY);
                     
                     selectedIds.forEach(id => {
                       if (id !== stroke.id) {
@@ -318,8 +332,10 @@ export function SpatialCanvas({
                         if (otherNode) {
                           const origStroke = strokes.find(s => s.id === id);
                           if (origStroke) {
-                            otherNode.x((origStroke.x || 0) + deltaX);
-                            otherNode.y((origStroke.y || 0) + deltaY);
+                            const otherOffsetX = origStroke.blockId && blockOffsetMap && blockOffsetMap[origStroke.blockId] ? blockOffsetMap[origStroke.blockId].x : 0;
+                            const otherOffsetY = origStroke.blockId && blockOffsetMap && blockOffsetMap[origStroke.blockId] ? blockOffsetMap[origStroke.blockId].y : 0;
+                            otherNode.x((origStroke.x || 0) + otherOffsetX + deltaX);
+                            otherNode.y((origStroke.y || 0) + otherOffsetY + deltaY);
                           }
                         }
                       }
@@ -330,8 +346,8 @@ export function SpatialCanvas({
                   e.cancelBubble = true;
                   if (selectedIds.includes(stroke.id) && selectedIds.length > 1) {
                     const node = e.target;
-                    const deltaX = node.x() - (stroke.x || 0);
-                    const deltaY = node.y() - (stroke.y || 0);
+                    const deltaX = node.x() - ((stroke.x || 0) + offsetX);
+                    const deltaY = node.y() - ((stroke.y || 0) + offsetY);
                     
                     setStrokes(prev => prev.map(s => {
                       if (selectedIds.includes(s.id)) {
@@ -340,8 +356,8 @@ export function SpatialCanvas({
                       return s;
                     }));
                   } else {
-                    const newX = e.target.x();
-                    const newY = e.target.y();
+                    const newX = e.target.x() - offsetX;
+                    const newY = e.target.y() - offsetY;
                     setStrokes(prev => prev.map(s => 
                       s.id === stroke.id ? { ...s, x: newX, y: newY } : s
                     ));
@@ -351,8 +367,8 @@ export function SpatialCanvas({
                   const node = e.target;
                   const scaleX = node.scaleX();
                   const scaleY = node.scaleY();
-                  const x = node.x();
-                  const y = node.y();
+                  const x = node.x() - offsetX;
+                  const y = node.y() - offsetY;
 
                   setStrokes(prev => prev.map(s => 
                     s.id === stroke.id ? { ...s, x, y, scaleX, scaleY } : s

@@ -237,28 +237,23 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
     strokes.forEach((stroke: Stroke) => {
       if (!stroke.points || stroke.points.length === 0) return;
-      const strokeBox = getStrokeBoundingBox(stroke);
       
-      let bestBlock = null;
-      let maxOverlap = 0;
-
-      baseBlocks.forEach(block => {
-        const blockBox = getBlockBoundingBox(block);
-        const overlap = getIntersectionArea(strokeBox, blockBox);
-        if (overlap > maxOverlap) {
-          maxOverlap = overlap;
-          bestBlock = block;
+      if (stroke.blockId) {
+        const block = baseBlocks.find(b => b.id === stroke.blockId);
+        if (block) {
+          block.attachedStrokes.push(stroke);
+        } else {
+          // Fallback
+          unattachedStrokes.push(stroke);
         }
-      });
-
-      if (bestBlock && maxOverlap > 0) {
-        (bestBlock as any).attachedStrokes.push(stroke);
       } else {
+        // Global sketches have no blockId
         unattachedStrokes.push(stroke);
       }
     });
 
-    const clusters: { type: 'drawing', id: string, x: number, y: number, attachedStrokes: Stroke[], minX: number, minY: number, maxX: number, maxY: number, width: number, height: number }[] = [];
+    // Group unattached strokes into drawing blocks
+    const drawingBlocks: any[] = [];
     
     unattachedStrokes.forEach(stroke => {
       const box = getStrokeBoundingBox(stroke);
@@ -270,7 +265,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         maxY: box.maxY + padding
       };
       
-      const overlappingCluster = clusters.find(c => getIntersectionArea(expandedBox, c) > 0);
+      const overlappingCluster = drawingBlocks.find(c => getIntersectionArea(expandedBox, c) > 0);
       
       if (overlappingCluster) {
         overlappingCluster.attachedStrokes.push(stroke);
@@ -283,7 +278,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         overlappingCluster.width = overlappingCluster.maxX - overlappingCluster.minX;
         overlappingCluster.height = overlappingCluster.maxY - overlappingCluster.minY;
       } else {
-        clusters.push({
+        drawingBlocks.push({
           type: 'drawing',
           id: `cluster-${stroke.id}`,
           x: box.minX,
@@ -299,7 +294,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       }
     });
 
-    const finalBlocks = [...baseBlocks, ...clusters];
+    const finalBlocks = [...baseBlocks, ...drawingBlocks];
     return finalBlocks.sort((a, b) => {
       if (Math.abs(a.y - b.y) > 10) return a.y - b.y; // 10px tolerance for vertical alignment
       return a.x - b.x;
@@ -424,14 +419,16 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
         {/* Linear feed of blocks */}
         <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
-          {sortedBlocks.map(block => {
+          {sortedBlocks.map((block, index) => {
             const blockBox = getBlockBoundingBox(block);
+            const reverseZ = 1000 - index;
 
             if (block.type === 'text') {
               return (
                 <div 
                   key={block.id} 
-                  className="w-full min-h-[50px] relative z-10 overflow-x-hidden"
+                  className="w-full min-h-[50px] relative"
+                  style={{ zIndex: reverseZ }}
                 >
                   <TipTapEditor 
                     content={block.content}
@@ -447,7 +444,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             } else if (block.type === 'audio') {
               return (
-                <div key={block.id} className="relative w-full z-10 overflow-x-hidden">
+                <div key={block.id} className="relative w-full" style={{ zIndex: reverseZ }}>
                   <MobileAudioCard 
                     node={block} 
                     updateAudioTitle={(id, title) => setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a))}
@@ -461,7 +458,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
-                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-white dark:bg-zinc-900 z-10"
+                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black"
+                  style={{ zIndex: reverseZ }}
                 >
                   <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
                   <button 
@@ -477,7 +475,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
-                  className="relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between z-10 overflow-x-hidden"
+                  className="relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between"
+                  style={{ zIndex: reverseZ }}
                 >
                   <div className="flex items-center gap-3 overflow-hidden relative z-30">
                     <File size={24} className="text-primary-500 flex-shrink-0" />
@@ -506,7 +505,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
-                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black aspect-video overflow-hidden z-10"
+                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black aspect-video"
+                  style={{ zIndex: reverseZ }}
                 >
                   <iframe 
                     src={embedUrl} 
