@@ -1272,7 +1272,15 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               <div className="flex items-center gap-2 h-full py-1">
                 <div className="flex items-center h-full gap-1 border-r border-zinc-200 dark:border-zinc-700 pr-2 mr-1">
                   <button
-                    onClick={() => setTool("lasso")}
+                    onClick={() => setTool("home")}
+                    className={`flex flex-col items-center justify-center h-full px-2 rounded ${tool === "home" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    title="Select / Pan"
+                  >
+                    <MousePointer2 size={16} strokeWidth={2} className="mb-0.5" />
+                    <span className="text-[10px] font-medium leading-none">Select</span>
+                  </button>
+                  <button
+                    onClick={() => setTool(tool === "lasso" ? "home" : "lasso")}
                     className={`flex flex-col items-center justify-center h-full px-2 rounded ${tool === "lasso" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
                     title="Lasso Select"
                   >
@@ -1288,15 +1296,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   
                   <div className="relative h-full flex items-center">
                     <button
-                      onClick={() => {
-                        if (tool === "eraser") {
-                          setIsEraserMenuOpen(!isEraserMenuOpen);
-                        } else {
-                          setTool("eraser");
-                        }
-                      }}
+                      onClick={() => setTool(tool === "eraser" ? "home" : "eraser")}
                       className={`flex flex-col items-center justify-center h-full px-2 rounded-l ${tool === "eraser" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
-                      title="Eraser (Click again for options)"
+                      title="Eraser"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5">
                         <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
@@ -1342,7 +1344,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   {presets.map(preset => (
                     <button
                       key={preset.id}
-                      onClick={() => { setActivePresetId(preset.id); setTool("pen"); }}
+                      onClick={() => {
+                        if (tool === 'pen' && activePresetId === preset.id) {
+                          setTool('home');
+                        } else {
+                          setActivePresetId(preset.id); 
+                          setTool("pen"); 
+                        }
+                      }}
                       className={`flex flex-col items-center justify-center h-full px-2 rounded min-w-[40px] relative transition-colors ${activePresetId === preset.id && tool === "pen" ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
                     >
                       {preset.type === 'pen' ? (
