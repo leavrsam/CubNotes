@@ -157,16 +157,55 @@ export const Minimap: React.FC<MinimapProps> = ({
             );
           })}
 
-          {/* Render Media */}
-          {[...images, ...files, ...audios, ...videos].map(m => (
+          {/* Render Audios (Meeting Notes) */}
+          {audios.map(a => (
+            <Group 
+              key={a.id}
+              x={(a.x - bounds.x) * scale + offsetX}
+              y={(a.y - bounds.y) * scale + offsetY}
+            >
+              <Rect 
+                width={(a.width || 400) * scale}
+                height={100 * scale}
+                fill="#312e81" // indigo-900 for dark mode feel
+                cornerRadius={8 * scale}
+                stroke="#4f46e5" // indigo-600
+                strokeWidth={1 * scale}
+              />
+              <Text 
+                x={12 * scale}
+                y={12 * scale}
+                text={"✨ " + (a.title || "Meeting Note")}
+                fontSize={16 * scale}
+                fontFamily="sans-serif"
+                fontStyle="bold"
+                fill="#818cf8" // indigo-400
+              />
+              {a.summary && (
+                <Text 
+                  x={12 * scale}
+                  y={40 * scale}
+                  width={((a.width || 400) - 24) * scale}
+                  text={a.summary}
+                  fontSize={12 * scale}
+                  fontFamily="sans-serif"
+                  fill="#d4d4d8" // zinc-300
+                  wrap="word"
+                />
+              )}
+            </Group>
+          ))}
+
+          {/* Render Other Media */}
+          {[...images, ...files, ...videos].map(m => (
             <Rect 
               key={m.id}
               x={(m.x - bounds.x) * scale + offsetX}
               y={(m.y - bounds.y) * scale + offsetY}
-              width={(m.width || 300) * scale}
-              height={(m.height || 200) * scale}
+              width={(m.width || 400) * scale}
+              height={(('height' in m ? m.height : 100) || 100) * scale}
               fill="#d4d4d8" // zinc-300
-              cornerRadius={6 * scale}
+              cornerRadius={8 * scale}
             />
           ))}
 
