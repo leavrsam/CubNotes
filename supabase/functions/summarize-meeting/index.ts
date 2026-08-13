@@ -55,22 +55,43 @@ serve(async (req) => {
     }
 
     const ai = new GoogleGenerativeAI(geminiKey);
-    const model = ai.getGenerativeModel({ 
-      model: "gemini-3.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    });
+    const prompt = "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript', and YOU MUST identify and separate different speakers (e.g., Speaker 1: ..., Speaker 2: ...). Then, summarize the meeting into key takeaways, action items, and decisions as 'summary' (formatted in clean, rich markdown). Return a JSON object with two string keys: 'summary' and 'transcript'.";
     
-    const result = await model.generateContent([
-      "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript', and YOU MUST identify and separate different speakers (e.g., Speaker 1: ..., Speaker 2: ...). Then, summarize the meeting into key takeaways, action items, and decisions as 'summary' (formatted in clean, rich markdown). Return a JSON object with two string keys: 'summary' and 'transcript'.",
-      {
-        inlineData: {
-          data: audioBase64,
-          mimeType: mimeType,
+    let result;
+    try {
+      const model = ai.getGenerativeModel({ 
+        model: "gemini-3.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json"
         }
-      }
-    ]);
+      });
+      result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: audioBase64,
+            mimeType: mimeType,
+          }
+        }
+      ]);
+    } catch (e) {
+      console.warn("Primary model gemini-3.5-flash failed, falling back to gemini-1.5-flash...", e);
+      const fallbackModel = ai.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      });
+      result = await fallbackModel.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: audioBase64,
+            mimeType: mimeType,
+          }
+        }
+      ]);
+    }
 
     const responseText = result.response.text();
     let parsedData = { summary: "", transcript: "" };
