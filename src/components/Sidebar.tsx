@@ -57,7 +57,7 @@ export function Sidebar({
     <aside className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800 flex-shrink-0">
       <div className="p-4 border-b border-zinc-800 flex items-center justify-between group">
         <h1 className="text-lg font-bold text-zinc-100 tracking-tight flex items-center gap-2">
-          <span>✨</span> CubNotes
+          CubNotes
         </h1>
         <div className="flex items-center gap-1">
           <button 

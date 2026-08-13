@@ -57,7 +57,8 @@ export default function Home() {
   // Fullscreen & Keyboard shortcuts
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const doc = document as any;
+      setIsFullscreen(!!(document.fullscreenElement || doc.webkitFullscreenElement));
     };
     
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -69,9 +70,11 @@ export default function Home() {
     };
     
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -405,14 +408,30 @@ export default function Home() {
                           await appWindow.setFullscreen(!isFs);
                           setIsFullscreen(!isFs);
                         } else {
-                          if (!document.fullscreenElement) {
-                            await document.documentElement.requestFullscreen();
+                          const docEl = document.documentElement as any;
+                          const doc = document as any;
+                          
+                          if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
+                            if (docEl.requestFullscreen) {
+                              await docEl.requestFullscreen();
+                            } else if (docEl.webkitRequestFullscreen) {
+                              await docEl.webkitRequestFullscreen();
+                            } else if (docEl.msRequestFullscreen) {
+                              await docEl.msRequestFullscreen();
+                            }
                           } else {
-                            await document.exitFullscreen();
+                            if (document.exitFullscreen) {
+                              await document.exitFullscreen();
+                            } else if (doc.webkitExitFullscreen) {
+                              await doc.webkitExitFullscreen();
+                            } else if (doc.msExitFullscreen) {
+                              await doc.msExitFullscreen();
+                            }
                           }
                         }
-                      } catch (err) {
-                        console.error(err);
+                      } catch (err: any) {
+                        console.error('Fullscreen error:', err);
+                        toast.error(err.message || 'Fullscreen not supported');
                       }
                     }}
                     className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
