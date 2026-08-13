@@ -143,7 +143,7 @@ export function SpatialCanvas({
           id: uuidv4(),
           points: [[pos.x, pos.y, pos.pressure]],
           color: "white",
-          size: activeSize,
+          size: eraserSize,
           type: 'eraser'
         });
       }
