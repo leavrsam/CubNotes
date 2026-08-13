@@ -266,7 +266,6 @@ export function AudioOverlay({
                   </div>
                 </div>
               </div>
-            </div>
           );
         })}
       </div>
