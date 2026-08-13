@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 import { SettingsModal } from "./SettingsModal";
 import { MobileAudioCard } from "./MobileAudioCard";
+import { MobileDrawOverlay } from "./MobileDrawOverlay";
 import type { Stroke, TextNode, ImageNode, AudioNode, FileNode, VideoNode } from "./CustomCanvas";
 
 function getStrokeBoundingBox(stroke: Stroke) {
@@ -180,9 +181,17 @@ interface MobilePageProps {
 }
 
 export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting }: MobilePageProps) {
-  const { loading, strokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
+  const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  
+  const [isDrawOverlayOpen, setIsDrawOverlayOpen] = useState(false);
+  const [drawOverlayBlockId, setDrawOverlayBlockId] = useState<string | null>(null);
+
+  const openDrawOverlay = (blockId: string | null = null) => {
+    setDrawOverlayBlockId(blockId);
+    setIsDrawOverlayOpen(true);
+  };
   
   const imageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
@@ -427,9 +436,16 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
+                  id={`block-${block.id}`}
                   className="w-full min-h-[50px] relative"
                   style={{ zIndex: reverseZ }}
                 >
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
+                    className="absolute -top-3 -right-3 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-indigo-500 hover:text-indigo-600 z-30"
+                  >
+                    <PenTool size={14} />
+                  </button>
                   <TipTapEditor 
                     content={block.content}
                     onChange={(content) => {
@@ -444,12 +460,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             } else if (block.type === 'audio') {
               return (
-                <div key={block.id} className="relative w-full" style={{ zIndex: reverseZ }}>
+                <div key={block.id} id={`block-${block.id}`} className="relative w-full" style={{ zIndex: reverseZ }}>
                   <MobileAudioCard 
                     node={block} 
                     updateAudioTitle={(id, title) => setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a))}
                     updateAudioField={(id, field, value) => setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a))}
                     deleteAudioNode={(id) => setAudios(prev => prev.filter(a => a.id !== id))}
+                    onAnnotate={(id) => openDrawOverlay(id)}
                   />
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                 </div>
@@ -458,10 +475,17 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
+                  id={`block-${block.id}`}
                   className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black"
                   style={{ zIndex: reverseZ }}
                 >
                   <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
+                    className="absolute top-2 right-12 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-indigo-500 hover:text-indigo-600 z-30"
+                  >
+                    <PenTool size={14} />
+                  </button>
                   <button 
                     onClick={() => setImages(prev => prev.filter(n => n.id !== block.id))}
                     className="absolute top-2 right-2 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-red-500 hover:text-red-600 z-30"
@@ -475,6 +499,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
+                  id={`block-${block.id}`}
                   className="relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between"
                   style={{ zIndex: reverseZ }}
                 >
@@ -483,6 +508,12 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
                   </div>
                   <div className="flex items-center gap-2 relative z-30">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
+                      className="p-2 text-indigo-500 hover:text-indigo-600"
+                    >
+                      <PenTool size={18} />
+                    </button>
                     <a href={block.url} download target="_blank" rel="noopener noreferrer" className="p-2 text-primary-600 dark:text-primary-400">
                       <Download size={18} />
                     </a>
@@ -505,6 +536,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               return (
                 <div 
                   key={block.id} 
+                  id={`block-${block.id}`}
                   className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black aspect-video"
                   style={{ zIndex: reverseZ }}
                 >
@@ -516,6 +548,12 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     allowFullScreen
                     className="w-full h-full relative z-10"
                   ></iframe>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
+                    className="absolute top-2 right-12 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-indigo-500 hover:text-indigo-600 z-30"
+                  >
+                    <PenTool size={14} />
+                  </button>
                   <button 
                     onClick={() => setVideos(prev => prev.filter(n => n.id !== block.id))}
                     className="absolute top-2 right-2 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-red-500 hover:text-red-600 z-30"
@@ -587,7 +625,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           <Mic size={22} />
         </button>
         <button 
-          onClick={() => toast.success("Native drawing is coming soon! For now, view your desktop drawings here.")}
+          onClick={() => openDrawOverlay(null)}
           className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
         >
           <PenTool size={22} />
@@ -600,6 +638,14 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
       </div>
+
+      <MobileDrawOverlay 
+        isOpen={isDrawOverlayOpen}
+        onClose={() => setIsDrawOverlayOpen(false)}
+        annotateBlockId={drawOverlayBlockId}
+        strokes={strokes}
+        setStrokes={setStrokes}
+      />
     </div>
   );
 }
