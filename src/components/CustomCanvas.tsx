@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
+import { getStroke } from "perfect-freehand";
 import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
@@ -213,6 +214,21 @@ function CustomSelect({
       )}
     </div>
   );
+}
+
+// Utility to convert perfect-freehand points to an SVG path string
+function getSvgPathFromStroke(stroke: number[][]) {
+  if (!stroke.length) return "";
+  const d = stroke.reduce(
+    (acc, [x0, y0], i, arr) => {
+      const [x1, y1] = arr[(i + 1) % arr.length];
+      acc.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+      return acc;
+    },
+    ["M", ...stroke[0], "Q"]
+  );
+  d.push("Z");
+  return d.join(" ");
 }
 
 export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls }: CustomCanvasProps) {
@@ -748,14 +764,55 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       // Gather data
       const selectedTexts = texts.filter(t => selectedIds.includes(t.id));
       const selectedAudios = audios.filter(a => selectedIds.includes(a.id));
+      const selectedStrokes = strokes.filter(s => selectedIds.includes(s.id));
+      
+      let imageNodes: string[] = [];
+
+      if (selectedStrokes.length > 0) {
+        const bounds = getSelectionBounds();
+        if (bounds) {
+          const canvas = document.createElement('canvas');
+          const padding = 20;
+          canvas.width = bounds.width + padding * 2;
+          canvas.height = bounds.height + padding * 2;
+          const ctx = canvas.getContext('2d');
+          
+          if (ctx) {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.translate(-bounds.x + padding, -bounds.y + padding);
+
+            selectedStrokes.forEach(stroke => {
+              const outlinePoints = getStroke(stroke.points, {
+                size: stroke.size || 4,
+                thinning: 0.5,
+                smoothing: 0.5,
+                streamline: 0.5,
+              });
+              const pathData = getSvgPathFromStroke(outlinePoints);
+              const p = new Path2D(pathData);
+              ctx.fillStyle = stroke.color || '#000000';
+              ctx.save();
+              ctx.translate(stroke.x || 0, stroke.y || 0);
+              ctx.fill(p);
+              ctx.restore();
+            });
+
+            const dataUrl = canvas.toDataURL('image/png');
+            imageNodes.push(dataUrl);
+          }
+        }
+      }
       
       const promptData = {
         textNodes: selectedTexts.map(t => t.content),
-        audioSummaries: selectedAudios.map(a => a.summary)
+        audioSummaries: selectedAudios.map(a => a.summary),
+        imageNodes
       };
 
-      if (promptData.textNodes.length === 0 && promptData.audioSummaries.length === 0) {
-        toast.error("Select at least one text or audio block to organize.", { id: toastId });
+      if (promptData.textNodes.length === 0 && promptData.audioSummaries.length === 0 && promptData.imageNodes.length === 0) {
+        toast.error("Select at least one block to organize.", { id: toastId });
         return;
       }
 
