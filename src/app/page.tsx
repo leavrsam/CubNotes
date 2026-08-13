@@ -399,36 +399,41 @@ export default function Home() {
                     {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
                   </button>
                   <button
-                    onClick={async () => {
+                    onClick={(e) => {
+                      e.preventDefault();
                       const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
                       try {
                         if (isDesktop) {
+                          // Tauri uses async API, but we don't await the parent onClick
                           const appWindow = getCurrentWindow();
-                          const isFs = await appWindow.isFullscreen();
-                          await appWindow.setFullscreen(!isFs);
-                          setIsFullscreen(!isFs);
+                          appWindow.isFullscreen().then(isFs => {
+                            appWindow.setFullscreen(!isFs).then(() => {
+                              setIsFullscreen(!isFs);
+                            });
+                          });
                         } else {
                           const docEl = document.documentElement as any;
                           const doc = document as any;
                           
                           if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
-                            toast.success("Requesting fullscreen...");
                             if (docEl.requestFullscreen) {
-                              await docEl.requestFullscreen();
+                              docEl.requestFullscreen().catch((err: any) => {
+                                toast.error("Fullscreen error: " + err.message);
+                              });
                             } else if (docEl.webkitRequestFullscreen) {
-                              await docEl.webkitRequestFullscreen();
+                              docEl.webkitRequestFullscreen();
                             } else if (docEl.msRequestFullscreen) {
-                              await docEl.msRequestFullscreen();
+                              docEl.msRequestFullscreen();
                             } else {
                               toast.error("No fullscreen API found");
                             }
                           } else {
                             if (document.exitFullscreen) {
-                              await document.exitFullscreen();
+                              document.exitFullscreen();
                             } else if (doc.webkitExitFullscreen) {
-                              await doc.webkitExitFullscreen();
+                              doc.webkitExitFullscreen();
                             } else if (doc.msExitFullscreen) {
-                              await doc.msExitFullscreen();
+                              doc.msExitFullscreen();
                             }
                           }
                         }
