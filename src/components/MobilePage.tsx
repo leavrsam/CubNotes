@@ -9,8 +9,9 @@ import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
-
-import { Stroke } from "./CustomCanvas";
+import { SettingsModal } from "./SettingsModal";
+import { MobileAudioCard } from "./MobileAudioCard";
+import type { Stroke, TextNode, ImageNode, AudioNode, FileNode, VideoNode } from "./CustomCanvas";
 
 function getStrokeBoundingBox(stroke: Stroke) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -426,51 +427,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               );
             } else if (block.type === 'audio') {
               return (
-                <div 
-                  key={block.id} 
-                  className="w-full relative bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 z-10 overflow-x-hidden"
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <input 
-                      type="text"
-                      value={block.title || "Meeting Recording"}
-                      onChange={(e) => {
-                        setAudios(prev => prev.map(a => a.id === block.id ? { ...a, title: e.target.value } : a));
-                      }}
-                      className="font-bold text-sm text-zinc-800 dark:text-zinc-100 bg-transparent border-none outline-none w-full relative z-30"
-                    />
-                    <button 
-                      onClick={() => setAudios(prev => prev.filter(a => a.id !== block.id))}
-                      className="text-red-500 p-1 relative z-30"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  
-                  <audio controls className="w-full h-10 outline-none rounded-md relative z-30">
-                    <source src={block.url} type="audio/webm" />
-                  </audio>
-
-                  {block.summary && (
-                    <details open className="mt-4 relative z-30">
-                      <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer list-none mb-2 flex items-center gap-2">
-                        <span className="transform transition-transform">▶</span> Summary
-                      </summary>
-                      <div className="text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert bg-zinc-50 dark:bg-zinc-950/50 p-3 rounded-lg">
-                        <ReactMarkdown>{block.summary}</ReactMarkdown>
-                      </div>
-                    </details>
-                  )}
-                  {block.transcript && (
-                    <details className="mt-4 border-t border-zinc-200 dark:border-zinc-800 pt-2 relative z-30">
-                      <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer list-none mb-2 flex items-center gap-2">
-                        <span className="transform transition-transform">▶</span> Transcript
-                      </summary>
-                      <div className="text-sm text-zinc-600 dark:text-zinc-400 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar whitespace-pre-wrap bg-zinc-50 dark:bg-zinc-950/50 p-3 rounded-lg">
-                        {block.transcript}
-                      </div>
-                    </details>
-                  )}
+                <div key={block.id} className="relative w-full z-10 overflow-x-hidden">
+                  <MobileAudioCard 
+                    node={block} 
+                    updateAudioTitle={(id, title) => setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a))}
+                    updateAudioField={(id, field, value) => setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a))}
+                    deleteAudioNode={(id) => setAudios(prev => prev.filter(a => a.id !== id))}
+                  />
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                 </div>
               );
