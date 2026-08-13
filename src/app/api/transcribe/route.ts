@@ -5,6 +5,8 @@ import path from 'path';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
+export const maxDuration = 60; // Allow Vercel functions to run up to 60 seconds for long transcripts
+
 export async function POST(req: NextRequest) {
   try {
     const { audioUrl } = await req.json();
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
     `;
 
     const result = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-pro',
       contents: [
         uploadResult,
         prompt
