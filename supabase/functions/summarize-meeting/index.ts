@@ -56,7 +56,7 @@ serve(async (req) => {
 
     const ai = new GoogleGenerativeAI(geminiKey);
     const model = ai.getGenerativeModel({ 
-      model: "gemini-1.5-pro",
+      model: "gemini-3.5-flash",
       generationConfig: {
         responseMimeType: "application/json"
       }
