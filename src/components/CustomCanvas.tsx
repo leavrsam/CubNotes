@@ -1704,7 +1704,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               onClick={() => handleOrganize()}
               className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-full shadow-xl font-medium transition-transform active:scale-95"
             >
-              <span>✨ Organize Chaos</span>
+              <span>Organize Chaos</span>
             </button>
           </div>
         );
