@@ -412,12 +412,15 @@ export default function Home() {
                           const doc = document as any;
                           
                           if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
+                            toast.success("Requesting fullscreen...");
                             if (docEl.requestFullscreen) {
                               await docEl.requestFullscreen();
                             } else if (docEl.webkitRequestFullscreen) {
                               await docEl.webkitRequestFullscreen();
                             } else if (docEl.msRequestFullscreen) {
                               await docEl.msRequestFullscreen();
+                            } else {
+                              toast.error("No fullscreen API found");
                             }
                           } else {
                             if (document.exitFullscreen) {
@@ -431,7 +434,7 @@ export default function Home() {
                         }
                       } catch (err: any) {
                         console.error('Fullscreen error:', err);
-                        toast.error(err.message || 'Fullscreen not supported');
+                        toast.error("Catch: " + (err.message || 'Fullscreen not supported'));
                       }
                     }}
                     className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
