@@ -2,9 +2,9 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
-import { Trash2, Edit2, Check, GripVertical } from "lucide-react";
+import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'react-markdown';
+import { supabase } from "@/lib/supabaseClient";
 
 interface AudioOverlayProps {
   audios: AudioNode[];
@@ -19,6 +19,310 @@ interface AudioOverlayProps {
   onDragSelectionEnd?: () => void;
 }
 
+type TabType = 'notes' | 'enhanced' | 'transcript' | 'summary' | 'chat';
+
+function AudioNodeCard({ 
+  node, 
+  tool, 
+  isSelected, 
+  updateAudioTitle, 
+  updateAudioField, 
+  deleteAudioNode,
+  setDraggingId,
+  dragStartRef,
+  setResizingId,
+  resizeStartRef,
+  onDragSelectionStart
+}: {
+  node: AudioNode;
+  tool: ToolType;
+  isSelected: boolean;
+  updateAudioTitle: (id: string, title: string) => void;
+  updateAudioField: (id: string, field: keyof AudioNode, value: any) => void;
+  deleteAudioNode: (id: string) => void;
+  setDraggingId: (id: string | null) => void;
+  dragStartRef: React.MutableRefObject<{ x: number, y: number, nodeX: number, nodeY: number } | null>;
+  setResizingId: (id: string | null) => void;
+  resizeStartRef: React.MutableRefObject<{ x: number, nodeWidth: number } | null>;
+  onDragSelectionStart?: (id: string) => void;
+}) {
+  const [activeTab, setActiveTab] = useState<TabType>('notes');
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+
+  const handleEnhance = async () => {
+    if (!node.notes || !node.transcript) return;
+    setIsEnhancing(true);
+    setActiveTab('enhanced');
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('enhance-notes', {
+        body: { notes: node.notes, transcript: node.transcript }
+      });
+      if (error) throw error;
+      if (data?.success) {
+        updateAudioField(node.id, 'enhancedNotes', data.enhancedNotes);
+      }
+    } catch (e) {
+      console.error("Enhance failed:", e);
+      updateAudioField(node.id, 'enhancedNotes', "Failed to enhance notes. Please try again.");
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
+  const handleChat = async () => {
+    if (!chatInput.trim() || !node.transcript) return;
+    const userMsg = chatInput;
+    setChatInput("");
+    setIsChatting(true);
+    
+    const newHistory = [...(node.chatHistory || []), { role: 'user' as const, text: userMsg }];
+    updateAudioField(node.id, 'chatHistory', newHistory);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('chat-with-transcript', {
+        body: { transcript: node.transcript, question: userMsg, history: newHistory }
+      });
+      if (error) throw error;
+      if (data?.success) {
+        updateAudioField(node.id, 'chatHistory', [...newHistory, { role: 'assistant' as const, text: data.answer }]);
+      }
+    } catch (e) {
+      console.error("Chat failed:", e);
+      updateAudioField(node.id, 'chatHistory', [...newHistory, { role: 'assistant' as const, text: "Sorry, I couldn't process that question." }]);
+    } finally {
+      setIsChatting(false);
+    }
+  };
+
+  return (
+    <div 
+      className={`absolute pointer-events-auto group transition-colors rounded-xl`}
+      style={{
+        left: node.x,
+        top: node.y,
+        width: node.width || 500, // increased default width for notes/chat
+      }}
+    >
+      {tool === 'home' && (
+        <>
+          {/* Drag Handle (Move) */}
+          <div 
+            className="absolute -top-5 left-[1px] right-[1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onDragSelectionStart?.(node.id);
+              setDraggingId(node.id);
+              dragStartRef.current = { x: e.clientX, y: e.clientY, nodeX: node.x, nodeY: node.y };
+            }}
+          >
+            <div className="flex gap-1">
+              <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+              <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+              <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+              <div className="w-1 h-1 bg-zinc-500 rounded-full" />
+            </div>
+          </div>
+
+          {/* Resize Handle (Right edge) */}
+          <div 
+            className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20 opacity-0 group-hover:opacity-100 transition-opacity"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              setResizingId(node.id);
+              resizeStartRef.current = { x: e.clientX, nodeWidth: node.width || 500 };
+            }}
+          >
+            <div className="w-1.5 h-6 bg-zinc-300 dark:bg-zinc-600 group-hover/resize:bg-zinc-500 rounded-full" />
+          </div>
+        </>
+      )}
+
+      <div className="w-full flex flex-col bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 overflow-hidden">
+        
+        {/* Header / Audio Player */}
+        <div className="bg-white/95 dark:bg-zinc-900/95 pt-5 pb-3 px-5 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
+          <div className="flex justify-between items-center mb-3">
+            <input 
+              type="text"
+              value={node.title || "Meeting Notes"}
+              onChange={(e) => updateAudioTitle(node.id, e.target.value)}
+              className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 -ml-2 rounded-lg transition-colors w-full tracking-tight`}
+              placeholder="Recording Name..."
+            />
+            <button 
+              onClick={() => deleteAudioNode(node.id)}
+              className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0`}
+              title="Delete Recording"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+          
+          <audio controls className={`w-full outline-none h-10`}>
+            <source src={node.url} type="audio/webm" />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex items-center px-2 py-1 border-b border-zinc-200/50 dark:border-zinc-700/50 bg-zinc-50/50 dark:bg-zinc-800/50 overflow-x-auto custom-scrollbar flex-shrink-0">
+          <button onClick={() => setActiveTab('notes')} className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${activeTab === 'notes' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+            <Edit3 size={14} /> My Notes
+          </button>
+          <button onClick={() => setActiveTab('enhanced')} className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${activeTab === 'enhanced' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+            <Sparkles size={14} className={activeTab === 'enhanced' ? 'text-amber-500' : ''} /> Enhanced AI
+          </button>
+          <button onClick={() => setActiveTab('transcript')} className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${activeTab === 'transcript' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+            <AlignLeft size={14} /> Transcript
+          </button>
+          <button onClick={() => setActiveTab('summary')} className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${activeTab === 'summary' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+            <FileText size={14} /> Summary
+          </button>
+          <button onClick={() => setActiveTab('chat')} className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors ${activeTab === 'chat' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+            <MessageSquare size={14} /> Chat
+          </button>
+        </div>
+
+        {/* Tab Content Area */}
+        <div 
+          className="h-[400px] flex flex-col"
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {/* Notes Tab */}
+          {activeTab === 'notes' && (
+            <div className="flex flex-col h-full bg-zinc-50/30 dark:bg-zinc-900/30">
+              <textarea 
+                value={node.notes || ""}
+                onChange={(e) => updateAudioField(node.id, 'notes', e.target.value)}
+                placeholder="Type your shorthand notes here during the meeting..."
+                className="flex-1 w-full p-5 text-sm text-zinc-800 dark:text-zinc-200 bg-transparent border-none outline-none resize-none custom-scrollbar leading-relaxed"
+              />
+              <div className="p-3 border-t border-zinc-200/50 dark:border-zinc-700/50 bg-white/50 dark:bg-zinc-800/50 flex justify-end">
+                <button 
+                  onClick={handleEnhance}
+                  disabled={!node.notes || !node.transcript || isEnhancing}
+                  className="px-4 py-2 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isEnhancing ? <span className="animate-pulse">Enhancing...</span> : <>Enhance Notes <Sparkles size={14} /></>}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Enhanced Notes Tab */}
+          {activeTab === 'enhanced' && (
+            <div className="p-5 overflow-y-auto h-full custom-scrollbar">
+              {!node.enhancedNotes && !isEnhancing ? (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3">
+                  <Sparkles size={32} className="opacity-20" />
+                  <p className="text-sm">Write notes in the "My Notes" tab and click Enhance.</p>
+                </div>
+              ) : isEnhancing ? (
+                <div className="flex flex-col items-center justify-center h-full text-amber-500 gap-3 animate-pulse">
+                  <Sparkles size={32} />
+                  <p className="text-sm font-medium">AI is polishing your notes...</p>
+                </div>
+              ) : (
+                <div className="prose prose-sm dark:prose-invert max-w-none text-zinc-800 dark:text-zinc-200">
+                  <ReactMarkdown>{node.enhancedNotes || ""}</ReactMarkdown>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transcript Tab */}
+          {activeTab === 'transcript' && (
+            <div className="p-5 overflow-y-auto h-full custom-scrollbar">
+              {node.transcript ? (
+                <div className="text-[13px] font-mono leading-loose text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">
+                  {node.transcript}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
+                  {node.summary?.includes('Transcribing') ? 'Transcribing audio...' : 'No transcript available.'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Summary Tab */}
+          {activeTab === 'summary' && (
+            <div className="p-5 overflow-y-auto h-full custom-scrollbar prose prose-sm dark:prose-invert max-w-none">
+              {node.summary ? (
+                <ReactMarkdown>{node.summary}</ReactMarkdown>
+              ) : (
+                <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
+                  No summary available.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chat Tab */}
+          {activeTab === 'chat' && (
+            <div className="flex flex-col h-full bg-zinc-50/50 dark:bg-zinc-900/50">
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+                {(!node.chatHistory || node.chatHistory.length === 0) && (
+                  <div className="flex items-center justify-center h-full text-zinc-400 text-sm text-center px-4">
+                    Ask me anything about this meeting!<br/>I can find action items, summarize decisions, or locate details.
+                  </div>
+                )}
+                {node.chatHistory?.map((msg, idx) => (
+                  <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'}`}>
+                      {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                    </div>
+                    <div className={`p-3 rounded-2xl max-w-[85%] text-sm ${msg.role === 'user' ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200/50 dark:border-zinc-700/50 rounded-tl-sm'}`}>
+                      {msg.role === 'user' ? msg.text : <ReactMarkdown className="prose prose-sm dark:prose-invert prose-p:my-1 max-w-none">{msg.text}</ReactMarkdown>}
+                    </div>
+                  </div>
+                ))}
+                {isChatting && (
+                  <div className="flex gap-3 flex-row">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+                      <Bot size={16} />
+                    </div>
+                    <div className="p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200/50 dark:border-zinc-700/50 rounded-tl-sm flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="p-3 border-t border-zinc-200/50 dark:border-zinc-700/50 bg-white/50 dark:bg-zinc-800/50">
+                <form 
+                  onSubmit={(e) => { e.preventDefault(); handleChat(); }}
+                  className="flex items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask about the transcript..."
+                    className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                  <button 
+                    type="submit"
+                    disabled={!chatInput.trim() || isChatting || !node.transcript}
+                    className="w-9 h-9 flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                  >
+                    <Send size={14} className="-ml-0.5" />
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export function AudioOverlay({ 
   audios, setAudios, 
   pan, zoom, tool,
@@ -26,8 +330,6 @@ export function AudioOverlay({
   onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
 }: AudioOverlayProps) {
   
-  const [editingId, setEditingId] = useState<{ id: string, field: 'summary' | 'transcript' } | null>(null);
-
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragStartRef = useRef<{ x: number, y: number, nodeX: number, nodeY: number } | null>(null);
@@ -44,7 +346,7 @@ export function AudioOverlay({
     setAudios(prev => prev.map(a => a.id === id ? { ...a, title: newTitle } : a));
   }, [setAudios]);
 
-  const updateAudioField = useCallback((id: string, field: 'summary' | 'transcript', value: string) => {
+  const updateAudioField = useCallback((id: string, field: keyof AudioNode, value: any) => {
     setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   }, [setAudios]);
 
@@ -59,7 +361,7 @@ export function AudioOverlay({
         if (a.id === resizingId && resizeStartRef.current) {
           return {
             ...a,
-            width: Math.max(300, resizeStartRef.current.nodeWidth + deltaX) // Min width 300 for audio player
+            width: Math.max(400, resizeStartRef.current.nodeWidth + deltaX)
           };
         }
         return a;
@@ -97,180 +399,27 @@ export function AudioOverlay({
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`
         }}
       >
-        {audios.map(node => {
-          const isSelected = selectedIds.includes(node.id);
-          return (
-            <div 
-              key={node.id}
-              onPointerDown={(e) => {
-                if (tool === 'home') {
-                  e.stopPropagation();
-                  setSelectedIds?.([node.id]);
-                }
-              }}
-              className={`absolute pointer-events-auto group transition-colors rounded-xl`}
-              style={{
-                left: node.x,
-                top: node.y,
-                width: node.width || 400,
-              }}
-            >
-              {tool === 'home' && (
-                <>
-                  {/* Drag Handle (Move) */}
-                  <div 
-                    className="absolute -top-5 left-[1px] right-[1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      onDragSelectionStart?.(node.id);
-                      setDraggingId(node.id);
-                      dragStartRef.current = {
-                        x: e.clientX,
-                        y: e.clientY,
-                        nodeX: node.x,
-                        nodeY: node.y
-                      };
-                    }}
-                  >
-                    <div className="flex gap-1">
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                      <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                    </div>
-                  </div>
-
-                  {/* Resize Handle (Right edge) */}
-                  <div 
-                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize flex items-center justify-center group/resize z-20 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      setResizingId(node.id);
-                      resizeStartRef.current = {
-                        x: e.clientX,
-                        nodeWidth: node.width || 400
-                      };
-                    }}
-                  >
-                    <div className="w-1.5 h-6 bg-zinc-300 dark:bg-zinc-600 group-hover/resize:bg-zinc-500 rounded-full" />
-                  </div>
-                </>
-              )}
-
-                <div className="w-full flex flex-col bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 max-h-[85vh] overflow-y-auto overflow-x-hidden">
-                  
-                  {/* Sticky Header Section */}
-                  <div className="sticky top-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-700/50 pt-5 pb-3 px-5">
-                    <div className="flex justify-between items-center mb-3">
-                      <input 
-                        type="text"
-                        value={node.title || "Audio File"}
-                        onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-                        className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 -ml-2 rounded-lg transition-colors w-full tracking-tight`}
-                        placeholder="Recording Name..."
-                      />
-                      <button 
-                        onClick={() => deleteAudioNode(node.id)}
-                        className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0`}
-                        title="Delete Recording"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                    
-                    <audio controls className={`w-full outline-none`}>
-                      <source src={node.url} type="audio/webm" />
-                      Your browser does not support the audio element.
-                    </audio>
-                  </div>
-
-                  {/* Scrollable Content Section */}
-                  <div 
-                    className="p-5 pt-2 flex flex-col gap-3"
-                    onWheel={(e) => e.stopPropagation()}
-                  >
-
-                {node.summary && (
-                  <details open className="mt-2 group/details">
-                    <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="transform transition-transform group-open/details:rotate-90">▶</span>
-                        View Summary
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (editingId?.id === node.id && editingId?.field === 'summary') {
-                            setEditingId(null);
-                          } else {
-                            setEditingId({ id: node.id, field: 'summary' });
-                          }
-                        }}
-                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors`}
-                      >
-                        {editingId?.id === node.id && editingId?.field === 'summary' ? <Check size={14} /> : <Edit2 size={14} />}
-                      </button>
-                    </summary>
-                    <div className={`mt-3`}>
-                      {editingId?.id === node.id && editingId?.field === 'summary' ? (
-                        <textarea 
-                          value={node.summary}
-                          onChange={(e) => updateAudioField(node.id, 'summary', e.target.value)}
-                          className="w-full h-40 p-3 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y transition-shadow"
-                        />
-                      ) : (
-                        <div className={`text-sm text-zinc-700 dark:text-zinc-300 prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 overflow-hidden ${node.summary?.includes('Transcribing and summarizing') ? 'animate-pulse text-indigo-500 dark:text-indigo-400 font-medium flex items-center gap-2' : ''}`}>
-                          {node.summary?.includes('Transcribing and summarizing') && (
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          )}
-                          <ReactMarkdown>{node.summary || ""}</ReactMarkdown>
-                        </div>
-                      )}
-                    </div>
-                  </details>
-                )}
-
-                {node.transcript && (
-                  <details className="mt-2 border-t border-zinc-200 dark:border-zinc-700 pt-2 group/details">
-                    <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors list-none flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="transform transition-transform group-open/details:rotate-90">▶</span>
-                        View Transcript
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (editingId?.id === node.id && editingId?.field === 'transcript') {
-                            setEditingId(null);
-                          } else {
-                            setEditingId({ id: node.id, field: 'transcript' });
-                          }
-                        }}
-                        className={`p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors`}
-                      >
-                        {editingId?.id === node.id && editingId?.field === 'transcript' ? <Check size={14} /> : <Edit2 size={14} />}
-                      </button>
-                    </summary>
-                    <div className={`mt-3`}>
-                      {editingId?.id === node.id && editingId?.field === 'transcript' ? (
-                        <textarea 
-                          value={node.transcript}
-                          onChange={(e) => updateAudioField(node.id, 'transcript', e.target.value)}
-                          className="w-full h-64 p-3 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 resize-y transition-shadow"
-                        />
-                      ) : (
-                        <div className="text-sm text-zinc-600 dark:text-zinc-400 max-h-[300px] overflow-y-auto pr-3 custom-scrollbar whitespace-pre-wrap leading-loose font-mono text-[13px] bg-black/5 dark:bg-white/5 p-4 rounded-xl border border-zinc-200/50 dark:border-zinc-700/50">
-                          {node.transcript}
-                        </div>
-                      )}
-                    </div>
-                  </details>
-                )}
-                  </div>
-                </div>
-              </div>
-          );
-        })}
+        {audios.map(node => (
+          <AudioNodeCard
+            key={node.id}
+            node={node}
+            tool={tool}
+            isSelected={selectedIds.includes(node.id)}
+            updateAudioTitle={updateAudioTitle}
+            updateAudioField={updateAudioField}
+            deleteAudioNode={deleteAudioNode}
+            setDraggingId={setDraggingId}
+            dragStartRef={dragStartRef}
+            setResizingId={setResizingId}
+            resizeStartRef={resizeStartRef}
+            onDragSelectionStart={(id) => {
+              if (tool === 'home') {
+                setSelectedIds?.([id]);
+              }
+              onDragSelectionStart?.(id);
+            }}
+          />
+        ))}
       </div>
     </div>
   );

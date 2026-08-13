@@ -12,3 +12,10 @@ This project is deployed on Vercel via GitHub integration. When making code chan
 2. Push the changes to GitHub (`git push`).
 This ensures Vercel automatically triggers a build and deploys the updates.
 <!-- END:vercel-deployment-rules -->
+
+<!-- BEGIN:terminal-commands-rule -->
+# Terminal Commands for the User
+
+When asking the user to manually run a command in their terminal, you MUST ALWAYS provide explicit instructions on how to navigate to the correct directory first. The user is not familiar with terminal navigation. 
+Always include the `cd /path/to/project` command in your instructions immediately before the actual command they need to run.
+<!-- END:terminal-commands-rule -->

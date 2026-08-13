@@ -50,6 +50,9 @@ export type AudioNode = {
   title?: string;
   summary?: string;
   transcript?: string;
+  notes?: string;
+  enhancedNotes?: string;
+  chatHistory?: { role: 'user' | 'assistant', text: string }[];
 };
 
 export type ImageNode = {
@@ -81,7 +84,7 @@ export type VideoNode = {
 import { ColorPickerMenu } from "./ColorPickerMenu";
 
 export type ToolType = "pan" | "home" | "pen" | "eraser" | "lasso";
-export type RibbonTab = "Home" | "Insert" | "Draw" | "History" | "View";
+export type RibbonTab = "Home" | "Insert" | "Record" | "Draw" | "History" | "View";
 
 export type ToolPreset = {
   id: string;
@@ -368,6 +371,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   // Audio Recording State
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -460,6 +464,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
       mediaRecorder.start();
       setIsRecording(true);
+      setIsPaused(false);
       setRecordingDuration(0);
 
       timerIntervalRef.current = setInterval(() => {
@@ -472,10 +477,31 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    }
+  };
+
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setIsPaused(false);
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
       }
@@ -892,7 +918,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           )}
 
           <div className="flex gap-1">
-            {(["Home", "Insert", "Draw", "History", "View"] as RibbonTab[]).map(tab => (
+            {(["Home", "Insert", "Record", "Draw", "History", "View"] as RibbonTab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => {
@@ -1075,29 +1101,76 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               </div>
             )}
             
+            {activeTab === "Record" && (
+              <div className="flex items-center gap-4 h-full py-1">
+                <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio')} />
+                
+                <div className="flex items-center h-full gap-2">
+                  {!isRecording ? (
+                    <button
+                      onClick={startRecording}
+                      className="flex flex-col items-center justify-center h-full px-4 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-indigo-600 dark:text-indigo-400 font-semibold"
+                    >
+                      <Mic size={18} strokeWidth={2} />
+                      <span className="text-[11px] font-bold mt-1 flex items-center gap-1">
+                        Start Meeting ✨
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+                      <button
+                        onClick={stopRecording}
+                        className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-red-500"
+                      >
+                        <Square size={16} strokeWidth={2} className="fill-current animate-pulse" />
+                        <span className="text-[10px] font-bold mt-0.5">Stop</span>
+                      </button>
+
+                      {isPaused ? (
+                        <button
+                          onClick={resumeRecording}
+                          className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-red-500"
+                        >
+                          <Mic size={16} strokeWidth={2} className="fill-current" />
+                          <span className="text-[10px] font-bold mt-0.5">Resume</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={pauseRecording}
+                          className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-red-500"
+                        >
+                          <div className="flex gap-0.5">
+                            <div className="w-1 h-3.5 bg-current rounded-sm"></div>
+                            <div className="w-1 h-3.5 bg-current rounded-sm"></div>
+                          </div>
+                          <span className="text-[10px] font-bold mt-0.5 pt-0.5">Pause</span>
+                        </button>
+                      )}
+
+                      <div className="px-2 font-mono text-red-500 text-sm font-bold min-w-[50px] text-center">
+                        {formatTime(recordingDuration)}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+                  
+                  <button
+                    onClick={() => audioInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+                  >
+                    <FileIcon size={16} strokeWidth={2} />
+                    <span className="text-[10px] font-medium mt-0.5">Upload Audio File</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {activeTab === "Insert" && (
               <div className="flex items-center gap-4 h-full py-1">
                 <input type="file" ref={imageInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} />
                 <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => handleFileUpload(e, 'file')} />
-                <input type="file" ref={audioInputRef} accept="audio/*" className="hidden" onChange={(e) => handleFileUpload(e, 'audio')} />
-                
                 <div className="flex items-center h-full">
-                  <button
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${isRecording ? 'text-red-500 bg-red-50 dark:bg-red-900/20' : 'text-indigo-600 dark:text-indigo-400 font-semibold'}`}
-                  >
-                    {isRecording ? <Square size={16} strokeWidth={2} className="fill-current animate-pulse" /> : <Mic size={16} strokeWidth={2} />}
-                    <span className="text-[10px] font-bold mt-0.5 flex items-center gap-1">
-                      {isRecording ? formatTime(recordingDuration) : 'AI Meeting'} ✨
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => audioInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
-                  >
-                    <FileIcon size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Audio File</span>
-                  </button>
                   <button
                     onClick={() => imageInputRef.current?.click()}
                     className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
