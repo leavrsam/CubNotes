@@ -157,7 +157,7 @@ export const Minimap: React.FC<MinimapProps> = ({
             );
           })}
 
-          {/* Render Audios (Meeting Notes) */}
+          {/* Render Audios (AudioOverlay Cards) */}
           {audios.map(a => (
             <Group 
               key={a.id}
@@ -166,30 +166,39 @@ export const Minimap: React.FC<MinimapProps> = ({
             >
               <Rect 
                 width={(a.width || 400) * scale}
-                height={100 * scale}
-                fill="#312e81" // indigo-900 for dark mode feel
-                cornerRadius={8 * scale}
-                stroke="#4f46e5" // indigo-600
-                strokeWidth={1 * scale}
+                height={150 * scale} // Approximate height of the audio card
+                fill="#e4e4e7" // zinc-200 (light gray similar to white card on canvas)
+                cornerRadius={12 * scale} // rounded-2xl
+                shadowColor="#000"
+                shadowBlur={10 * scale}
+                shadowOpacity={0.1}
               />
               <Text 
                 x={12 * scale}
                 y={12 * scale}
-                text={"✨ " + (a.title || "Meeting Note")}
+                text={a.title || "Audio File"}
                 fontSize={16 * scale}
                 fontFamily="sans-serif"
                 fontStyle="bold"
-                fill="#818cf8" // indigo-400
+                fill="#18181b" // zinc-900
+              />
+              <Rect
+                x={12 * scale}
+                y={40 * scale}
+                width={((a.width || 400) - 24) * scale}
+                height={30 * scale}
+                fill="#d4d4d8" // zinc-300 (represents the <audio> controls)
+                cornerRadius={4 * scale}
               />
               {a.summary && (
                 <Text 
                   x={12 * scale}
-                  y={40 * scale}
+                  y={80 * scale}
                   width={((a.width || 400) - 24) * scale}
-                  text={a.summary}
+                  text={a.summary.replace(/<[^>]*>?/gm, '')}
                   fontSize={12 * scale}
                   fontFamily="sans-serif"
-                  fill="#d4d4d8" // zinc-300
+                  fill="#52525b" // zinc-600
                   wrap="word"
                 />
               )}
