@@ -119,7 +119,7 @@ export function AudioOverlay({
                 <>
                   {/* Drag Handle (Move) */}
                   <div 
-                    className="absolute -top-5 left-[-1px] right-[-1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
+                    className="absolute -top-5 left-[1px] right-[1px] h-5 cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center border border-transparent border-b-0 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       onDragSelectionStart?.(node.id);
@@ -157,28 +157,35 @@ export function AudioOverlay({
                 </>
               )}
 
-              <div className="w-full flex flex-col gap-3 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl p-5 rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 max-h-[85vh] overflow-y-auto overflow-x-hidden">
-                <div className="flex justify-between items-center px-1">
-                  <input 
-                    type="text"
-                    value={node.title || "Audio File"}
-                    onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-                    className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-colors w-full tracking-tight`}
-                    placeholder="Recording Name..."
-                  />
-                  <button 
-                    onClick={() => deleteAudioNode(node.id)}
-                    className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0`}
-                    title="Delete Recording"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-                
-                <audio controls className={`w-full h-10 outline-none rounded-md`}>
-                  <source src={node.url} type="audio/webm" />
-                  Your browser does not support the audio element.
-                </audio>
+                <div className="w-full flex flex-col bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 max-h-[85vh] overflow-y-auto overflow-x-hidden">
+                  
+                  {/* Sticky Header Section */}
+                  <div className="sticky top-0 z-10 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-700/50 pt-5 pb-3 px-5">
+                    <div className="flex justify-between items-center mb-3">
+                      <input 
+                        type="text"
+                        value={node.title || "Audio File"}
+                        onChange={(e) => updateAudioTitle(node.id, e.target.value)}
+                        className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 -ml-2 rounded-lg transition-colors w-full tracking-tight`}
+                        placeholder="Recording Name..."
+                      />
+                      <button 
+                        onClick={() => deleteAudioNode(node.id)}
+                        className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0`}
+                        title="Delete Recording"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    
+                    <audio controls className={`w-full outline-none`}>
+                      <source src={node.url} type="audio/webm" />
+                      Your browser does not support the audio element.
+                    </audio>
+                  </div>
+
+                  {/* Scrollable Content Section */}
+                  <div className="p-5 pt-2 flex flex-col gap-3">
 
                 {node.summary && (
                   <details open className="mt-2 group/details">
@@ -256,6 +263,8 @@ export function AudioOverlay({
                     </div>
                   </details>
                 )}
+                  </div>
+                </div>
               </div>
             </div>
           );
