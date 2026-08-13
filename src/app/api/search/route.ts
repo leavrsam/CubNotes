@@ -6,7 +6,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function POST(req: Request) {
   try {
-    const { query } = await req.json();
+    const { query, pageId } = await req.json();
 
     if (!query) {
       return NextResponse.json({ error: "Missing query" }, { status: 400 });
@@ -32,10 +32,12 @@ export async function POST(req: Request) {
     }
 
     // Call the match_documents RPC function
+    // Call the match_documents RPC function
     const { data: matches, error } = await supabase.rpc('match_documents', {
       query_embedding,
       match_threshold: 0.5,
-      match_count: 10
+      match_count: 10,
+      filter_page_id: pageId || null
     });
 
     if (error) {

@@ -31,6 +31,7 @@ export function Sidebar({
   onClose, onOpenSettings, onJumpToCoordinates, user
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchScope, setSearchScope] = useState<'global' | 'local'>('global');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
 
@@ -41,7 +42,10 @@ export function Sidebar({
         const res = await fetch('/api/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: searchQuery })
+          body: JSON.stringify({ 
+            query: searchQuery,
+            pageId: searchScope === 'local' ? selectedPageId : undefined
+          })
         });
         const data = await res.json();
         setSearchResults(data.matches || []);
@@ -71,19 +75,28 @@ export function Sidebar({
       </div>
 
       <div className="p-3 border-b border-zinc-800">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-2.5 text-zinc-500" />
+        <div className="relative flex items-center">
+          <Search size={14} className="absolute left-2.5 text-zinc-500" />
           <input
             type="text"
-            placeholder="Semantic search..."
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleSearch}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-200 placeholder:text-zinc-600"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-8 pr-16 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-200 placeholder:text-zinc-600"
           />
-          {isSearching && (
-            <Loader2 size={14} className="absolute right-2.5 top-2.5 text-zinc-500 animate-spin" />
-          )}
+          <div className="absolute right-1 flex items-center gap-1">
+            <button
+              onClick={() => setSearchScope(prev => prev === 'global' ? 'local' : 'global')}
+              className={`p-1 rounded flex items-center justify-center transition-colors ${searchScope === 'local' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+              title={searchScope === 'global' ? "Searching all notes (Click to search current note)" : "Searching current note (Click to search all notes)"}
+            >
+              {searchScope === 'global' ? <Folder size={12} /> : <FileText size={12} />}
+            </button>
+            {isSearching && (
+              <Loader2 size={12} className="text-zinc-500 animate-spin mr-1" />
+            )}
+          </div>
         </div>
       </div>
 
