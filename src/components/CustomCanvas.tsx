@@ -515,18 +515,32 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
       toast.loading("Generating rich summary with Gemini...", { id: toastId });
 
-      // Call Gemini API Route
-      const res = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioUrl: publicUrl })
+      // Call Edge Function for Transcription/Summary
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const base64String = (reader.result as string).split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = reject;
       });
 
-      if (!res.ok) {
-        throw new Error("Transcription failed");
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('summarize-meeting', {
+        body: { audioBase64: base64Data, mimeType: 'audio/webm' }
+      });
+
+      if (edgeError || (edgeData && edgeData.success === false)) {
+        const actualError = edgeData?.error || edgeError;
+        console.error("============= EDGE FUNCTION ERROR =============");
+        console.error(actualError);
+        console.error("===============================================");
+        throw new Error(String(actualError));
       }
 
-      const { transcript, summary } = await res.json();
+      const transcript = edgeData?.transcript || "Transcript not available.";
+      const summary = edgeData?.summary || "Summary not available.";
 
       setAudios(prev => prev.map(audio => {
         if (audio.id === nodeId) {
