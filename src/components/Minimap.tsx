@@ -141,13 +141,14 @@ export const Minimap: React.FC<MinimapProps> = ({
           {/* Render Texts */}
           {texts.map(t => {
             const rawText = t.content ? t.content.replace(/<[^>]*>?/gm, '') : '';
+            if (!rawText.trim()) return null;
             return (
               <Text 
                 key={t.id}
                 x={(t.x - bounds.x) * scale + offsetX}
                 y={(t.y - bounds.y) * scale + offsetY}
                 width={(t.width || 200) * scale}
-                text={rawText.trim() ? rawText : "Empty text"}
+                text={rawText}
                 fontSize={24 * scale} // Base font size, scaled down
                 fontFamily="sans-serif"
                 fill="#71717a" // zinc-500
