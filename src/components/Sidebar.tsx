@@ -83,12 +83,12 @@ export function Sidebar({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleSearch}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-8 pr-16 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-200 placeholder:text-zinc-600"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-8 pr-16 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 text-zinc-200 placeholder:text-zinc-600"
           />
           <div className="absolute right-1 flex items-center gap-1">
             <button
               onClick={() => setSearchScope(prev => prev === 'global' ? 'local' : 'global')}
-              className={`p-1 rounded flex items-center justify-center transition-colors ${searchScope === 'local' ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+              className={`p-1 rounded flex items-center justify-center transition-colors ${searchScope === 'local' ? 'bg-primary-500/20 text-primary-400' : 'text-zinc-500 hover:text-zinc-300'}`}
               title={searchScope === 'global' ? "Searching all notes (Click to search current note)" : "Searching current note (Click to search all notes)"}
             >
               {searchScope === 'global' ? <Folder size={12} /> : <FileText size={12} />}
@@ -121,7 +121,7 @@ export function Sidebar({
                   }
                 }}
               >
-                <div className="text-xs text-indigo-400 mb-0.5">{(res.similarity * 100).toFixed(1)}% match</div>
+                <div className="text-xs text-primary-400 mb-0.5">{(res.similarity * 100).toFixed(1)}% match</div>
                 <div className="text-sm text-zinc-300 truncate">{preview}</div>
               </div>
             );
