@@ -4,6 +4,7 @@ import { useAccent, AccentColor } from "./AccentProvider";
 import { X, Moon, Sun, Monitor, LogOut, Check, User as UserIcon, Upload, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
+import { useMinimapSettings } from "@/hooks/useMinimapSettings";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose, userEmail, user, onSignOut }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccent();
+  const { showMinimap, setShowMinimap } = useMinimapSettings();
   const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "account">("profile");
   
   // Profile State
@@ -281,6 +283,28 @@ export function SettingsModal({ isOpen, onClose, userEmail, user, onSignOut }: S
                         {accentColor === color.id && <Check size={16} className="text-white drop-shadow-md" />}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Minimap</h3>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Show Minimap</div>
+                      <div className="text-xs text-zinc-500">Display a bird's-eye view of your canvas in the corner</div>
+                    </div>
+                    <button
+                      onClick={() => setShowMinimap(!showMinimap)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900 ${
+                        showMinimap ? 'bg-primary-600' : 'bg-zinc-200 dark:bg-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          showMinimap ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
               </div>

@@ -102,6 +102,7 @@ export type DocumentState = {
 };
 
 import { useCanvasData } from "@/hooks/useCanvasData";
+import { useMinimapSettings } from "@/hooks/useMinimapSettings";
 import toast from "react-hot-toast";
 
 const FONT_OPTIONS = [
@@ -373,7 +374,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [showMinimap, setShowMinimap] = useState(true);
+  const { showMinimap, setShowMinimap } = useMinimapSettings();
 
   const getCanvasCenter = useCallback(() => {
     const screenCenterX = window.innerWidth / 2;

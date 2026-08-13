@@ -167,11 +167,13 @@ export const Minimap: React.FC<MinimapProps> = ({
               <Rect 
                 width={(a.width || 400) * scale}
                 height={150 * scale} // Approximate height of the audio card
-                fill="#e4e4e7" // zinc-200 (light gray similar to white card on canvas)
+                fill="#18181b" // zinc-900 (dark gray)
                 cornerRadius={12 * scale} // rounded-2xl
                 shadowColor="#000"
                 shadowBlur={10 * scale}
-                shadowOpacity={0.1}
+                shadowOpacity={0.3}
+                stroke="#27272a" // zinc-800 border
+                strokeWidth={1 * scale}
               />
               <Text 
                 x={12 * scale}
@@ -180,14 +182,14 @@ export const Minimap: React.FC<MinimapProps> = ({
                 fontSize={16 * scale}
                 fontFamily="sans-serif"
                 fontStyle="bold"
-                fill="#18181b" // zinc-900
+                fill="#f4f4f5" // zinc-100
               />
               <Rect
                 x={12 * scale}
                 y={40 * scale}
                 width={((a.width || 400) - 24) * scale}
                 height={30 * scale}
-                fill="#d4d4d8" // zinc-300 (represents the <audio> controls)
+                fill="#27272a" // zinc-800 (represents the <audio> controls)
                 cornerRadius={4 * scale}
               />
               {a.summary && (
@@ -198,7 +200,7 @@ export const Minimap: React.FC<MinimapProps> = ({
                   text={a.summary.replace(/<[^>]*>?/gm, '')}
                   fontSize={12 * scale}
                   fontFamily="sans-serif"
-                  fill="#52525b" // zinc-600
+                  fill="#a1a1aa" // zinc-400
                   wrap="word"
                 />
               )}
