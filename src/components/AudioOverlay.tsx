@@ -4,7 +4,9 @@ import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
 import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
 
 interface AudioOverlayProps {
   audios: AudioNode[];
