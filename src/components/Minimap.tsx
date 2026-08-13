@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { Stroke, TextNode, ImageNode, FileNode, VideoNode, AudioNode } from './CustomCanvas';
-import { Stage, Layer, Rect, Group, Path } from 'react-konva';
+import { Stage, Layer, Rect, Group, Path, Text } from 'react-konva';
 
 interface MinimapProps {
   strokes: Stroke[];
@@ -138,18 +138,23 @@ export const Minimap: React.FC<MinimapProps> = ({
             />
           ))}
           
-          {/* Render Texts (as generic blocks) */}
-          {texts.map(t => (
-            <Rect 
-              key={t.id}
-              x={(t.x - bounds.x) * scale + offsetX}
-              y={(t.y - bounds.y) * scale + offsetY}
-              width={(t.width || 200) * scale}
-              height={100 * scale}
-              fill="#e4e4e7" // zinc-200
-              cornerRadius={4 * scale}
-            />
-          ))}
+          {/* Render Texts */}
+          {texts.map(t => {
+            const rawText = t.content ? t.content.replace(/<[^>]*>?/gm, '') : '';
+            return (
+              <Text 
+                key={t.id}
+                x={(t.x - bounds.x) * scale + offsetX}
+                y={(t.y - bounds.y) * scale + offsetY}
+                width={(t.width || 200) * scale}
+                text={rawText.trim() ? rawText : "Empty text"}
+                fontSize={24 * scale} // Base font size, scaled down
+                fontFamily="sans-serif"
+                fill="#71717a" // zinc-500
+                wrap="word"
+              />
+            );
+          })}
 
           {/* Render Media */}
           {[...images, ...files, ...audios, ...videos].map(m => (
