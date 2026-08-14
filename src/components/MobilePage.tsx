@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus, File, Download, ChevronLeft, Type, Image as ImageIcon, Mic, PenTool } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, Paperclip } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -194,6 +194,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   };
   
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -229,6 +230,40 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       toast.error(`Upload failed: ${error.message}`, { id: toastId });
     } finally {
       e.target.value = ''; // Reset input
+    }
+  };
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const toastId = toast.loading(`Uploading ${file.name}...`);
+    try {
+      const ext = file.name.split('.').pop();
+      const filename = `${pageId}/${uuidv4()}.${ext}`;
+
+      const { data, error } = await supabase.storage
+        .from('recordings')
+        .upload(filename, file);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('recordings')
+        .getPublicUrl(filename);
+
+      setFiles(prev => [...(prev || []), {
+        id: uuidv4(),
+        x: 50,
+        y: bottomY,
+        filename: file.name,
+        url: publicUrl
+      }]);
+      toast.success(`File attached!`, { id: toastId });
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`, { id: toastId });
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -379,11 +414,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-white dark:bg-black relative">
+    <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-white dark:bg-black overflow-hidden select-none">
       
-      {/* Blurred Header */}
+      {/* Top Blurred Header */}
       <div 
-        className="sticky top-0 z-[1500] bg-white/85 dark:bg-black/85 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 transition-all"
+        className="flex-shrink-0 z-[1500] bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 transition-all"
         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
       >
         <div className="flex items-center px-4 py-3">
@@ -405,7 +440,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       </div>
 
       <div 
-        className="flex-1 overflow-y-auto overflow-x-hidden relative scroll-smooth" 
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative scroll-smooth overscroll-contain select-text" 
         style={{ WebkitOverflowScrolling: 'touch' }}
         onClick={() => setActiveBlockId(null)}
       >
@@ -637,9 +672,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         </div>
       </div>
 
-      {/* Sticky Bottom Action Bar */}
+      {/* Fixed Bottom Action Bar */}
       <div 
-        className="sticky bottom-0 z-[1500] bg-white/85 dark:bg-black/85 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800 px-6 py-4 flex items-center justify-between"
+        className="flex-shrink-0 z-[1500] bg-white/90 dark:bg-black/90 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800 px-8 py-3 flex items-center justify-around"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
       >
         <input 
@@ -649,36 +684,44 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           accept="image/*" 
           className="hidden" 
         />
-        <button onClick={addTextBlock} className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
-          <Type size={22} />
-        </button>
-        <button onClick={() => imageInputRef.current?.click()} className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors">
+        <input 
+          type="file" 
+          ref={docInputRef} 
+          onChange={handleDocUpload} 
+          className="hidden" 
+        />
+        <button 
+          onClick={() => imageInputRef.current?.click()} 
+          className="p-2.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
+          title="Add Photo / Image"
+        >
           <ImageIcon size={22} />
+        </button>
+        <button 
+          onClick={() => docInputRef.current?.click()} 
+          className="p-2.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
+          title="Attach Document"
+        >
+          <Paperclip size={22} />
         </button>
         <button 
           onClick={onToggleMeeting}
           disabled={isProcessing}
-          className={`p-2 transition-colors ${
+          className={`p-2.5 transition-colors ${
             isRecording 
               ? 'text-red-500 animate-pulse' 
               : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white'
           }`}
+          title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
         >
           <Mic size={22} />
         </button>
         <button 
           onClick={() => openDrawOverlay(activeBlockId)}
-          className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
-          title="Draw"
+          className="p-2.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
+          title="Sketch / Annotate"
         >
           <PenTool size={22} />
-        </button>
-        <div className="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-2" />
-        <button 
-          onClick={addTextBlock}
-          className="p-2 text-primary-600 dark:text-yellow-500"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
       </div>
 
