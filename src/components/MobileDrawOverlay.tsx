@@ -32,11 +32,15 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
   const [tool, setTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
   const [color, setColor] = useState('#FFFFFF');
   const [size, setSize] = useState(4);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
   const [blockRect, setBlockRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
 
-  // Set default drawing color based on current theme on open
+  // Set default drawing color based on current theme and reset pan/zoom on open
   useEffect(() => {
     if (isOpen) {
+      setPan({ x: 0, y: 0 });
+      setZoom(1);
       if (resolvedTheme === 'dark') {
         setColor('#FFFFFF');
       } else {
@@ -75,11 +79,11 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
           style={{
             clipPath: `polygon(
               0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%,
-              ${blockRect.x}px ${blockRect.y}px,
-              ${blockRect.x + blockRect.width}px ${blockRect.y}px,
-              ${blockRect.x + blockRect.width}px ${blockRect.y + blockRect.height}px,
-              ${blockRect.x}px ${blockRect.y + blockRect.height}px,
-              ${blockRect.x}px ${blockRect.y}px
+              ${blockRect.x * zoom + pan.x}px ${blockRect.y * zoom + pan.y}px,
+              ${(blockRect.x + blockRect.width) * zoom + pan.x}px ${blockRect.y * zoom + pan.y}px,
+              ${(blockRect.x + blockRect.width) * zoom + pan.x}px ${(blockRect.y + blockRect.height) * zoom + pan.y}px,
+              ${blockRect.x * zoom + pan.x}px ${(blockRect.y + blockRect.height) * zoom + pan.y}px,
+              ${blockRect.x * zoom + pan.x}px ${blockRect.y * zoom + pan.y}px
             )`
           }}
         />
@@ -110,10 +114,10 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
         <SpatialCanvas 
           strokes={strokes}
           setStrokes={setStrokes}
-          pan={{ x: 0, y: 0 }}
-          setPan={() => {}}
-          zoom={1}
-          setZoom={() => {}}
+          pan={pan}
+          setPan={setPan}
+          zoom={zoom}
+          setZoom={setZoom}
           tool={tool}
           activeColor={color}
           activeSize={size}

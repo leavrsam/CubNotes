@@ -161,27 +161,29 @@ export function SpatialCanvas({
 
       const { lastCenter, lastDist } = touchStateRef.current;
       if (lastCenter && lastDist && lastDist > 0) {
-        const deltaX = newCenter.x - lastCenter.x;
-        const deltaY = newCenter.y - lastCenter.y;
         const scaleFactor = newDist / lastDist;
 
         const oldScale = zoom;
         let newScale = oldScale;
 
-        // Smooth pinch-zoom when distance changes significantly
-        if (Math.abs(newDist - lastDist) > 1.5) {
+        // Smooth pinch-zoom when distance changes
+        if (Math.abs(newDist - lastDist) > 1) {
           newScale = Math.max(0.1, Math.min(oldScale * scaleFactor, 5));
         }
 
-        const pointTo = {
-          x: (newCenter.x - pan.x) / oldScale,
-          y: (newCenter.y - pan.y) / oldScale,
+        // Anchor around lastCenter, transformed by new zoom to newCenter
+        const anchorPoint = {
+          x: (lastCenter.x - pan.x) / oldScale,
+          y: (lastCenter.y - pan.y) / oldScale,
         };
+
+        const newPanX = newCenter.x - anchorPoint.x * newScale;
+        const newPanY = newCenter.y - anchorPoint.y * newScale;
 
         setZoom(newScale);
         setPan({
-          x: newCenter.x - pointTo.x * newScale + deltaX,
-          y: newCenter.y - pointTo.y * newScale + deltaY,
+          x: newPanX,
+          y: newPanY,
         });
 
         touchStateRef.current = {
