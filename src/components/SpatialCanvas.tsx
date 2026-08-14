@@ -115,9 +115,107 @@ export function SpatialCanvas({
     }));
   };
 
+  // Multi-touch gesture tracking for 2-finger pan and pinch-to-zoom
+  const touchStateRef = useRef<{
+    lastCenter: { x: number; y: number } | null;
+    lastDist: number | null;
+    isPinching: boolean;
+  }>({
+    lastCenter: null,
+    lastDist: null,
+    isPinching: false,
+  });
+
+  const handleTouchStart = (e: any) => {
+    if (e.evt.touches && e.evt.touches.length >= 2) {
+      // Abort single-finger stroke immediately when a second finger touches
+      setIsDrawing(false);
+      setCurrentStroke(null);
+
+      const t1 = e.evt.touches[0];
+      const t2 = e.evt.touches[1];
+      const center = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2,
+      };
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      touchStateRef.current = {
+        lastCenter: center,
+        lastDist: dist,
+        isPinching: true,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: any) => {
+    if (e.evt.touches && e.evt.touches.length >= 2) {
+      e.evt.preventDefault();
+
+      const t1 = e.evt.touches[0];
+      const t2 = e.evt.touches[1];
+      const newCenter = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2,
+      };
+      const newDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+      const { lastCenter, lastDist } = touchStateRef.current;
+      if (lastCenter && lastDist && lastDist > 0) {
+        const deltaX = newCenter.x - lastCenter.x;
+        const deltaY = newCenter.y - lastCenter.y;
+        const scaleFactor = newDist / lastDist;
+
+        const oldScale = zoom;
+        let newScale = oldScale;
+
+        // Smooth pinch-zoom when distance changes significantly
+        if (Math.abs(newDist - lastDist) > 1.5) {
+          newScale = Math.max(0.1, Math.min(oldScale * scaleFactor, 5));
+        }
+
+        const pointTo = {
+          x: (newCenter.x - pan.x) / oldScale,
+          y: (newCenter.y - pan.y) / oldScale,
+        };
+
+        setZoom(newScale);
+        setPan({
+          x: newCenter.x - pointTo.x * newScale + deltaX,
+          y: newCenter.y - pointTo.y * newScale + deltaY,
+        });
+
+        touchStateRef.current = {
+          lastCenter: newCenter,
+          lastDist: newDist,
+          isPinching: true,
+        };
+      } else {
+        touchStateRef.current = {
+          lastCenter: newCenter,
+          lastDist: newDist,
+          isPinching: true,
+        };
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: any) => {
+    if (!e.evt.touches || e.evt.touches.length < 2) {
+      touchStateRef.current = {
+        lastCenter: null,
+        lastDist: null,
+        isPinching: false,
+      };
+    }
+  };
+
   const handlePointerDown = (e: any) => {
     if (e.evt.button === 1 || tool === "pan") {
       // Middle click or pan tool
+      return;
+    }
+
+    if (touchStateRef.current.isPinching || (e.evt.touches && e.evt.touches.length >= 2)) {
       return;
     }
     
@@ -168,7 +266,7 @@ export function SpatialCanvas({
   };
 
   const handlePointerMove = (e: any) => {
-    if (!isDrawing) return;
+    if (!isDrawing || touchStateRef.current.isPinching || (e.evt.touches && e.evt.touches.length >= 2)) return;
     const rawPos = getPointerPos(e);
     
     const offsetX = annotateBlockId && blockOffsetMap && blockOffsetMap[annotateBlockId] ? blockOffsetMap[annotateBlockId].x : 0;
@@ -219,39 +317,57 @@ export function SpatialCanvas({
     setCurrentStroke(null);
   };
 
-  // Handle Zoom (Wheel)
+  // Handle Zoom & Pan via Trackpad / Mouse Wheel
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
     const stage = stageRef.current;
     if (!stage) return;
-    
-    const scaleBy = 1.05;
-    const oldScale = zoom;
-    const pointer = stage.getPointerPosition();
 
-    const mousePointTo = {
-      x: (pointer.x - pan.x) / oldScale,
-      y: (pointer.y - pan.y) / oldScale,
-    };
+    // Trackpad Pinch-to-Zoom (or Ctrl/Meta + Mouse Wheel)
+    if (e.evt.ctrlKey || e.evt.metaKey) {
+      const oldScale = zoom;
+      const pointer = stage.getPointerPosition() || {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      };
 
-    let newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    newScale = Math.max(0.1, Math.min(newScale, 5)); // Clamp zoom between 10% and 500%
+      const mousePointTo = {
+        x: (pointer.x - pan.x) / oldScale,
+        y: (pointer.y - pan.y) / oldScale,
+      };
 
-    setZoom(newScale);
-    setPan({
-      x: pointer.x - mousePointTo.x * newScale,
-      y: pointer.y - mousePointTo.y * newScale,
-    });
+      // Smooth zoom factor for trackpad pinch
+      const factor = Math.exp(-e.evt.deltaY * 0.01);
+      let newScale = Math.max(0.1, Math.min(oldScale * factor, 5));
+
+      setZoom(newScale);
+      setPan({
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale,
+      });
+    } else {
+      // Two-finger Trackpad Pan / Mouse Wheel Scroll (Pans the canvas)
+      const dx = e.evt.shiftKey ? e.evt.deltaY : e.evt.deltaX;
+      const dy = e.evt.shiftKey ? 0 : e.evt.deltaY;
+
+      setPan(prev => ({
+        x: prev.x - dx,
+        y: prev.y - dy,
+      }));
+    }
   };
 
   return (
-    <div className={`absolute inset-0 ${tool === 'pen' ? 'cursor-crosshair' : tool === 'home' ? 'cursor-text' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
+    <div className={`absolute inset-0 touch-none ${tool === 'pen' ? 'cursor-crosshair' : tool === 'home' ? 'cursor-text' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       <Stage
         width={typeof window !== 'undefined' ? window.innerWidth : 1000}
         height={typeof window !== 'undefined' ? window.innerHeight : 800}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onClick={(e) => {
           if (tool === 'home' && e.target === stageRef.current) {
             const pos = getPointerPos(e);
