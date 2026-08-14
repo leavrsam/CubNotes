@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { SpatialCanvas } from './SpatialCanvas';
 import { PenTool, Eraser, Highlighter, Check, X, Circle } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import type { Stroke } from './CustomCanvas';
 
 interface MobileDrawOverlayProps {
@@ -12,11 +13,12 @@ interface MobileDrawOverlayProps {
 }
 
 const COLOR_PRESETS = [
-  { label: 'Black', value: '#000000', darkValue: '#FFFFFF' },
-  { label: 'Blue', value: '#2563EB', darkValue: '#3B82F6' },
-  { label: 'Red', value: '#DC2626', darkValue: '#EF4444' },
-  { label: 'Green', value: '#16A34A', darkValue: '#22C55E' },
-  { label: 'Yellow', value: '#CA8A04', darkValue: '#EAB308' },
+  { label: 'White', value: '#FFFFFF' },
+  { label: 'Black', value: '#000000' },
+  { label: 'Blue', value: '#3B82F6' },
+  { label: 'Red', value: '#EF4444' },
+  { label: 'Green', value: '#22C55E' },
+  { label: 'Yellow', value: '#EAB308' },
 ];
 
 const SIZE_PRESETS = [
@@ -26,10 +28,22 @@ const SIZE_PRESETS = [
 ];
 
 export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, setStrokes }: MobileDrawOverlayProps) {
+  const { resolvedTheme } = useTheme();
   const [tool, setTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
-  const [color, setColor] = useState('#000000');
+  const [color, setColor] = useState('#FFFFFF');
   const [size, setSize] = useState(4);
   const [blockRect, setBlockRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+
+  // Set default drawing color based on current theme on open
+  useEffect(() => {
+    if (isOpen) {
+      if (resolvedTheme === 'dark') {
+        setColor('#FFFFFF');
+      } else {
+        setColor('#000000');
+      }
+    }
+  }, [isOpen, resolvedTheme]);
 
   useEffect(() => {
     if (isOpen && annotateBlockId) {
@@ -186,21 +200,17 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
           {tool !== 'eraser' ? (
             <div className="flex items-center gap-1.5">
               {COLOR_PRESETS.map((c) => {
-                const isSelected = color === c.value;
+                const isSelected = color.toLowerCase() === c.value.toLowerCase();
                 return (
                   <button
                     key={c.value}
                     onClick={() => setColor(c.value)}
-                    className={`w-6 h-6 rounded-full border border-black/10 dark:border-white/10 transition-transform flex items-center justify-center ${
+                    className={`w-6 h-6 rounded-full border border-zinc-300 dark:border-zinc-600 transition-transform flex items-center justify-center ${
                       isSelected 
                         ? 'scale-110 ring-2 ring-offset-2 ring-primary-500 dark:ring-offset-zinc-900 shadow-sm' 
-                        : 'opacity-75 hover:opacity-100'
+                        : 'opacity-80 hover:opacity-100'
                     }`}
-                    style={{ 
-                      backgroundColor: c.value === '#000000' 
-                        ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? '#FFFFFF' : '#000000') 
-                        : c.value 
-                    }}
+                    style={{ backgroundColor: c.value }}
                     title={c.label}
                   />
                 );
