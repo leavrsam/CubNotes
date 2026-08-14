@@ -192,9 +192,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   
   const [isDrawOverlayOpen, setIsDrawOverlayOpen] = useState(false);
   const [drawOverlayBlockId, setDrawOverlayBlockId] = useState<string | null>(null);
+  const [drawOverlayBlockType, setDrawOverlayBlockType] = useState<string | null>(null);
 
-  const openDrawOverlay = (blockId: string | null = null) => {
+  const openDrawOverlay = (blockId: string | null = null, blockType: string | null = null) => {
     setDrawOverlayBlockId(blockId);
+    setDrawOverlayBlockType(blockType);
     setIsDrawOverlayOpen(true);
   };
   
@@ -213,6 +215,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = "/login";
+  };
+
+  const deleteDrawingBlock = (block: any) => {
+    const strokeIds = new Set(block.attachedStrokes.map((s: any) => s.id));
+    setStrokes(prev => prev.filter(s => !strokeIds.has(s.id)));
+    setActiveBlockId(null);
+    toast.success("Sketch deleted");
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -463,11 +472,14 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             const reverseZ = 500 - index;
 
             if (block.type === 'text') {
+              const isSelected = activeBlockId === block.id;
               return (
                 <div 
                   key={block.id} 
                   id={`block-${block.id}`}
-                  className="w-full min-h-[50px] relative"
+                  className={`w-full min-h-[50px] relative rounded-xl transition-all duration-200 ${
+                    isSelected ? 'ring-1 ring-primary-500/40 bg-zinc-50/50 dark:bg-zinc-900/30' : ''
+                  }`}
                   style={{ zIndex: reverseZ }}
                   onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
                 >
@@ -485,14 +497,23 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 </div>
               );
             } else if (block.type === 'audio') {
+              const isSelected = activeBlockId === block.id;
               return (
-                <div key={block.id} id={`block-${block.id}`} className="relative w-full" style={{ zIndex: reverseZ }}>
+                <div 
+                  key={block.id} 
+                  id={`block-${block.id}`} 
+                  className={`relative w-full rounded-2xl transition-all duration-200 ${
+                    isSelected ? 'ring-2 ring-primary-500/50 shadow-md' : ''
+                  }`} 
+                  style={{ zIndex: reverseZ }}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
+                >
                   <MobileAudioCard 
                     node={block} 
                     updateAudioTitle={(id, title) => setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a))}
                     updateAudioField={(id, field, value) => setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a))}
                     deleteAudioNode={(id) => setAudios(prev => prev.filter(a => a.id !== id))}
-                    onAnnotate={(id) => openDrawOverlay(id)}
+                    onAnnotate={(id) => openDrawOverlay(id, 'audio')}
                   />
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                 </div>
@@ -642,28 +663,65 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 width: block.width
               };
 
-              const isActive = activeBlockId === block.id;
-              const activeClasses = isActive 
-                ? 'overflow-x-auto ring-1 ring-zinc-200 dark:ring-zinc-800 rounded-lg p-2 -mx-2 bg-white dark:bg-zinc-900 shadow-sm z-20 custom-scrollbar' 
-                : 'overflow-x-hidden z-10';
+              const isSelected = activeBlockId === block.id;
 
               return (
                 <div 
                   key={block.id} 
-                  className={`w-full my-4 transition-all duration-300 ${activeClasses}`}
+                  id={`block-${block.id}`}
+                  className={`w-full my-3 relative rounded-2xl border transition-all duration-200 ${
+                    isSelected 
+                      ? 'border-primary-500 ring-2 ring-primary-500/20 bg-zinc-50/90 dark:bg-zinc-900/90 shadow-md' 
+                      : 'border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-900/30 hover:border-zinc-300 dark:hover:border-zinc-700'
+                  } p-4 min-h-[140px] flex flex-col justify-center`}
+                  style={{ zIndex: reverseZ }}
                   onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
                 >
+                  {/* Action Pill on Selection */}
+                  {isSelected && (
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/80 dark:bg-zinc-800/90 backdrop-blur-md rounded-full px-3 py-1.5 z-30 shadow-lg border border-white/10 animate-in fade-in zoom-in-95 duration-150">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'drawing'); }}
+                        className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
+                        title="Edit Sketch"
+                      >
+                        <PenTool size={13} />
+                        <span>Edit</span>
+                      </button>
+                      <div className="w-px h-3 bg-white/20" />
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); deleteDrawingBlock(block); }}
+                        className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                        title="Delete Sketch"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} isStandalone={true} />
                 </div>
               );
             }
           })}
           
-          {/* Tap Zone at bottom to append text */}
+          {/* Tap Zone at bottom to append text or sketch */}
           <div 
-            className="flex-1 min-h-[200px] w-full cursor-text" 
+            className="flex-1 min-h-[160px] w-full cursor-text flex flex-col items-center justify-center text-center p-6 select-none" 
             onClick={addTextBlock}
-          />
+          >
+            <div className="text-xs font-medium text-zinc-400/80 dark:text-zinc-600 flex items-center gap-2">
+              <span>Tap empty area to write</span>
+              <span>•</span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); openDrawOverlay(null, 'drawing'); }}
+                className="inline-flex items-center gap-1 text-primary-600 dark:text-yellow-500/80 hover:underline font-semibold"
+              >
+                <PenTool size={12} />
+                <span>Add sketch</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -703,11 +761,25 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           </button>
 
           <button 
-            onClick={() => openDrawOverlay(activeBlockId)}
-            className="p-2 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
-            title="Sketch / Annotate"
+            onClick={() => {
+              if (activeBlockId) {
+                const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
+                openDrawOverlay(activeBlockId, activeBlock?.type || 'block');
+              } else {
+                openDrawOverlay(null, 'drawing');
+              }
+            }}
+            className={`p-2 transition-all rounded-full active:scale-90 relative ${
+              activeBlockId 
+                ? 'text-primary-600 dark:text-yellow-500 bg-primary-500/10 dark:bg-yellow-500/10 ring-1 ring-primary-500/30' 
+                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+            title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
           >
             <PenTool size={22} />
+            {activeBlockId && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+            )}
           </button>
         </div>
       </div>
@@ -716,6 +788,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         isOpen={isDrawOverlayOpen}
         onClose={() => setIsDrawOverlayOpen(false)}
         annotateBlockId={drawOverlayBlockId}
+        blockType={drawOverlayBlockType}
         strokes={strokes}
         setStrokes={setStrokes}
       />

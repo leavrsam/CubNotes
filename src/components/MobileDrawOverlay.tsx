@@ -8,6 +8,7 @@ interface MobileDrawOverlayProps {
   isOpen: boolean;
   onClose: () => void;
   annotateBlockId: string | null;
+  blockType?: string | null;
   strokes: Stroke[];
   setStrokes: React.Dispatch<React.SetStateAction<Stroke[]>>;
 }
@@ -27,7 +28,7 @@ const SIZE_PRESETS = [
   { label: 'Thick', size: 8, iconSize: 12 },
 ];
 
-export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, setStrokes }: MobileDrawOverlayProps) {
+export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType, strokes, setStrokes }: MobileDrawOverlayProps) {
   const { resolvedTheme } = useTheme();
   const [tool, setTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
   const [color, setColor] = useState('#FFFFFF');
@@ -35,6 +36,17 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [blockRect, setBlockRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+
+  const getContextLabel = () => {
+    if (!annotateBlockId) return '🎨 New Sketch Block';
+    if (blockType === 'drawing') return '🎨 Editing Sketch';
+    if (blockType === 'image') return '🖼️ Annotating Image';
+    if (blockType === 'audio') return '🎙️ Annotating Voice Note';
+    if (blockType === 'video') return '🎬 Annotating Video';
+    if (blockType === 'file') return '📎 Annotating File';
+    if (blockType === 'text') return '📝 Annotating Text';
+    return '✏️ Annotating Block';
+  };
 
   // Set default drawing color based on current theme and reset pan/zoom on open
   useEffect(() => {
@@ -96,9 +108,9 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
         className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[2100] pointer-events-auto"
         style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
       >
-        <div className="flex items-center gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm border border-zinc-200/60 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+        <div className="flex items-center gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-zinc-200/60 dark:border-zinc-800 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
           <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
-          {annotateBlockId ? 'Annotating Block' : 'Drawing'}
+          <span>{getContextLabel()}</span>
         </div>
         
         <button 
