@@ -149,7 +149,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
 
   return (
     <div className="group relative w-full h-full bg-transparent">
-      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none prose-p:my-0 prose-p:leading-normal prose-p:whitespace-pre-wrap prose-li:marker:text-inherit">
+      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:text-[17.5px] [&_.ProseMirror]:leading-[1.55] [&_.ProseMirror_p]:text-[17.5px] [&_.ProseMirror_p]:leading-[1.55] [&_.ProseMirror_li]:text-[17.5px] prose-p:my-0.5 prose-p:leading-relaxed prose-p:whitespace-pre-wrap prose-li:marker:text-inherit">
         <EditorContent editor={editor} />
       </div>
 

@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SpatialCanvas } from './SpatialCanvas';
-import { PenTool, Eraser, Highlighter, Check, X } from 'lucide-react';
+import { PenTool, Eraser, Highlighter, Check, X, Circle } from 'lucide-react';
 import type { Stroke } from './CustomCanvas';
 
 interface MobileDrawOverlayProps {
@@ -10,6 +10,20 @@ interface MobileDrawOverlayProps {
   strokes: Stroke[];
   setStrokes: React.Dispatch<React.SetStateAction<Stroke[]>>;
 }
+
+const COLOR_PRESETS = [
+  { label: 'Black', value: '#000000', darkValue: '#FFFFFF' },
+  { label: 'Blue', value: '#2563EB', darkValue: '#3B82F6' },
+  { label: 'Red', value: '#DC2626', darkValue: '#EF4444' },
+  { label: 'Green', value: '#16A34A', darkValue: '#22C55E' },
+  { label: 'Yellow', value: '#CA8A04', darkValue: '#EAB308' },
+];
+
+const SIZE_PRESETS = [
+  { label: 'Fine', size: 2, iconSize: 4 },
+  { label: 'Medium', size: 4, iconSize: 8 },
+  { label: 'Thick', size: 8, iconSize: 12 },
+];
 
 export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, setStrokes }: MobileDrawOverlayProps) {
   const [tool, setTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
@@ -29,7 +43,6 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
           height: rect.height
         });
       } else {
-        // Fallback if element not found somehow
         setBlockRect(null);
       }
     } else {
@@ -40,11 +53,11 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col">
+    <div className="fixed inset-0 z-[100] flex flex-col select-none overflow-hidden touch-none">
       {/* Background Mask */}
       {annotateBlockId && blockRect ? (
         <div 
-          className="absolute inset-0 pointer-events-none bg-black/60 backdrop-blur-sm"
+          className="absolute inset-0 pointer-events-none bg-black/50 backdrop-blur-[2px] transition-all"
           style={{
             clipPath: `polygon(
               0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%,
@@ -57,19 +70,24 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
           }}
         />
       ) : (
-        <div className="absolute inset-0 pointer-events-none bg-white/90 dark:bg-black/90 backdrop-blur-md" />
+        <div className="absolute inset-0 pointer-events-none bg-white/95 dark:bg-zinc-950/95 backdrop-blur-sm" />
       )}
 
-      {/* Title / Header */}
-      <div className="absolute top-safe left-0 right-0 p-4 flex items-center justify-between z-[110] pointer-events-auto">
-        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur px-4 py-2 rounded-full shadow-sm text-sm font-semibold">
-          {annotateBlockId ? 'Annotating Block' : 'Global Sketch'}
+      {/* Top Header Bar */}
+      <div 
+        className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[110] pointer-events-auto"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+      >
+        <div className="flex items-center gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm border border-zinc-200/60 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+          <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+          {annotateBlockId ? 'Annotating Block' : 'Drawing'}
         </div>
+        
         <button 
           onClick={onClose}
-          className="w-10 h-10 bg-white/80 dark:bg-zinc-900/80 backdrop-blur rounded-full flex items-center justify-center text-zinc-800 dark:text-zinc-200 shadow-sm"
+          className="px-4 py-1.5 bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-100 text-white dark:text-zinc-900 rounded-full font-semibold text-xs shadow-md active:scale-95 transition-transform"
         >
-          <X size={20} />
+          Done
         </button>
       </div>
 
@@ -79,9 +97,9 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
           strokes={strokes}
           setStrokes={setStrokes}
           pan={{ x: 0, y: 0 }}
-          setPan={() => {}} // No panning in mobile overlay
+          setPan={() => {}}
           zoom={1}
-          setZoom={() => {}} // No zooming
+          setZoom={() => {}}
           tool={tool}
           activeColor={color}
           activeSize={size}
@@ -92,54 +110,117 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
         />
       </div>
 
-      {/* Bottom Toolbar */}
-      <div className="absolute bottom-safe left-0 right-0 p-4 pb-8 z-[110] pointer-events-auto flex items-end justify-center">
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 p-2 flex items-center gap-2">
-          
-          <button 
-            onClick={() => setTool('pen')}
-            className={`p-3 rounded-xl transition-all ${tool === 'pen' ? 'bg-primary-100 text-primary-600 dark:bg-yellow-500/20 dark:text-yellow-500' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-          >
-            <PenTool size={24} />
-          </button>
-          
-          <button 
-            onClick={() => setTool('highlighter')}
-            className={`p-3 rounded-xl transition-all ${tool === 'highlighter' ? 'bg-primary-100 text-primary-600 dark:bg-yellow-500/20 dark:text-yellow-500' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-          >
-            <Highlighter size={24} />
-          </button>
-
-          <button 
-            onClick={() => setTool('eraser')}
-            className={`p-3 rounded-xl transition-all ${tool === 'eraser' ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-          >
-            <Eraser size={24} />
-          </button>
-
-          <div className="w-px h-8 bg-zinc-200 dark:bg-zinc-800 mx-1" />
-
-          {/* Colors (only show if not erasing) */}
-          {tool !== 'eraser' && (
-            <div className="flex gap-1 px-1">
-              {['#000000', '#EF4444', '#3B82F6', '#10B981', '#F59E0B'].map(c => (
-                <button
-                  key={c}
-                  onClick={() => setColor(c)}
-                  className={`w-8 h-8 rounded-full border-2 transition-transform ${color === c ? 'border-primary-500 scale-110' : 'border-transparent hover:scale-105'}`}
-                  style={{ backgroundColor: c === '#000000' ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? '#FFFFFF' : '#000000') : c }}
+      {/* Bottom Floating Drawing Toolbar (Compact & Fits on all screens) */}
+      <div 
+        className="absolute bottom-0 left-0 right-0 p-3 z-[110] pointer-events-auto flex flex-col items-center gap-2"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+      >
+        {/* Tool Size Sub-bar (if pen or highlighter) */}
+        {tool !== 'eraser' && (
+          <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3 py-1 rounded-full shadow-md border border-zinc-200/80 dark:border-zinc-800 flex items-center gap-3">
+            {SIZE_PRESETS.map((p) => (
+              <button
+                key={p.label}
+                onClick={() => setSize(p.size)}
+                className={`w-6 h-6 flex items-center justify-center rounded-full transition-all ${
+                  size === p.size 
+                    ? 'bg-zinc-200 dark:bg-zinc-700 ring-2 ring-primary-500' 
+                    : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200'
+                }`}
+                title={p.label}
+              >
+                <div 
+                  className="rounded-full bg-current" 
+                  style={{ width: p.iconSize, height: p.iconSize }}
                 />
-              ))}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Main Tool & Color Bar */}
+        <div className="w-full max-w-[360px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/90 dark:border-zinc-800 px-3 py-2 flex items-center justify-between gap-1.5">
+          
+          {/* Tool Switchers */}
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => setTool('pen')}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                tool === 'pen' 
+                  ? 'bg-primary-50 text-primary-600 dark:bg-primary-950/60 dark:text-primary-400 ring-1.5 ring-primary-500' 
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title="Pen"
+            >
+              <PenTool size={18} />
+            </button>
+            
+            <button 
+              onClick={() => setTool('highlighter')}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                tool === 'highlighter' 
+                  ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-950/60 dark:text-yellow-400 ring-1.5 ring-yellow-500' 
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title="Highlighter"
+            >
+              <Highlighter size={18} />
+            </button>
+
+            <button 
+              onClick={() => setTool('eraser')}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                tool === 'eraser' 
+                  ? 'bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 ring-1.5 ring-red-500' 
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title="Eraser"
+            >
+              <Eraser size={18} />
+            </button>
+          </div>
+
+          <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 flex-shrink-0" />
+
+          {/* Color Palettes (When not erasing) */}
+          {tool !== 'eraser' ? (
+            <div className="flex items-center gap-1.5">
+              {COLOR_PRESETS.map((c) => {
+                const isSelected = color === c.value;
+                return (
+                  <button
+                    key={c.value}
+                    onClick={() => setColor(c.value)}
+                    className={`w-6 h-6 rounded-full border border-black/10 dark:border-white/10 transition-transform flex items-center justify-center ${
+                      isSelected 
+                        ? 'scale-110 ring-2 ring-offset-2 ring-primary-500 dark:ring-offset-zinc-900 shadow-sm' 
+                        : 'opacity-75 hover:opacity-100'
+                    }`}
+                    style={{ 
+                      backgroundColor: c.value === '#000000' 
+                        ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? '#FFFFFF' : '#000000') 
+                        : c.value 
+                    }}
+                    title={c.label}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-xs text-zinc-400 font-medium px-2">
+              Tap strokes to erase
             </div>
           )}
 
-          <div className="w-px h-8 bg-zinc-200 dark:bg-zinc-800 mx-1" />
+          <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 flex-shrink-0" />
 
+          {/* Done Check Icon */}
           <button 
             onClick={onClose}
-            className="p-3 bg-primary-600 hover:bg-primary-700 dark:bg-yellow-500 dark:hover:bg-yellow-600 text-white dark:text-black rounded-xl font-bold transition-colors shadow-sm ml-1"
+            className="w-9 h-9 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-xl flex items-center justify-center shadow-sm active:scale-95 transition-all flex-shrink-0"
+            title="Done Drawing"
           >
-            <Check size={24} />
+            <Check size={18} strokeWidth={2.5} />
           </button>
         </div>
       </div>

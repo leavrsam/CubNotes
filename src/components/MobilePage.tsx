@@ -411,16 +411,16 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       >
         
         {/* Title area (scrolls with content) */}
-        <div className="px-5 pt-4 pb-6">
+        <div className="px-5 pt-4 pb-4">
           <input
             type="text"
             value={pageTitle}
             onChange={(e) => onUpdatePageTitle(e.target.value)}
             placeholder="Page Title"
-            className="bg-transparent text-4xl font-bold text-zinc-900 dark:text-white border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-full mb-1"
+            className="bg-transparent text-[32px] font-bold text-zinc-900 dark:text-white border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-full mb-1 tracking-tight leading-tight"
           />
           {pageCreatedAt && (
-            <div className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            <div className="text-[13px] font-medium text-zinc-400 dark:text-zinc-500">
               {format(new Date(pageCreatedAt), "MMMM d, yyyy 'at' h:mm a")}
             </div>
           )}
@@ -439,14 +439,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                   id={`block-${block.id}`}
                   className="w-full min-h-[50px] relative"
                   style={{ zIndex: reverseZ }}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
                 >
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
-                    className="absolute -top-3 -right-3 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-indigo-500 hover:text-indigo-600 z-30"
-                  >
-                    <PenTool size={14} />
-                  </button>
                   <TipTapEditor 
+                    id={block.id}
                     content={block.content}
                     onChange={(content) => {
                       setTexts(prev => prev.map(t => t.id === block.id ? { ...t, content } : t));
@@ -472,53 +468,84 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 </div>
               );
             } else if (block.type === 'image') {
+              const isSelected = activeBlockId === block.id;
               return (
                 <div 
                   key={block.id} 
                   id={`block-${block.id}`}
-                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black"
+                  className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
+                    isSelected ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
+                  } bg-black`}
                   style={{ zIndex: reverseZ }}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
                 >
                   <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
-                    className="absolute top-2 right-12 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-indigo-500 hover:text-indigo-600 z-30"
-                  >
-                    <PenTool size={14} />
-                  </button>
-                  <button 
-                    onClick={() => setImages(prev => prev.filter(n => n.id !== block.id))}
-                    className="absolute top-2 right-2 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-red-500 hover:text-red-600 z-30"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  
+                  {/* Subtle Action Pill (only on selection or clean corner) */}
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2 py-1 z-30 shadow-lg border border-white/10">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
+                        className="p-1.5 text-white/80 hover:text-white transition-colors"
+                        title="Annotate"
+                      >
+                        <PenTool size={14} />
+                      </button>
+                      <div className="w-px h-3 bg-white/20" />
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setImages(prev => prev.filter(n => n.id !== block.id)); }}
+                        className="p-1.5 text-red-400 hover:text-red-300 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                 </div>
               );
             } else if (block.type === 'file') {
+              const isSelected = activeBlockId === block.id;
               return (
                 <div 
                   key={block.id} 
                   id={`block-${block.id}`}
-                  className="relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex items-center justify-between"
+                  className={`relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border transition-all ${
+                    isSelected ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
+                  } flex items-center justify-between`}
                   style={{ zIndex: reverseZ }}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
                 >
                   <div className="flex items-center gap-3 overflow-hidden relative z-30">
-                    <File size={24} className="text-primary-500 flex-shrink-0" />
+                    <File size={22} className="text-primary-500 flex-shrink-0" />
                     <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
                   </div>
-                  <div className="flex items-center gap-2 relative z-30">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
-                      className="p-2 text-indigo-500 hover:text-indigo-600"
+                  <div className="flex items-center gap-1 relative z-30">
+                    {isSelected && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
+                        className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                        title="Annotate"
+                      >
+                        <PenTool size={16} />
+                      </button>
+                    )}
+                    <a 
+                      href={block.url} 
+                      download 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="p-1.5 text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      title="Download"
                     >
-                      <PenTool size={18} />
-                    </button>
-                    <a href={block.url} download target="_blank" rel="noopener noreferrer" className="p-2 text-primary-600 dark:text-primary-400">
-                      <Download size={18} />
+                      <Download size={16} />
                     </a>
-                    <button onClick={() => setFiles(prev => prev.filter(n => n.id !== block.id))} className="p-2 text-red-500">
-                      <Trash2 size={18} />
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setFiles(prev => prev.filter(n => n.id !== block.id)); }} 
+                      className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
                     </button>
                   </div>
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
@@ -532,13 +559,17 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 videoId = block.url.split("youtu.be/")[1]?.split("?")[0];
               }
               const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : block.url;
+              const isSelected = activeBlockId === block.id;
 
               return (
                 <div 
                   key={block.id} 
                   id={`block-${block.id}`}
-                  className="relative w-full rounded shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black aspect-video"
+                  className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
+                    isSelected ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
+                  } bg-black aspect-video`}
                   style={{ zIndex: reverseZ }}
+                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
                 >
                   <iframe 
                     src={embedUrl} 
@@ -548,18 +579,26 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     allowFullScreen
                     className="w-full h-full relative z-10"
                   ></iframe>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
-                    className="absolute top-2 right-12 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-indigo-500 hover:text-indigo-600 z-30"
-                  >
-                    <PenTool size={14} />
-                  </button>
-                  <button 
-                    onClick={() => setVideos(prev => prev.filter(n => n.id !== block.id))}
-                    className="absolute top-2 right-2 w-8 h-8 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full flex items-center justify-center text-red-500 hover:text-red-600 z-30"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2 py-1 z-30 shadow-lg border border-white/10">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
+                        className="p-1.5 text-white/80 hover:text-white transition-colors"
+                        title="Annotate"
+                      >
+                        <PenTool size={14} />
+                      </button>
+                      <div className="w-px h-3 bg-white/20" />
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(n => n.id !== block.id)); }}
+                        className="p-1.5 text-red-400 hover:text-red-300 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                   <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                 </div>
               );
@@ -625,8 +664,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           <Mic size={22} />
         </button>
         <button 
-          onClick={() => openDrawOverlay(null)}
+          onClick={() => openDrawOverlay(activeBlockId)}
           className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
+          title="Draw"
         >
           <PenTool size={22} />
         </button>

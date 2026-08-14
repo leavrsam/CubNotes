@@ -87,20 +87,20 @@ export function MobileAudioCard({
               className="text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 -ml-2 rounded-lg transition-colors w-full tracking-tight"
               placeholder="Recording Name..."
             />
-            <div className="flex gap-1 ml-2">
+            <div className="flex items-center gap-1 ml-2">
               <button 
                 onClick={(e) => { e.stopPropagation(); onAnnotate?.(node.id); }}
-                className="text-indigo-500 hover:text-indigo-600 transition-colors p-1 flex-shrink-0"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
                 title="Annotate Audio"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+                <Edit3 size={15} />
               </button>
               <button 
                 onClick={() => deleteAudioNode(node.id)}
-                className="text-red-500 hover:text-red-600 transition-colors p-1 flex-shrink-0"
+                className="text-zinc-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
                 title="Delete Recording"
               >
-                <Trash2 size={16} />
+                <Trash2 size={15} />
               </button>
             </div>
           </div>
