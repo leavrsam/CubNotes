@@ -73,7 +73,17 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType,
           height: rect.height
         });
       } else {
-        setBlockRect(null);
+        // Default centered focus box for new sketch block
+        const defaultWidth = Math.min(typeof window !== 'undefined' ? window.innerWidth - 32 : 360, 500);
+        const defaultHeight = 280;
+        const defaultX = typeof window !== 'undefined' ? (window.innerWidth - defaultWidth) / 2 : 16;
+        const defaultY = typeof window !== 'undefined' ? Math.max(80, (window.innerHeight - defaultHeight) / 2 - 40) : 100;
+        setBlockRect({
+          x: defaultX,
+          y: defaultY,
+          width: defaultWidth,
+          height: defaultHeight
+        });
       }
     } else {
       setBlockRect(null);

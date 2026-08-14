@@ -98,20 +98,76 @@ function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
 
-  // For attached strokes, use the block's width as the reference.
-  // For standalone strokes, use a virtual desktop width (e.g. 800) so small scribbles don't become massive.
-  const referenceWidth = isStandalone ? 800 : blockBox.width;
+  if (isStandalone) {
+    return (
+      <svg 
+        className="relative w-full pointer-events-none z-20"
+        style={{
+          height: Math.max(160, Math.min(height + 20, 360)),
+        }}
+        viewBox={`${minX - 10} ${minY - 10} ${width + 20} ${height + 20}`}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <mask id={`mask-${strokes[0]?.id || 'empty'}`}>
+            <rect x={minX - 10} y={minY - 10} width={width + 20} height={height + 20} fill="white" />
+            {strokes.filter(s => s.type === 'eraser').map(stroke => {
+              if (!stroke.points || stroke.points.length === 0) return null;
+              const strokeData = getStroke(stroke.points, { size: stroke.size, thinning: 0.5, smoothing: 0.5, streamline: 0.5 });
+              const pathData = getSvgPathFromStroke(strokeData);
+              const sX = stroke.scaleX || 1;
+              const sY = stroke.scaleY || 1;
+              const tX = stroke.x || 0;
+              const tY = stroke.y || 0;
+              return <path key={stroke.id} d={pathData} fill="black" transform={`translate(${tX}, ${tY}) scale(${sX}, ${sY})`} />;
+            })}
+          </mask>
+        </defs>
+        <g mask={`url(#mask-${strokes[0]?.id || 'empty'})`}>
+          {strokes.filter(s => s.type !== 'eraser').map((stroke) => {
+            if (!stroke.points || stroke.points.length === 0) return null;
+            
+            const strokeData = getStroke(stroke.points, {
+              size: stroke.size,
+              thinning: 0.5,
+              smoothing: 0.5,
+              streamline: 0.5,
+            });
+            const pathData = getSvgPathFromStroke(strokeData);
 
-  // Use percentages relative to the block width so strokes scale gracefully with text layout on mobile
-  const leftPercent = isStandalone ? 0 : ((minX - blockBox.minX) / referenceWidth) * 100;
+            const sX = stroke.scaleX || 1;
+            const sY = stroke.scaleY || 1;
+            const tX = stroke.x || 0;
+            const tY = stroke.y || 0;
+
+            const opacity = stroke.type === 'highlighter' ? 0.4 : 1;
+
+            return (
+              <path
+                key={stroke.id}
+                d={pathData}
+                fill={stroke.color}
+                opacity={opacity}
+                transform={`translate(${tX}, ${tY}) scale(${sX}, ${sY})`}
+                style={stroke.type === 'highlighter' ? { mixBlendMode: 'multiply' } : undefined}
+              />
+            );
+          })}
+        </g>
+      </svg>
+    );
+  }
+
+  // Non-standalone (attached to text/image/audio card)
+  const referenceWidth = blockBox.width || 400;
+  const leftPercent = ((minX - (blockBox.minX || 0)) / referenceWidth) * 100;
   
   return (
     <svg 
-      className={`${isStandalone ? 'relative' : 'absolute'} pointer-events-none z-20`}
+      className="absolute inset-0 pointer-events-none z-20"
       style={{
-        left: isStandalone ? undefined : `${leftPercent}%`, 
-        top: isStandalone ? undefined : 0,
-        // Calculate proportional width relative to reference width
+        left: `${leftPercent}%`, 
+        top: 0,
         width: `${Math.min((width / referenceWidth) * 100, 200)}%`,
         height: 'auto',
       }}
@@ -204,6 +260,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     setDrawOverlayBlockType(blockType);
     setIsDrawOverlayOpen(true);
   };
+
+  const startNewSketchBlock = () => {
+    const newSketchId = `sketch-${uuidv4()}`;
+    openDrawOverlay(newSketchId, 'drawing');
+  };
   
   const imageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
@@ -257,7 +318,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
   const deleteDrawingBlock = (block: any) => {
     const strokeIds = new Set(block.attachedStrokes.map((s: any) => s.id));
-    setStrokes(prev => prev.filter(s => !strokeIds.has(s.id)));
+    setStrokes(prev => prev.filter(s => !strokeIds.has(s.id) && s.blockId !== block.id));
     setActiveBlockId(null);
     toast.success("Sketch deleted");
   };
@@ -366,27 +427,53 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       ...(videos || []).map(v => ({ ...v, type: 'video' as const, attachedStrokes: [] as Stroke[] }))
     ];
 
+    const sketchBlocksMap = new Map<string, any>();
     const unattachedStrokes: Stroke[] = [];
 
     strokes.forEach((stroke: Stroke) => {
       if (!stroke.points || stroke.points.length === 0) return;
       
       if (stroke.blockId) {
-        const block = baseBlocks.find(b => b.id === stroke.blockId);
-        if (block) {
-          block.attachedStrokes.push(stroke);
+        const baseBlock = baseBlocks.find(b => b.id === stroke.blockId);
+        if (baseBlock) {
+          baseBlock.attachedStrokes.push(stroke);
         } else {
-          // Fallback
-          unattachedStrokes.push(stroke);
+          // Standalone sketch block with stable blockId
+          if (!sketchBlocksMap.has(stroke.blockId)) {
+            const box = getStrokeBoundingBox(stroke);
+            sketchBlocksMap.set(stroke.blockId, {
+              type: 'drawing',
+              id: stroke.blockId,
+              x: stroke.x || 50,
+              y: stroke.y || box.minY || 0,
+              minX: box.minX,
+              minY: box.minY,
+              maxX: box.maxX,
+              maxY: box.maxY,
+              width: Math.max(box.maxX - box.minX, 300),
+              height: Math.max(box.maxY - box.minY, 150),
+              attachedStrokes: [stroke]
+            });
+          } else {
+            const sBlock = sketchBlocksMap.get(stroke.blockId)!;
+            sBlock.attachedStrokes.push(stroke);
+            const box = getStrokeBoundingBox(stroke);
+            sBlock.minX = Math.min(sBlock.minX, box.minX);
+            sBlock.minY = Math.min(sBlock.minY, box.minY);
+            sBlock.maxX = Math.max(sBlock.maxX, box.maxX);
+            sBlock.maxY = Math.max(sBlock.maxY, box.maxY);
+            sBlock.width = Math.max(sBlock.maxX - sBlock.minX, 300);
+            sBlock.height = Math.max(sBlock.maxY - sBlock.minY, 150);
+          }
         }
       } else {
-        // Global sketches have no blockId
+        // Legacy unattached strokes without blockId
         unattachedStrokes.push(stroke);
       }
     });
 
-    // Group unattached strokes into drawing blocks
-    const drawingBlocks: any[] = [];
+    // Group legacy unattached strokes into drawing blocks
+    const legacyDrawingBlocks: any[] = [];
     
     unattachedStrokes.forEach(stroke => {
       const box = getStrokeBoundingBox(stroke);
@@ -398,7 +485,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         maxY: box.maxY + padding
       };
       
-      const overlappingCluster = drawingBlocks.find(c => getIntersectionArea(expandedBox, c) > 0);
+      const overlappingCluster = legacyDrawingBlocks.find(c => getIntersectionArea(expandedBox, c) > 0);
       
       if (overlappingCluster) {
         overlappingCluster.attachedStrokes.push(stroke);
@@ -411,9 +498,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         overlappingCluster.width = overlappingCluster.maxX - overlappingCluster.minX;
         overlappingCluster.height = overlappingCluster.maxY - overlappingCluster.minY;
       } else {
-        drawingBlocks.push({
+        legacyDrawingBlocks.push({
           type: 'drawing',
-          id: `cluster-${stroke.id}`,
+          id: `sketch-${stroke.id}`,
           x: box.minX,
           y: box.minY,
           minX: box.minX,
@@ -427,7 +514,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       }
     });
 
-    const finalBlocks = [...baseBlocks, ...drawingBlocks];
+    const finalBlocks = [...baseBlocks, ...Array.from(sketchBlocksMap.values()), ...legacyDrawingBlocks];
     return finalBlocks.sort((a, b) => {
       if (Math.abs(a.y - b.y) > 10) return a.y - b.y; // 10px tolerance for vertical alignment
       return a.x - b.x;
@@ -848,7 +935,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               <span>Tap empty area to write</span>
               <span>•</span>
               <button 
-                onClick={(e) => { e.stopPropagation(); openDrawOverlay(null, 'drawing'); }}
+                onClick={(e) => { e.stopPropagation(); startNewSketchBlock(); }}
                 className="inline-flex items-center gap-1 text-primary-600 dark:text-yellow-500/80 hover:underline font-semibold"
               >
                 <PenTool size={12} />
@@ -900,7 +987,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
                 openDrawOverlay(activeBlockId, activeBlock?.type || 'block');
               } else {
-                openDrawOverlay(null, 'drawing');
+                startNewSketchBlock();
               }
             }}
             className={`p-2 transition-all rounded-full active:scale-90 relative ${
