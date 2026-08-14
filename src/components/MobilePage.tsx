@@ -383,7 +383,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       
       {/* Blurred Header */}
       <div 
-        className="sticky top-0 z-50 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 transition-all"
+        className="sticky top-0 z-[1500] bg-white/85 dark:bg-black/85 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 transition-all"
         style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
       >
         <div className="flex items-center px-4 py-3">
@@ -430,7 +430,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
           {sortedBlocks.map((block, index) => {
             const blockBox = getBlockBoundingBox(block);
-            const reverseZ = 1000 - index;
+            const reverseZ = 500 - index;
 
             if (block.type === 'text') {
               return (
@@ -638,7 +638,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       </div>
 
       {/* Sticky Bottom Action Bar */}
-      <div className="sticky bottom-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 px-6 py-4 pb-safe flex items-center justify-between">
+      <div 
+        className="sticky bottom-0 z-[1500] bg-white/85 dark:bg-black/85 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800 px-6 py-4 flex items-center justify-between"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+      >
         <input 
           type="file" 
           ref={imageInputRef} 

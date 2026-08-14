@@ -71,7 +71,7 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col select-none overflow-hidden touch-none">
+    <div className="fixed inset-0 z-[2000] flex flex-col select-none overflow-hidden touch-none">
       {/* Background Mask */}
       {annotateBlockId && blockRect ? (
         <div 
@@ -93,8 +93,8 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
 
       {/* Top Header Bar */}
       <div 
-        className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[110] pointer-events-auto"
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+        className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[2100] pointer-events-auto"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
       >
         <div className="flex items-center gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm border border-zinc-200/60 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
           <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
@@ -110,7 +110,7 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
       </div>
 
       {/* Canvas Layer */}
-      <div className="absolute inset-0 z-[105]">
+      <div className="absolute inset-0 z-[2050]">
         <SpatialCanvas 
           strokes={strokes}
           setStrokes={setStrokes}
@@ -130,8 +130,8 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, strokes, s
 
       {/* Bottom Floating Drawing Toolbar (Compact & Fits on all screens) */}
       <div 
-        className="absolute bottom-0 left-0 right-0 p-3 z-[110] pointer-events-auto flex flex-col items-center gap-2"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+        className="absolute bottom-0 left-0 right-0 p-3 z-[2100] pointer-events-auto flex flex-col items-center gap-2"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 18px)' }}
       >
         {/* Tool Size Sub-bar (if pen or highlighter) */}
         {tool !== 'eraser' && (
