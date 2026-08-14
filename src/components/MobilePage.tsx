@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -190,6 +190,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [userEmail, setUserEmail] = useState<string>("");
   const [currentUser, setCurrentUser] = useState<any>(null);
   
+  // Rearrange / Reorder State
+  const [isRearranging, setIsRearranging] = useState(false);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPosRef = useRef<{ x: number, y: number } | null>(null);
+
   const [isDrawOverlayOpen, setIsDrawOverlayOpen] = useState(false);
   const [drawOverlayBlockId, setDrawOverlayBlockId] = useState<string | null>(null);
   const [drawOverlayBlockType, setDrawOverlayBlockType] = useState<string | null>(null);
@@ -217,11 +222,102 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     window.location.href = "/login";
   };
 
+  const handleCardTouchStart = (blockId: string, e: React.TouchEvent) => {
+    if (isRearranging) return;
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    longPressTimerRef.current = setTimeout(() => {
+      setIsRearranging(true);
+      setActiveBlockId(blockId);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
+      toast.success("Rearrange Mode Activated", { id: 'rearrange-toast', duration: 1500 });
+    }, 450);
+  };
+
+  const handleCardTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPosRef.current || !longPressTimerRef.current) return;
+    const touch = e.touches[0];
+    const dist = Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y);
+    if (dist > 10) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleCardTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartPosRef.current = null;
+  };
+
   const deleteDrawingBlock = (block: any) => {
     const strokeIds = new Set(block.attachedStrokes.map((s: any) => s.id));
     setStrokes(prev => prev.filter(s => !strokeIds.has(s.id)));
     setActiveBlockId(null);
     toast.success("Sketch deleted");
+  };
+
+  const moveBlock = (currentIndex: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sortedBlocks.length) return;
+
+    const newBlocks = [...sortedBlocks];
+    const [movedBlock] = newBlocks.splice(currentIndex, 1);
+    newBlocks.splice(targetIndex, 0, movedBlock);
+
+    // Reassign clean Y coordinates based on the new order
+    const updatedTexts: TextNode[] = [];
+    const updatedAudios: AudioNode[] = [];
+    const updatedImages: ImageNode[] = [];
+    const updatedFiles: FileNode[] = [];
+    const updatedVideos: VideoNode[] = [];
+    let updatedStrokes = [...strokes];
+
+    newBlocks.forEach((block, index) => {
+      const newY = 100 + index * 250;
+      const deltaY = newY - block.y;
+
+      if (block.type === 'text') {
+        const existing = texts.find(t => t.id === block.id);
+        if (existing) updatedTexts.push({ ...existing, y: newY });
+      } else if (block.type === 'audio') {
+        const existing = audios.find(a => a.id === block.id);
+        if (existing) updatedAudios.push({ ...existing, y: newY });
+      } else if (block.type === 'image') {
+        const existing = images.find(i => i.id === block.id);
+        if (existing) updatedImages.push({ ...existing, y: newY });
+      } else if (block.type === 'file') {
+        const existing = files.find(f => f.id === block.id);
+        if (existing) updatedFiles.push({ ...existing, y: newY });
+      } else if (block.type === 'video') {
+        const existing = videos.find(v => v.id === block.id);
+        if (existing) updatedVideos.push({ ...existing, y: newY });
+      } else if (block.type === 'drawing') {
+        const strokeIds = new Set(block.attachedStrokes.map((s: any) => s.id));
+        updatedStrokes = updatedStrokes.map(s => {
+          if (strokeIds.has(s.id)) {
+            return {
+              ...s,
+              y: (s.y || 0) + deltaY,
+              points: s.points.map(([px, py]) => [px, py + deltaY])
+            };
+          }
+          return s;
+        });
+      }
+    });
+
+    setTexts(updatedTexts);
+    setAudios(updatedAudios);
+    setImages(updatedImages);
+    setFiles(updatedFiles);
+    setVideos(updatedVideos);
+    setStrokes(updatedStrokes);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -409,36 +505,56 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   return (
     <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-white dark:bg-black overflow-hidden select-none">
       
-      {/* Floating Top Navigation Pills */}
-      <div 
-        className="fixed top-0 left-0 right-0 z-[1500] pointer-events-none px-4 flex items-center justify-between transition-all"
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
-      >
-        {onBack ? (
-          <button 
-            onClick={onBack}
-            className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-primary-600 dark:text-yellow-500 font-semibold text-sm active:scale-95 transition-all"
-            title="Back to Notes"
-          >
-            <ChevronLeft size={19} className="-ml-1" />
-            <span>Notes</span>
-          </button>
-        ) : <div />}
-
-        <button 
-          onClick={() => {
-            if (onOpenSettings) {
-              onOpenSettings();
-            } else {
-              setIsInternalSettingsOpen(true);
-            }
-          }}
-          className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
-          title="Settings"
+      {/* Floating Top Navigation / Rearrange Bar */}
+      {isRearranging ? (
+        <div 
+          className="fixed top-0 left-0 right-0 z-[1600] pointer-events-none px-4 flex items-center justify-between transition-all"
+          style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
         >
-          <MoreHorizontal size={19} />
-        </button>
-      </div>
+          <div className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-600 dark:bg-yellow-500 text-white dark:text-zinc-950 shadow-lg backdrop-blur-2xl font-bold text-xs animate-in fade-in">
+            <GripVertical size={15} />
+            <span>Rearrange Blocks</span>
+          </div>
+
+          <button 
+            onClick={() => setIsRearranging(false)}
+            className="pointer-events-auto flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold text-xs shadow-lg active:scale-95 transition-transform"
+          >
+            <Check size={14} />
+            <span>Done</span>
+          </button>
+        </div>
+      ) : (
+        <div 
+          className="fixed top-0 left-0 right-0 z-[1500] pointer-events-none px-4 flex items-center justify-between transition-all"
+          style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
+        >
+          {onBack ? (
+            <button 
+              onClick={onBack}
+              className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-primary-600 dark:text-yellow-500 font-semibold text-sm active:scale-95 transition-all"
+              title="Back to Notes"
+            >
+              <ChevronLeft size={19} className="-ml-1" />
+              <span>Notes</span>
+            </button>
+          ) : <div />}
+
+          <button 
+            onClick={() => {
+              if (onOpenSettings) {
+                onOpenSettings();
+              } else {
+                setIsInternalSettingsOpen(true);
+              }
+            }}
+            className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
+            title="Settings"
+          >
+            <MoreHorizontal size={19} />
+          </button>
+        </div>
+      )}
 
       <div 
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative scroll-smooth overscroll-contain select-text" 
@@ -470,239 +586,257 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           {sortedBlocks.map((block, index) => {
             const blockBox = getBlockBoundingBox(block);
             const reverseZ = 500 - index;
+            const isSelected = activeBlockId === block.id;
 
-            if (block.type === 'text') {
-              const isSelected = activeBlockId === block.id;
-              return (
-                <div 
-                  key={block.id} 
-                  id={`block-${block.id}`}
-                  className={`w-full min-h-[50px] relative rounded-xl transition-all duration-200 ${
-                    isSelected ? 'ring-1 ring-primary-500/40 bg-zinc-50/50 dark:bg-zinc-900/30' : ''
-                  }`}
-                  style={{ zIndex: reverseZ }}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
-                >
-                  <TipTapEditor 
-                    id={block.id}
-                    content={block.content}
-                    onChange={(content) => {
-                      setTexts(prev => prev.map(t => t.id === block.id ? { ...t, content } : t));
-                    }}
-                    onDelete={() => {
-                      setTexts(prev => prev.filter(t => t.id !== block.id));
-                    }}
-                  />
-                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
-                </div>
-              );
-            } else if (block.type === 'audio') {
-              const isSelected = activeBlockId === block.id;
-              return (
-                <div 
-                  key={block.id} 
-                  id={`block-${block.id}`} 
-                  className={`relative w-full rounded-2xl transition-all duration-200 ${
-                    isSelected ? 'ring-2 ring-primary-500/50 shadow-md' : ''
-                  }`} 
-                  style={{ zIndex: reverseZ }}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
-                >
-                  <MobileAudioCard 
-                    node={block} 
-                    updateAudioTitle={(id, title) => setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a))}
-                    updateAudioField={(id, field, value) => setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a))}
-                    deleteAudioNode={(id) => setAudios(prev => prev.filter(a => a.id !== id))}
-                    onAnnotate={(id) => openDrawOverlay(id, 'audio')}
-                  />
-                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
-                </div>
-              );
-            } else if (block.type === 'image') {
-              const isSelected = activeBlockId === block.id;
-              return (
-                <div 
-                  key={block.id} 
-                  id={`block-${block.id}`}
-                  className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
-                    isSelected ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
-                  } bg-black`}
-                  style={{ zIndex: reverseZ }}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
-                >
-                  <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
-                  
-                  {/* Subtle Action Pill (only on selection or clean corner) */}
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2 py-1 z-30 shadow-lg border border-white/10">
+            return (
+              <div 
+                key={block.id}
+                onTouchStart={(e) => handleCardTouchStart(block.id, e)}
+                onTouchMove={handleCardTouchMove}
+                onTouchEnd={handleCardTouchEnd}
+                className={`relative transition-all duration-200 ${
+                  isRearranging 
+                    ? 'p-3 rounded-2xl border-2 border-dashed border-primary-500/40 dark:border-yellow-500/40 bg-zinc-50/70 dark:bg-zinc-900/70 shadow-sm' 
+                    : ''
+                }`}
+                style={{ zIndex: reverseZ }}
+              >
+                {/* Rearrange Reorder Pill */}
+                {isRearranging && (
+                  <div className="flex items-center justify-between mb-2 bg-zinc-200/80 dark:bg-zinc-800/90 border border-zinc-300 dark:border-zinc-700/60 rounded-full px-3 py-1 w-full shadow-sm z-30">
+                    <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 flex items-center gap-1">
+                      <GripVertical size={13} className="text-zinc-400" />
+                      Block #{index + 1}
+                    </span>
+                    <div className="flex items-center gap-1">
                       <button 
-                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
-                        className="p-1.5 text-white/80 hover:text-white transition-colors"
-                        title="Annotate"
+                        disabled={index === 0}
+                        onClick={(e) => { e.stopPropagation(); moveBlock(index, 'up'); }}
+                        className="p-1 rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-25 disabled:pointer-events-none transition-colors"
+                        title="Move Up"
                       >
-                        <PenTool size={14} />
+                        <ChevronUp size={16} />
                       </button>
-                      <div className="w-px h-3 bg-white/20" />
                       <button 
-                        onClick={(e) => { e.stopPropagation(); setImages(prev => prev.filter(n => n.id !== block.id)); }}
-                        className="p-1.5 text-red-400 hover:text-red-300 transition-colors"
-                        title="Delete"
+                        disabled={index === sortedBlocks.length - 1}
+                        onClick={(e) => { e.stopPropagation(); moveBlock(index, 'down'); }}
+                        className="p-1 rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-25 disabled:pointer-events-none transition-colors"
+                        title="Move Down"
                       >
-                        <Trash2 size={14} />
+                        <ChevronDown size={16} />
                       </button>
                     </div>
-                  )}
-                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
-                </div>
-              );
-            } else if (block.type === 'file') {
-              const isSelected = activeBlockId === block.id;
-              return (
-                <div 
-                  key={block.id} 
-                  id={`block-${block.id}`}
-                  className={`relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border transition-all ${
-                    isSelected ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
-                  } flex items-center justify-between`}
-                  style={{ zIndex: reverseZ }}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
-                >
-                  <div className="flex items-center gap-3 overflow-hidden relative z-30">
-                    <File size={22} className="text-primary-500 flex-shrink-0" />
-                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
                   </div>
-                  <div className="flex items-center gap-1 relative z-30">
-                    {isSelected && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
-                        className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                        title="Annotate"
-                      >
-                        <PenTool size={16} />
-                      </button>
+                )}
+
+                {/* Render Block by Type */}
+                {block.type === 'text' && (
+                  <div 
+                    id={`block-${block.id}`}
+                    className={`w-full min-h-[50px] relative rounded-xl transition-all duration-200 ${
+                      isSelected && !isRearranging ? 'ring-1 ring-primary-500/40 bg-zinc-50/50 dark:bg-zinc-900/30' : ''
+                    } ${isRearranging ? 'pointer-events-none' : ''}`}
+                    onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
+                  >
+                    <TipTapEditor 
+                      id={block.id}
+                      content={block.content}
+                      onChange={(content) => {
+                        setTexts(prev => prev.map(t => t.id === block.id ? { ...t, content } : t));
+                      }}
+                      onDelete={() => {
+                        setTexts(prev => prev.filter(t => t.id !== block.id));
+                      }}
+                    />
+                    <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
+                  </div>
+                )}
+
+                {block.type === 'audio' && (
+                  <div 
+                    id={`block-${block.id}`} 
+                    className={`relative w-full rounded-2xl transition-all duration-200 ${
+                      isSelected && !isRearranging ? 'ring-2 ring-primary-500/50 shadow-md' : ''
+                    }`}
+                    onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
+                  >
+                    <MobileAudioCard 
+                      node={block} 
+                      updateAudioTitle={(id, title) => setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a))}
+                      updateAudioField={(id, field, value) => setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a))}
+                      deleteAudioNode={(id) => setAudios(prev => prev.filter(a => a.id !== id))}
+                      onAnnotate={(id) => openDrawOverlay(id, 'audio')}
+                    />
+                    <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
+                  </div>
+                )}
+
+                {block.type === 'image' && (
+                  <div 
+                    id={`block-${block.id}`}
+                    className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
+                      isSelected && !isRearranging ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
+                    } bg-black`}
+                    onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
+                  >
+                    <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
+                    
+                    {isSelected && !isRearranging && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-white/10">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'image'); }}
+                          className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
+                          title="Annotate"
+                        >
+                          <PenTool size={13} />
+                          <span>Annotate</span>
+                        </button>
+                        <div className="w-px h-3 bg-white/20" />
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setImages(prev => prev.filter(n => n.id !== block.id)); }}
+                          className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     )}
-                    <a 
-                      href={block.url} 
-                      download 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="p-1.5 text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      title="Download"
-                    >
-                      <Download size={16} />
-                    </a>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setFiles(prev => prev.filter(n => n.id !== block.id)); }} 
-                      className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                   </div>
-                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
-                </div>
-              );
-            } else if (block.type === 'video') {
-              let videoId = "";
-              if (block.url.includes("youtube.com/watch")) {
-                videoId = new URL(block.url).searchParams.get("v") || "";
-              } else if (block.url.includes("youtu.be/")) {
-                videoId = block.url.split("youtu.be/")[1]?.split("?")[0];
-              }
-              const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : block.url;
-              const isSelected = activeBlockId === block.id;
+                )}
 
-              return (
-                <div 
-                  key={block.id} 
-                  id={`block-${block.id}`}
-                  className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
-                    isSelected ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
-                  } bg-black aspect-video`}
-                  style={{ zIndex: reverseZ }}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
-                >
-                  <iframe 
-                    src={embedUrl} 
-                    title="YouTube video player" 
-                    frameBorder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                    allowFullScreen
-                    className="w-full h-full relative z-10"
-                  ></iframe>
-                  
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2 py-1 z-30 shadow-lg border border-white/10">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id); }}
-                        className="p-1.5 text-white/80 hover:text-white transition-colors"
-                        title="Annotate"
+                {block.type === 'file' && (
+                  <div 
+                    id={`block-${block.id}`}
+                    className={`relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border transition-all ${
+                      isSelected && !isRearranging ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
+                    } flex items-center justify-between`}
+                    onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
+                  >
+                    <div className="flex items-center gap-3 overflow-hidden relative z-30">
+                      <File size={22} className="text-primary-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
+                    </div>
+                    <div className="flex items-center gap-1 relative z-30">
+                      {isSelected && !isRearranging && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'file'); }}
+                          className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          title="Annotate"
+                        >
+                          <PenTool size={16} />
+                        </button>
+                      )}
+                      <a 
+                        href={block.url} 
+                        download 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="p-1.5 text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                        title="Download"
                       >
-                        <PenTool size={14} />
-                      </button>
-                      <div className="w-px h-3 bg-white/20" />
+                        <Download size={16} />
+                      </a>
                       <button 
-                        onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(n => n.id !== block.id)); }}
-                        className="p-1.5 text-red-400 hover:text-red-300 transition-colors"
+                        onClick={(e) => { e.stopPropagation(); setFiles(prev => prev.filter(n => n.id !== block.id)); }} 
+                        className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                         title="Delete"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
-                  )}
-                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
-                </div>
-              );
-            } else if (block.type === 'drawing') {
-              // Standalone drawing cluster
-              const blockBox = {
-                minX: block.minX,
-                minY: block.minY,
-                maxX: block.maxX,
-                maxY: block.maxY,
-                width: block.width
-              };
+                    <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
+                  </div>
+                )}
 
-              const isSelected = activeBlockId === block.id;
+                {block.type === 'video' && (
+                  <div 
+                    id={`block-${block.id}`}
+                    className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
+                      isSelected && !isRearranging ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
+                    } bg-black aspect-video ${isRearranging ? 'pointer-events-none' : ''}`}
+                    onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
+                  >
+                    {(() => {
+                      let videoId = "";
+                      if (block.url.includes("youtube.com/watch")) {
+                        videoId = new URL(block.url).searchParams.get("v") || "";
+                      } else if (block.url.includes("youtu.be/")) {
+                        videoId = block.url.split("youtu.be/")[1]?.split("?")[0];
+                      }
+                      const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : block.url;
+                      return (
+                        <iframe 
+                          src={embedUrl} 
+                          title="YouTube video player" 
+                          frameBorder="0" 
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                          allowFullScreen
+                          className="w-full h-full relative z-10"
+                        />
+                      );
+                    })()}
+                    
+                    {isSelected && !isRearranging && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-white/10">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'video'); }}
+                          className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
+                          title="Annotate"
+                        >
+                          <PenTool size={13} />
+                          <span>Annotate</span>
+                        </button>
+                        <div className="w-px h-3 bg-white/20" />
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(n => n.id !== block.id)); }}
+                          className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
+                    <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
+                  </div>
+                )}
 
-              return (
-                <div 
-                  key={block.id} 
-                  id={`block-${block.id}`}
-                  className={`w-full my-3 relative rounded-2xl border transition-all duration-200 ${
-                    isSelected 
-                      ? 'border-primary-500 ring-2 ring-primary-500/20 bg-zinc-50/90 dark:bg-zinc-900/90 shadow-md' 
-                      : 'border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-900/30 hover:border-zinc-300 dark:hover:border-zinc-700'
-                  } p-4 min-h-[140px] flex flex-col justify-center`}
-                  style={{ zIndex: reverseZ }}
-                  onClick={(e) => { e.stopPropagation(); setActiveBlockId(block.id); }}
-                >
-                  {/* Action Pill on Selection */}
-                  {isSelected && (
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/80 dark:bg-zinc-800/90 backdrop-blur-md rounded-full px-3 py-1.5 z-30 shadow-lg border border-white/10 animate-in fade-in zoom-in-95 duration-150">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'drawing'); }}
-                        className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
-                        title="Edit Sketch"
-                      >
-                        <PenTool size={13} />
-                        <span>Edit</span>
-                      </button>
-                      <div className="w-px h-3 bg-white/20" />
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); deleteDrawingBlock(block); }}
-                        className="p-1 text-red-400 hover:text-red-300 transition-colors"
-                        title="Delete Sketch"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  )}
+                {block.type === 'drawing' && (
+                  <div 
+                    id={`block-${block.id}`}
+                    className={`w-full relative rounded-2xl border transition-all duration-200 ${
+                      isSelected && !isRearranging
+                        ? 'border-primary-500 ring-2 ring-primary-500/20 bg-zinc-50/90 dark:bg-zinc-900/90 shadow-md' 
+                        : 'border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-900/30 hover:border-zinc-300 dark:hover:border-zinc-700'
+                    } p-4 min-h-[140px] flex flex-col justify-center`}
+                    onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
+                  >
+                    {isSelected && !isRearranging && (
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/80 dark:bg-zinc-800/90 backdrop-blur-md rounded-full px-3 py-1.5 z-30 shadow-lg border border-white/10 animate-in fade-in zoom-in-95 duration-150">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'drawing'); }}
+                          className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
+                          title="Edit Sketch"
+                        >
+                          <PenTool size={13} />
+                          <span>Edit</span>
+                        </button>
+                        <div className="w-px h-3 bg-white/20" />
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); deleteDrawingBlock(block); }}
+                          className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                          title="Delete Sketch"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
 
-                  <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} isStandalone={true} />
-                </div>
-              );
-            }
+                    <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} isStandalone={true} />
+                  </div>
+                )}
+              </div>
+            );
           })}
           
           {/* Tap Zone at bottom to append text or sketch */}
