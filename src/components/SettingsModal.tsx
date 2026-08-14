@@ -101,57 +101,57 @@ export function SettingsModal({ isOpen, onClose, userEmail, user, onSignOut }: S
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-auto">
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-3 sm:p-6 pointer-events-auto">
       <div 
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+        className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" 
         onClick={onClose}
       />
-      <div className="relative bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl w-[600px] h-[500px] overflow-hidden flex flex-col pointer-events-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Settings</h2>
+      <div className="relative bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-[620px] max-h-[85vh] sm:h-[540px] overflow-hidden flex flex-col pointer-events-auto animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md shrink-0">
+          <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100">Settings</h2>
           <button 
             onClick={onClose}
-            className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+            className="p-1.5 rounded-full text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar */}
-          <div className="w-48 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/50 p-2 flex flex-col gap-1">
+        <div className="flex flex-col sm:flex-row flex-1 overflow-hidden min-h-0">
+          {/* Tabs: Horizontal scroll on mobile, sidebar on desktop */}
+          <div className="flex sm:flex-col flex-row border-b sm:border-b-0 sm:border-r border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-950/40 p-2 sm:w-44 gap-1.5 shrink-0 overflow-x-auto">
             <button
               onClick={() => setActiveTab("profile")}
-              className={`px-3 py-2 text-sm font-medium rounded-md text-left transition-colors ${
+              className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 ${
                 activeTab === "profile"
-                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800/50"
+                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
               }`}
             >
               Profile
             </button>
             <button
               onClick={() => setActiveTab("appearance")}
-              className={`px-3 py-2 text-sm font-medium rounded-md text-left transition-colors ${
+              className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 ${
                 activeTab === "appearance"
-                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800/50"
+                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
               }`}
             >
               Appearance
             </button>
             <button
               onClick={() => setActiveTab("account")}
-              className={`px-3 py-2 text-sm font-medium rounded-md text-left transition-colors ${
+              className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 ${
                 activeTab === "account"
-                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800/50"
+                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
               }`}
             >
               Account
             </button>
           </div>
           {/* Content */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-4 sm:p-6 overflow-y-auto min-h-0">
             
             {activeTab === "profile" && (
               <div className="space-y-6">
