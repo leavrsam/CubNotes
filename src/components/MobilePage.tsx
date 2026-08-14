@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, Paperclip } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -194,7 +194,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   };
   
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const docInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -230,40 +229,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       toast.error(`Upload failed: ${error.message}`, { id: toastId });
     } finally {
       e.target.value = ''; // Reset input
-    }
-  };
-
-  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const toastId = toast.loading(`Uploading ${file.name}...`);
-    try {
-      const ext = file.name.split('.').pop();
-      const filename = `${pageId}/${uuidv4()}.${ext}`;
-
-      const { data, error } = await supabase.storage
-        .from('recordings')
-        .upload(filename, file);
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('recordings')
-        .getPublicUrl(filename);
-
-      setFiles(prev => [...(prev || []), {
-        id: uuidv4(),
-        x: 50,
-        y: bottomY,
-        filename: file.name,
-        url: publicUrl
-      }]);
-      toast.success(`File attached!`, { id: toastId });
-    } catch (error: any) {
-      toast.error(`Upload failed: ${error.message}`, { id: toastId });
-    } finally {
-      e.target.value = '';
     }
   };
 
@@ -672,57 +637,49 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         </div>
       </div>
 
-      {/* Fixed Bottom Action Bar */}
+      {/* Floating Glassmorphic Dock */}
       <div 
-        className="flex-shrink-0 z-[1500] bg-white/90 dark:bg-black/90 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800 px-8 py-3 flex items-center justify-around"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
+        style={{ bottom: 'max(env(safe-area-inset-bottom), 24px)' }}
       >
-        <input 
-          type="file" 
-          ref={imageInputRef} 
-          onChange={handleFileUpload} 
-          accept="image/*" 
-          className="hidden" 
-        />
-        <input 
-          type="file" 
-          ref={docInputRef} 
-          onChange={handleDocUpload} 
-          className="hidden" 
-        />
-        <button 
-          onClick={() => imageInputRef.current?.click()} 
-          className="p-2.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
-          title="Add Photo / Image"
-        >
-          <ImageIcon size={22} />
-        </button>
-        <button 
-          onClick={() => docInputRef.current?.click()} 
-          className="p-2.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
-          title="Attach Document"
-        >
-          <Paperclip size={22} />
-        </button>
-        <button 
-          onClick={onToggleMeeting}
-          disabled={isProcessing}
-          className={`p-2.5 transition-colors ${
-            isRecording 
-              ? 'text-red-500 animate-pulse' 
-              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white'
-          }`}
-          title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
-        >
-          <Mic size={22} />
-        </button>
-        <button 
-          onClick={() => openDrawOverlay(activeBlockId)}
-          className="p-2.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white transition-colors"
-          title="Sketch / Annotate"
-        >
-          <PenTool size={22} />
-        </button>
+        <div className="pointer-events-auto flex items-center gap-6 px-7 py-2.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-2xl shadow-black/15 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 transition-all">
+          <input 
+            type="file" 
+            ref={imageInputRef} 
+            onChange={handleFileUpload} 
+            accept="image/*" 
+            className="hidden" 
+          />
+          
+          <button 
+            onClick={() => imageInputRef.current?.click()} 
+            className="p-2 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+            title="Add Photo / Image"
+          >
+            <ImageIcon size={22} />
+          </button>
+
+          <button 
+            onClick={onToggleMeeting}
+            disabled={isProcessing}
+            className={`p-2 transition-all rounded-full active:scale-90 ${
+              isRecording 
+                ? 'text-red-500 animate-pulse bg-red-500/10' 
+                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+            title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
+          >
+            <Mic size={22} />
+          </button>
+
+          <button 
+            onClick={() => openDrawOverlay(activeBlockId)}
+            className="p-2 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+            title="Sketch / Annotate"
+          >
+            <PenTool size={22} />
+          </button>
+        </div>
       </div>
 
       <MobileDrawOverlay 
