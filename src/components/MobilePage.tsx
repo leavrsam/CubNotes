@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -172,18 +172,23 @@ function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[
 interface MobilePageProps {
   pageId: string;
   pageTitle: string;
-  pageCreatedAt: string;
+  pageCreatedAt?: string;
   onUpdatePageTitle: (title: string) => void;
   onBack?: () => void;
   isRecording?: boolean;
   isProcessing?: boolean;
   onToggleMeeting?: () => void;
+  onOpenSettings?: () => void;
 }
 
-export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting }: MobilePageProps) {
+export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting, onOpenSettings }: MobilePageProps) {
   const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  
+  const [isInternalSettingsOpen, setIsInternalSettingsOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [currentUser, setCurrentUser] = useState<any>(null);
   
   const [isDrawOverlayOpen, setIsDrawOverlayOpen] = useState(false);
   const [drawOverlayBlockId, setDrawOverlayBlockId] = useState<string | null>(null);
@@ -195,6 +200,20 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   
   const imageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUserEmail(user.email || "");
+        setCurrentUser(user);
+      }
+    });
+  }, [supabase]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -381,32 +400,43 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   return (
     <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-white dark:bg-black overflow-hidden select-none">
       
-      {/* Top Blurred Header */}
+      {/* Floating Top Navigation Pills */}
       <div 
-        className="flex-shrink-0 z-[1500] bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 transition-all"
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+        className="fixed top-0 left-0 right-0 z-[1500] pointer-events-none px-4 flex items-center justify-between transition-all"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
       >
-        <div className="flex items-center px-4 py-3">
-          {onBack && (
-            <button 
-              onClick={onBack}
-              className="flex items-center text-primary-600 dark:text-yellow-500 font-medium mr-2"
-            >
-              <ChevronLeft size={24} className="-ml-2" />
-              Notes
-            </button>
-          )}
-          <div className="flex-1" />
-          <button className="p-1 text-primary-600 dark:text-yellow-500 rounded-full">
-            {/* Placeholder for more actions */}
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        {onBack ? (
+          <button 
+            onClick={onBack}
+            className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-primary-600 dark:text-yellow-500 font-semibold text-sm active:scale-95 transition-all"
+            title="Back to Notes"
+          >
+            <ChevronLeft size={19} className="-ml-1" />
+            <span>Notes</span>
           </button>
-        </div>
+        ) : <div />}
+
+        <button 
+          onClick={() => {
+            if (onOpenSettings) {
+              onOpenSettings();
+            } else {
+              setIsInternalSettingsOpen(true);
+            }
+          }}
+          className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
+          title="Settings"
+        >
+          <MoreHorizontal size={19} />
+        </button>
       </div>
 
       <div 
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative scroll-smooth overscroll-contain select-text" 
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{ 
+          WebkitOverflowScrolling: 'touch',
+          paddingTop: 'calc(max(env(safe-area-inset-top), 14px) + 50px)'
+        }}
         onClick={() => setActiveBlockId(null)}
       >
         
@@ -688,6 +718,14 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         annotateBlockId={drawOverlayBlockId}
         strokes={strokes}
         setStrokes={setStrokes}
+      />
+
+      <SettingsModal 
+        isOpen={isInternalSettingsOpen} 
+        onClose={() => setIsInternalSettingsOpen(false)} 
+        userEmail={userEmail}
+        user={currentUser}
+        onSignOut={handleSignOut}
       />
     </div>
   );

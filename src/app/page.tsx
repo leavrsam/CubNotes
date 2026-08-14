@@ -496,6 +496,7 @@ export default function Home() {
                 isRecording={isAnyRecording}
                 isProcessing={isProcessing}
                 onToggleMeeting={handleToggleMeeting}
+                onOpenSettings={() => setIsSettingsOpen(true)}
               />
             </div>
           )}
