@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+"use client";
+
+import React, { useEffect, useState, useRef } from 'react';
 import { SpatialCanvas } from './SpatialCanvas';
-import { PenTool, Eraser, Highlighter, Check, X, Circle } from 'lucide-react';
+import { PenTool, Eraser, Highlighter, Check, File, Image as ImageIcon, Music, Video, FileText } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { Stroke } from './CustomCanvas';
 
@@ -9,6 +11,7 @@ interface MobileDrawOverlayProps {
   onClose: () => void;
   annotateBlockId: string | null;
   blockType?: string | null;
+  targetBlock?: any;
   strokes: Stroke[];
   setStrokes: React.Dispatch<React.SetStateAction<Stroke[]>>;
   initialBlockY?: number;
@@ -29,14 +32,27 @@ const SIZE_PRESETS = [
   { label: 'Thick', size: 8, iconSize: 12 },
 ];
 
-export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType, strokes, setStrokes, initialBlockY }: MobileDrawOverlayProps) {
+export function MobileDrawOverlay({ 
+  isOpen, 
+  onClose, 
+  annotateBlockId, 
+  blockType, 
+  targetBlock,
+  strokes, 
+  setStrokes, 
+  initialBlockY 
+}: MobileDrawOverlayProps) {
   const { resolvedTheme } = useTheme();
   const [tool, setTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
   const [color, setColor] = useState('#FFFFFF');
   const [size, setSize] = useState(4);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [blockRect, setBlockRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardDims, setCardDims] = useState<{ width: number; height: number }>({ width: 360, height: 300 });
+
+  const isContentBlockAnnotation = !!(annotateBlockId && blockType && blockType !== 'drawing' && targetBlock);
 
   const getContextLabel = () => {
     if (!annotateBlockId) return '🎨 New Sketch Block';
@@ -62,43 +78,43 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType,
     }
   }, [isOpen, resolvedTheme]);
 
+  // Measure card dimensions when annotating a content block
   useEffect(() => {
-    if (isOpen && annotateBlockId) {
-      const el = document.getElementById(`block-${annotateBlockId}`);
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        setBlockRect({
-          x: rect.left,
-          y: rect.top,
-          width: rect.width,
-          height: rect.height
-        });
-      } else {
-        // Default centered focus box for new sketch block
-        const defaultWidth = Math.min(typeof window !== 'undefined' ? window.innerWidth - 32 : 360, 500);
-        const defaultHeight = 280;
-        const defaultX = typeof window !== 'undefined' ? (window.innerWidth - defaultWidth) / 2 : 16;
-        const defaultY = typeof window !== 'undefined' ? Math.max(80, (window.innerHeight - defaultHeight) / 2 - 40) : 100;
-        setBlockRect({
-          x: defaultX,
-          y: defaultY,
-          width: defaultWidth,
-          height: defaultHeight
-        });
-      }
-    } else {
-      setBlockRect(null);
+    if (isOpen && isContentBlockAnnotation) {
+      const updateDimensions = () => {
+        if (cardRef.current) {
+          const rect = cardRef.current.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            setCardDims({
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            });
+          }
+        }
+      };
+
+      updateDimensions();
+      const timer = setTimeout(updateDimensions, 60);
+      window.addEventListener('resize', updateDimensions);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('resize', updateDimensions);
+      };
     }
-  }, [isOpen, annotateBlockId]);
+  }, [isOpen, isContentBlockAnnotation, targetBlock]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex flex-col select-none overflow-hidden touch-none bg-zinc-50 dark:bg-zinc-950 animate-in fade-in duration-150">
+    <div className={`fixed inset-0 z-[2000] flex flex-col select-none overflow-hidden touch-none ${
+      isContentBlockAnnotation 
+        ? 'bg-black/75 dark:bg-black/85 backdrop-blur-md' 
+        : 'bg-zinc-50 dark:bg-zinc-950'
+    } animate-in fade-in duration-150`}>
       
       {/* Top Header Bar */}
       <div 
-        className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[2100] pointer-events-auto"
+        className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[2200] pointer-events-auto"
         style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
       >
         <div className="flex items-center gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-zinc-200/60 dark:border-zinc-800 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
@@ -115,29 +131,124 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType,
         </button>
       </div>
 
-      {/* Clean Dedicated Canvas Layer */}
-      <div className="absolute inset-0 z-[2050]">
-        <SpatialCanvas 
-          strokes={strokes}
-          setStrokes={setStrokes}
-          pan={pan}
-          setPan={setPan}
-          zoom={zoom}
-          setZoom={setZoom}
-          tool={tool}
-          activeColor={color}
-          activeSize={size}
-          activePresetType={tool === 'highlighter' ? 'highlighter' : 'pen'}
-          eraserType="stroke"
-          annotateBlockId={annotateBlockId}
-          blockOffsetMap={annotateBlockId ? { [annotateBlockId]: { x: 0, y: 0 } } : undefined}
-          initialBlockY={initialBlockY}
-        />
-      </div>
+      {/* Main Center Area */}
+      {isContentBlockAnnotation ? (
+        /* Focused Content Block with Canvas Overlay */
+        <div className="flex-1 w-full h-full flex items-center justify-center p-4 pt-16 pb-28 relative z-[2050] overflow-hidden">
+          <div 
+            ref={cardRef}
+            className="relative w-full max-w-[420px] max-h-[62vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col justify-center"
+          >
+            {/* Underlying Block Content */}
+            <div className="w-full h-full overflow-hidden select-none pointer-events-none">
+              {blockType === 'image' && (
+                <img 
+                  src={targetBlock.url} 
+                  alt="Annotating" 
+                  onLoad={() => {
+                    if (cardRef.current) {
+                      const rect = cardRef.current.getBoundingClientRect();
+                      setCardDims({ width: Math.round(rect.width), height: Math.round(rect.height) });
+                    }
+                  }}
+                  className="w-full h-auto max-h-[58vh] object-contain bg-black" 
+                />
+              )}
 
-      {/* Bottom Floating Drawing Toolbar (Compact & Fits on all screens) */}
+              {blockType === 'text' && (
+                <div 
+                  className="p-5 max-h-[58vh] overflow-y-auto text-sm leading-relaxed text-zinc-900 dark:text-zinc-100 prose dark:prose-invert"
+                  dangerouslySetInnerHTML={{ __html: targetBlock.content || '<p class="text-zinc-400 italic">Empty text note...</p>' }}
+                />
+              )}
+
+              {blockType === 'file' && (
+                <div className="p-5 flex items-center gap-3 bg-white dark:bg-zinc-900">
+                  <File size={26} className="text-primary-500 flex-shrink-0" />
+                  <span className="font-semibold text-sm text-zinc-800 dark:text-zinc-200 truncate">{targetBlock.filename || 'File Document'}</span>
+                </div>
+              )}
+
+              {blockType === 'video' && (
+                <div className="w-full aspect-video bg-black flex items-center justify-center">
+                  {(() => {
+                    let videoId = "";
+                    if (targetBlock.url?.includes("youtube.com/watch")) {
+                      videoId = new URL(targetBlock.url).searchParams.get("v") || "";
+                    } else if (targetBlock.url?.includes("youtu.be/")) {
+                      videoId = targetBlock.url.split("youtu.be/")[1]?.split("?")[0];
+                    }
+                    const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : targetBlock.url;
+                    return (
+                      <iframe 
+                        src={embedUrl} 
+                        title="Video Player" 
+                        frameBorder="0" 
+                        className="w-full h-full pointer-events-none"
+                      />
+                    );
+                  })()}
+                </div>
+              )}
+
+              {blockType === 'audio' && (
+                <div className="p-5 bg-white dark:bg-zinc-900">
+                  <div className="font-bold text-sm text-zinc-800 dark:text-zinc-200 mb-1">{targetBlock.title || 'Voice Note'}</div>
+                  {targetBlock.summary ? (
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-3">{targetBlock.summary}</div>
+                  ) : (
+                    <div className="text-xs text-zinc-400 italic">Meeting audio attachment</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Direct Drawing Canvas Layer Mounted Directly on the Content Card */}
+            <div className="absolute inset-0 z-30 touch-none">
+              <SpatialCanvas 
+                strokes={strokes}
+                setStrokes={setStrokes}
+                pan={{ x: 0, y: 0 }}
+                setPan={() => {}}
+                zoom={1}
+                setZoom={() => {}}
+                width={cardDims.width}
+                height={cardDims.height}
+                tool={tool}
+                activeColor={color}
+                activeSize={size}
+                activePresetType={tool === 'highlighter' ? 'highlighter' : 'pen'}
+                eraserType="stroke"
+                annotateBlockId={annotateBlockId}
+                initialBlockY={initialBlockY}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Standalone Clean Canvas Layer for Sketch Blocks */
+        <div className="absolute inset-0 z-[2050]">
+          <SpatialCanvas 
+            strokes={strokes}
+            setStrokes={setStrokes}
+            pan={pan}
+            setPan={setPan}
+            zoom={zoom}
+            setZoom={setZoom}
+            tool={tool}
+            activeColor={color}
+            activeSize={size}
+            activePresetType={tool === 'highlighter' ? 'highlighter' : 'pen'}
+            eraserType="stroke"
+            annotateBlockId={annotateBlockId}
+            initialBlockY={initialBlockY}
+          />
+        </div>
+      )}
+
+      {/* Bottom Floating Drawing Toolbar */}
       <div 
-        className="absolute bottom-0 left-0 right-0 p-3 z-[2100] pointer-events-auto flex flex-col items-center gap-2"
+        className="absolute bottom-0 left-0 right-0 p-3 z-[2200] pointer-events-auto flex flex-col items-center gap-2"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 18px)' }}
       >
         {/* Tool Size Sub-bar (if pen or highlighter) */}

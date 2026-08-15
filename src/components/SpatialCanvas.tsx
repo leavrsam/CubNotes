@@ -44,6 +44,8 @@ interface SpatialCanvasProps {
   annotateBlockId?: string | null;
   blockOffsetMap?: Record<string, {x: number, y: number}>;
   initialBlockY?: number;
+  width?: number;
+  height?: number;
 }
 
 export function SpatialCanvas({ 
@@ -54,7 +56,8 @@ export function SpatialCanvas({
   selectedIds = [], setSelectedIds,
   onCanvasClick, onLassoComplete,
   onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
-  annotateBlockId, blockOffsetMap, initialBlockY
+  annotateBlockId, blockOffsetMap, initialBlockY,
+  width, height
 }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
@@ -363,7 +366,11 @@ export function SpatialCanvas({
 
   const visibleStrokes = useMemo(() => {
     if (annotateBlockId) {
-      return strokes.filter(s => s.blockId === annotateBlockId);
+      return strokes.filter(s => 
+        s.blockId === annotateBlockId || 
+        s.id === annotateBlockId || 
+        ('sketch-' + s.id) === annotateBlockId
+      );
     }
     return strokes;
   }, [strokes, annotateBlockId]);
@@ -371,8 +378,8 @@ export function SpatialCanvas({
   return (
     <div className={`absolute inset-0 touch-none ${tool === 'pen' ? 'cursor-crosshair' : tool === 'home' ? 'cursor-text' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       <Stage
-        width={typeof window !== 'undefined' ? window.innerWidth : 1000}
-        height={typeof window !== 'undefined' ? window.innerHeight : 800}
+        width={width || (typeof window !== 'undefined' ? window.innerWidth : 1000)}
+        height={height || (typeof window !== 'undefined' ? window.innerHeight : 800)}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

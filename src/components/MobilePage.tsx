@@ -81,24 +81,19 @@ function getSvgPathFromStroke(stroke: number[][]) {
 function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[], blockBox: any, isStandalone?: boolean }) {
   if (!strokes || strokes.length === 0) return null;
 
-  // We want to ensure we don't clip strokes that go slightly outside the block
-  let minX = blockBox.minX;
-  let minY = blockBox.minY;
-  let maxX = blockBox.maxX;
-  let maxY = blockBox.maxY;
-
-  strokes.forEach((stroke: Stroke) => {
-    const box = getStrokeBoundingBox(stroke);
-    minX = Math.min(minX, box.minX);
-    minY = Math.min(minY, box.minY);
-    maxX = Math.max(maxX, box.maxX);
-    maxY = Math.max(maxY, box.maxY);
-  });
-
-  const width = Math.max(1, maxX - minX);
-  const height = Math.max(1, maxY - minY);
-
   if (isStandalone) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    strokes.forEach((stroke: Stroke) => {
+      const box = getStrokeBoundingBox(stroke);
+      minX = Math.min(minX, box.minX);
+      minY = Math.min(minY, box.minY);
+      maxX = Math.max(maxX, box.maxX);
+      maxY = Math.max(maxY, box.maxY);
+    });
+
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+
     return (
       <svg 
         className="relative w-full pointer-events-none z-20"
@@ -159,24 +154,29 @@ function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[
   }
 
   // Non-standalone (attached to text/image/audio card)
-  const referenceWidth = blockBox.width || 400;
-  const leftPercent = ((minX - (blockBox.minX || 0)) / referenceWidth) * 100;
-  
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  strokes.forEach((stroke: Stroke) => {
+    const box = getStrokeBoundingBox(stroke);
+    minX = Math.min(minX, box.minX);
+    minY = Math.min(minY, box.minY);
+    maxX = Math.max(maxX, box.maxX);
+    maxY = Math.max(maxY, box.maxY);
+  });
+
+  const cardWidth = blockBox.width || 400;
+  const cardHeight = blockBox.height || 300;
+  const viewBoxWidth = Math.max(cardWidth, maxX);
+  const viewBoxHeight = Math.max(cardHeight, maxY);
+
   return (
     <svg 
-      className="absolute inset-0 pointer-events-none z-20"
-      style={{
-        left: `${leftPercent}%`, 
-        top: 0,
-        width: `${Math.min((width / referenceWidth) * 100, 200)}%`,
-        height: 'auto',
-      }}
-      viewBox={`${minX} ${minY} ${width} ${height}`}
-      preserveAspectRatio="xMinYMin meet"
+      className="absolute inset-0 w-full h-full pointer-events-none z-20"
+      viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+      preserveAspectRatio="none"
     >
       <defs>
         <mask id={`mask-${strokes[0]?.id || 'empty'}`}>
-          <rect x={minX} y={minY} width={width} height={height} fill="white" />
+          <rect x={0} y={0} width={viewBoxWidth} height={viewBoxHeight} fill="white" />
           {strokes.filter(s => s.type === 'eraser').map(stroke => {
             if (!stroke.points || stroke.points.length === 0) return null;
             const strokeData = getStroke(stroke.points, { size: stroke.size, thinning: 0.5, smoothing: 0.5, streamline: 0.5 });
@@ -206,7 +206,6 @@ function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[
           const tX = stroke.x || 0;
           const tY = stroke.y || 0;
 
-          // Apply opacity for highlighter
           const opacity = stroke.type === 'highlighter' ? 0.4 : 1;
 
           return (
@@ -257,6 +256,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [drawOverlayInitialY, setDrawOverlayInitialY] = useState<number | undefined>(undefined);
 
   const openDrawOverlay = (blockId: string | null = null, blockType: string | null = null, initialY?: number) => {
+    if (blockId) {
+      const targetBlock = sortedBlocks.find(b => b.id === blockId);
+      if (targetBlock && targetBlock.attachedStrokes && targetBlock.attachedStrokes.length > 0) {
+        const attachedStrokeIds = new Set(targetBlock.attachedStrokes.map((s: any) => s.id));
+        setStrokes(prev => prev.map(s => {
+          if (attachedStrokeIds.has(s.id) && s.blockId !== blockId) {
+            return { ...s, blockId };
+          }
+          return s;
+        }));
+      }
+    }
     setDrawOverlayBlockId(blockId);
     setDrawOverlayBlockType(blockType);
     setDrawOverlayInitialY(initialY);
@@ -734,6 +745,38 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     } ${isRearranging ? 'pointer-events-none' : ''}`}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
+                    {isSelected && !isRearranging && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-zinc-200/60 dark:border-white/10 animate-in fade-in zoom-in-95 duration-150">
+                        <button 
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            openDrawOverlay(block.id, 'text', block.y); 
+                          }}
+                          className="flex items-center gap-1 text-xs font-semibold text-zinc-700 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                          title="Annotate Text"
+                        >
+                          <PenTool size={13} />
+                          <span>Annotate</span>
+                        </button>
+                        <div className="w-px h-3 bg-zinc-300 dark:bg-white/20" />
+                        <button 
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            setTexts(prev => prev.filter(t => t.id !== block.id)); 
+                          }}
+                          className="p-1 text-red-400 hover:text-red-500 dark:hover:text-red-300 transition-colors"
+                          title="Delete Text"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
                     <TipTapEditor 
                       id={block.id}
                       content={block.content}
@@ -1069,6 +1112,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         onClose={() => setIsDrawOverlayOpen(false)}
         annotateBlockId={drawOverlayBlockId}
         blockType={drawOverlayBlockType}
+        targetBlock={sortedBlocks.find(b => b.id === drawOverlayBlockId)}
         initialBlockY={drawOverlayInitialY}
         strokes={strokes}
         setStrokes={setStrokes}
