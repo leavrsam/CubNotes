@@ -65,18 +65,75 @@ export function MobileDrawOverlay({
     return '✏️ Annotating Block';
   };
 
-  // Set default drawing color based on current theme and reset pan/zoom on open
+function getStrokeBoundingBox(stroke: Stroke) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of stroke.points) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  const sX = stroke.scaleX || 1;
+  const sY = stroke.scaleY || 1;
+  const tX = stroke.x || 0;
+  const tY = stroke.y || 0;
+  
+  return {
+    minX: minX * sX + tX,
+    minY: minY * sY + tY,
+    maxX: maxX * sX + tX,
+    maxY: maxY * sY + tY,
+  };
+}
+
+  // Set default drawing color based on current theme and auto-center existing strokes for sketch blocks
   useEffect(() => {
     if (isOpen) {
-      setPan({ x: 0, y: 0 });
-      setZoom(1);
       if (resolvedTheme === 'dark') {
         setColor('#FFFFFF');
       } else {
         setColor('#000000');
       }
+
+      if (!isContentBlockAnnotation && annotateBlockId) {
+        // Find existing strokes for this sketch block
+        const blockStrokes = strokes.filter(s => 
+          s.blockId === annotateBlockId || 
+          s.id === annotateBlockId || 
+          ('sketch-' + s.id) === annotateBlockId
+        );
+
+        if (blockStrokes.length > 0) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          blockStrokes.forEach(s => {
+            if (!s.points || s.points.length === 0) return;
+            const box = getStrokeBoundingBox(s);
+            minX = Math.min(minX, box.minX);
+            minY = Math.min(minY, box.minY);
+            maxX = Math.max(maxX, box.maxX);
+            maxY = Math.max(maxY, box.maxY);
+          });
+
+          if (isFinite(minX) && minX !== Infinity) {
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const screenW = typeof window !== 'undefined' ? window.innerWidth : 390;
+            const screenH = typeof window !== 'undefined' ? window.innerHeight : 844;
+            setPan({
+              x: Math.round(screenW / 2 - centerX),
+              y: Math.round(screenH / 2 - centerY),
+            });
+            setZoom(1);
+            return;
+          }
+        }
+      }
+
+      // Default for new sketch
+      setPan({ x: 0, y: 0 });
+      setZoom(1);
     }
-  }, [isOpen, resolvedTheme]);
+  }, [isOpen, annotateBlockId, isContentBlockAnnotation, resolvedTheme, strokes]);
 
   // Measure card dimensions when annotating a content block
   useEffect(() => {
