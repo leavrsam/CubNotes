@@ -60,6 +60,26 @@ function getIntersectionArea(box1: any, box2: any) {
   return overlapX * overlapY;
 }
 
+function getAttachedStrokesExtent(strokes: Stroke[]) {
+  if (!strokes || strokes.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0, hasStrokes: false };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  strokes.forEach(s => {
+    if (!s.points || s.points.length === 0) return;
+    const box = getStrokeBoundingBox(s);
+    minX = Math.min(minX, box.minX);
+    minY = Math.min(minY, box.minY);
+    maxX = Math.max(maxX, box.maxX);
+    maxY = Math.max(maxY, box.maxY);
+  });
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    hasStrokes: isFinite(minY) && minY !== Infinity
+  };
+}
+
 import { getStroke } from "perfect-freehand";
 
 // Utility to convert perfect-freehand points to an SVG path string
@@ -686,6 +706,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
           {sortedBlocks.map((block, index) => {
             const blockBox = getBlockBoundingBox(block);
+            const strokeExtent = getAttachedStrokesExtent(block.attachedStrokes);
             const reverseZ = 500 - index;
             const isSelected = activeBlockId === block.id;
 
@@ -737,6 +758,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     className={`w-full min-h-[50px] relative rounded-xl transition-all duration-200 ${
                       isSelected && !isRearranging ? 'ring-1 ring-primary-500/40 bg-zinc-50/50 dark:bg-zinc-900/30' : ''
                     } ${isRearranging ? 'pointer-events-none' : ''}`}
+                    style={{
+                      minHeight: strokeExtent.hasStrokes ? Math.max(50, strokeExtent.maxY + 24) : undefined,
+                      marginTop: strokeExtent.hasStrokes && strokeExtent.minY < -4 ? Math.abs(strokeExtent.minY) + 8 : undefined
+                    }}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
                     {isSelected && !isRearranging && (
@@ -791,6 +816,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     className={`relative w-full rounded-2xl transition-all duration-200 ${
                       isSelected && !isRearranging ? 'ring-2 ring-primary-500/50 shadow-md' : ''
                     }`}
+                    style={{
+                      minHeight: strokeExtent.hasStrokes ? Math.max(100, strokeExtent.maxY + 24) : undefined,
+                      marginTop: strokeExtent.hasStrokes && strokeExtent.minY < -4 ? Math.abs(strokeExtent.minY) + 8 : undefined
+                    }}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
                     <MobileAudioCard 
@@ -807,12 +836,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 {block.type === 'image' && (
                   <div 
                     id={`block-${block.id}`}
-                    className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
+                    className={`relative w-full rounded-xl shadow-sm border transition-all ${
                       isSelected && !isRearranging ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
                     } bg-black`}
+                    style={{
+                      minHeight: strokeExtent.hasStrokes ? Math.max(180, strokeExtent.maxY + 24) : undefined,
+                      marginTop: strokeExtent.hasStrokes && strokeExtent.minY < -4 ? Math.abs(strokeExtent.minY) + 8 : undefined
+                    }}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
-                    <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
+                    <div className="w-full h-auto overflow-hidden rounded-xl">
+                      <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
+                    </div>
                     
                     {isSelected && !isRearranging && (
                       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-white/10">
@@ -856,6 +891,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     className={`relative w-full bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border transition-all ${
                       isSelected && !isRearranging ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
                     } flex items-center justify-between`}
+                    style={{
+                      minHeight: strokeExtent.hasStrokes ? Math.max(64, strokeExtent.maxY + 24) : undefined,
+                      marginTop: strokeExtent.hasStrokes && strokeExtent.minY < -4 ? Math.abs(strokeExtent.minY) + 8 : undefined
+                    }}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
                     <div className="flex items-center gap-3 overflow-hidden relative z-30">
@@ -911,9 +950,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 {block.type === 'video' && (
                   <div 
                     id={`block-${block.id}`}
-                    className={`relative w-full rounded-xl overflow-hidden shadow-sm border transition-all ${
+                    className={`relative w-full rounded-xl shadow-sm border transition-all ${
                       isSelected && !isRearranging ? 'border-primary-500 ring-2 ring-primary-500/20' : 'border-zinc-200 dark:border-zinc-800'
                     } bg-black aspect-video ${isRearranging ? 'pointer-events-none' : ''}`}
+                    style={{
+                      minHeight: strokeExtent.hasStrokes ? Math.max(200, strokeExtent.maxY + 24) : undefined,
+                      marginTop: strokeExtent.hasStrokes && strokeExtent.minY < -4 ? Math.abs(strokeExtent.minY) + 8 : undefined
+                    }}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
                     {(() => {
