@@ -49,12 +49,12 @@ export function MobileNavigation({
           <div className="flex items-center justify-between px-4 py-3">
             <button 
               onClick={onBackToFolders}
-              className="flex items-center text-primary-600 dark:text-yellow-500 font-medium"
+              className="flex items-center text-primary-600 dark:text-primary-400 font-medium"
             >
               <ArrowLeft size={20} className="mr-1" />
               Folders
             </button>
-            <button onClick={() => onAddPage(sectionId)} className="text-primary-600 dark:text-yellow-500">
+            <button onClick={() => onAddPage(sectionId)} className="text-primary-600 dark:text-primary-400">
               <Plus size={24} />
             </button>
           </div>
@@ -101,7 +101,7 @@ export function MobileNavigation({
       >
         <div className="flex items-center justify-between px-4 py-3">
           <div className="w-6" /> {/* Spacer */}
-          <button onClick={onAddNotebook} className="text-primary-600 dark:text-yellow-500">
+          <button onClick={onAddNotebook} className="text-primary-600 dark:text-primary-400">
             <Plus size={24} />
           </button>
         </div>
@@ -119,7 +119,7 @@ export function MobileNavigation({
             <div key={nb.id} className="space-y-2">
               <div className="flex items-center justify-between px-2">
                 <h2 className="text-sm font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">{nb.title}</h2>
-                <button onClick={() => onAddSection(nb.id)} className="text-primary-600 dark:text-yellow-500">
+                <button onClick={() => onAddSection(nb.id)} className="text-primary-600 dark:text-primary-400">
                   <Plus size={18} />
                 </button>
               </div>
@@ -137,7 +137,7 @@ export function MobileNavigation({
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Folder size={20} className="text-primary-500 dark:text-yellow-500" />
+                        <Folder size={20} className="text-primary-500 dark:text-primary-400" />
                         <span className="font-medium text-zinc-900 dark:text-zinc-100">{sec.title}</span>
                       </div>
                       <div className="flex items-center gap-2">

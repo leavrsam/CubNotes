@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { Stroke, TextNode, ImageNode, FileNode, VideoNode, AudioNode } from './CustomCanvas';
 import { Stage, Layer, Rect, Group, Path, Text } from 'react-konva';
+import { useAccent, ACCENT_COLORS } from './AccentProvider';
 
 interface MinimapProps {
   strokes: Stroke[];
@@ -21,6 +22,8 @@ export const Minimap: React.FC<MinimapProps> = ({
   strokes, texts, images, files, videos, audios, pan, zoom, setPan
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { accentColor } = useAccent();
+  const accentHex = ACCENT_COLORS[accentColor]?.[500] || '#6366f1';
 
   // Calculate the bounding box of ALL content on the canvas
   const bounds = useMemo(() => {
@@ -226,9 +229,9 @@ export const Minimap: React.FC<MinimapProps> = ({
             y={miniViewY}
             width={miniViewW}
             height={miniViewH}
-            stroke="#3b82f6" // blue-500
+            stroke={accentHex}
             strokeWidth={2}
-            fill="rgba(59, 130, 246, 0.1)"
+            fill={`${accentHex}20`}
             listening={false}
           />
         </Layer>

@@ -1189,7 +1189,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   {!isRecording ? (
                     <button
                       onClick={startRecording}
-                      className="flex flex-col items-center justify-center h-full px-4 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-indigo-600 dark:text-indigo-400 font-semibold"
+                      className="flex flex-col items-center justify-center h-full px-4 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-primary-600 dark:text-primary-400 font-semibold"
                     >
                       <Mic size={18} strokeWidth={2} />
                       <span className="text-[11px] font-bold mt-1 flex items-center gap-1">
@@ -1738,7 +1738,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           >
             <button
               onClick={() => handleOrganize()}
-              className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-full shadow-xl font-medium transition-transform active:scale-95"
+              className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-full shadow-xl font-medium transition-transform active:scale-95"
             >
               <span>Organize Chaos</span>
             </button>

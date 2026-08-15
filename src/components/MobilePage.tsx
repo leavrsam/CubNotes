@@ -598,7 +598,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           className="fixed top-0 left-0 right-0 z-[1600] pointer-events-none px-4 flex items-center justify-between transition-all"
           style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
         >
-          <div className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-600 dark:bg-yellow-500 text-white dark:text-zinc-950 shadow-lg backdrop-blur-2xl font-bold text-xs animate-in fade-in">
+          <div className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-600 dark:bg-primary-500 text-white dark:text-zinc-950 shadow-lg backdrop-blur-2xl font-bold text-xs animate-in fade-in">
             <GripVertical size={15} />
             <span>Rearrange Blocks</span>
           </div>
@@ -619,7 +619,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           {onBack ? (
             <button 
               onClick={onBack}
-              className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-primary-600 dark:text-yellow-500 font-semibold text-sm active:scale-95 transition-all"
+              className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-primary-600 dark:text-primary-400 font-semibold text-sm active:scale-95 transition-all"
               title="Back to Notes"
             >
               <ChevronLeft size={19} className="-ml-1" />
@@ -683,7 +683,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 onTouchEnd={handleCardTouchEnd}
                 className={`relative transition-all duration-200 ${
                   isRearranging 
-                    ? 'p-3 rounded-2xl border-2 border-dashed border-primary-500/40 dark:border-yellow-500/40 bg-zinc-50/70 dark:bg-zinc-900/70 shadow-sm' 
+                    ? 'p-3 rounded-2xl border-2 border-dashed border-primary-500/40 dark:border-primary-400/40 bg-zinc-50/70 dark:bg-zinc-900/70 shadow-sm' 
                     : ''
                 }`}
                 style={{ zIndex: reverseZ }}
@@ -936,7 +936,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               <span>•</span>
               <button 
                 onClick={(e) => { e.stopPropagation(); startNewSketchBlock(); }}
-                className="inline-flex items-center gap-1 text-primary-600 dark:text-yellow-500/80 hover:underline font-semibold"
+                className="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline font-semibold"
               >
                 <PenTool size={12} />
                 <span>Add sketch</span>
@@ -992,7 +992,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             }}
             className={`p-2 transition-all rounded-full active:scale-90 relative ${
               activeBlockId 
-                ? 'text-primary-600 dark:text-yellow-500 bg-primary-500/10 dark:bg-yellow-500/10 ring-1 ring-primary-500/30' 
+                ? 'text-primary-600 dark:text-primary-400 bg-primary-500/10 dark:bg-primary-400/10 ring-1 ring-primary-500/30' 
                 : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
             }`}
             title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}

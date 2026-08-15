@@ -116,7 +116,7 @@ export function MediaOverlay({
 
             {tool === "home" && (
               <button 
-                className="absolute -top-4 left-6 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 z-10"
+                className="absolute -top-4 left-6 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-primary-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 z-10"
                 onClick={(e) => { e.stopPropagation(); onAnnotate?.(img.id); }}
                 title="Annotate Image"
               >
@@ -167,7 +167,7 @@ export function MediaOverlay({
 
             {tool === "home" && (
               <button 
-                className="absolute -top-3 left-5 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 z-10"
+                className="absolute -top-3 left-5 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-primary-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 z-10"
                 onClick={(e) => { e.stopPropagation(); onAnnotate?.(file.id); }}
                 title="Annotate File"
               >
@@ -223,7 +223,7 @@ export function MediaOverlay({
 
             {tool === "home" && (
               <button 
-                className="absolute -top-4 left-6 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 z-10"
+                className="absolute -top-4 left-6 w-8 h-8 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-primary-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 z-10"
                 onClick={(e) => { e.stopPropagation(); onAnnotate?.(video.id); }}
                 title="Annotate Video"
               >

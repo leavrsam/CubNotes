@@ -124,7 +124,7 @@ function AudioNodeCard({
             }}
           >
             <button
-              className="flex gap-[1px] text-[10px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full hover:text-indigo-500 transition-colors pointer-events-auto"
+              className="flex gap-[1px] text-[10px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full hover:text-primary-500 transition-colors pointer-events-auto"
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -288,10 +288,10 @@ function AudioNodeCard({
                 )}
                 {node.chatHistory?.map((msg, idx) => (
                   <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400' : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'}`}>
                       {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                     </div>
-                    <div className={`p-3 rounded-2xl max-w-[85%] text-sm ${msg.role === 'user' ? 'bg-indigo-500 text-white rounded-tr-sm' : 'bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200/50 dark:border-zinc-700/50 rounded-tl-sm'}`}>
+                    <div className={`p-3 rounded-2xl max-w-[85%] text-sm ${msg.role === 'user' ? 'bg-primary-500 text-white rounded-tr-sm' : 'bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200/50 dark:border-zinc-700/50 rounded-tl-sm'}`}>
                       {msg.role === 'user' ? msg.text : <ReactMarkdown className="prose prose-sm dark:prose-invert prose-p:my-1 max-w-none">{msg.text}</ReactMarkdown>}
                     </div>
                   </div>
@@ -319,12 +319,12 @@ function AudioNodeCard({
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     placeholder="Ask about the transcript..."
-                    className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-500/50"
                   />
                   <button 
                     type="submit"
                     disabled={!chatInput.trim() || isChatting || !node.transcript}
-                    className="w-9 h-9 flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                    className="w-9 h-9 flex items-center justify-center bg-primary-500 hover:bg-primary-600 text-white rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   >
                     <Send size={14} className="-ml-0.5" />
                   </button>

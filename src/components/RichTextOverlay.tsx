@@ -166,7 +166,7 @@ export function RichTextOverlay({
                     }}
                   >
                     <button
-                      className="flex gap-[1px] text-[10px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full px-1 hover:text-indigo-500 transition-colors pointer-events-auto"
+                      className="flex gap-[1px] text-[10px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full px-1 hover:text-primary-500 transition-colors pointer-events-auto"
                       onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
