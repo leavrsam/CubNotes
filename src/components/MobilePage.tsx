@@ -154,29 +154,14 @@ function AttachedStrokes({ strokes, blockBox, isStandalone }: { strokes: Stroke[
   }
 
   // Non-standalone (attached to text/image/audio card)
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  strokes.forEach((stroke: Stroke) => {
-    const box = getStrokeBoundingBox(stroke);
-    minX = Math.min(minX, box.minX);
-    minY = Math.min(minY, box.minY);
-    maxX = Math.max(maxX, box.maxX);
-    maxY = Math.max(maxY, box.maxY);
-  });
-
-  const cardWidth = blockBox.width || 400;
-  const cardHeight = blockBox.height || 300;
-  const viewBoxWidth = Math.max(cardWidth, maxX);
-  const viewBoxHeight = Math.max(cardHeight, maxY);
-
+  // 1:1 pixel rendering: fixed to where and how they were drawn, never stretched or distorted
   return (
     <svg 
-      className="absolute inset-0 w-full h-full pointer-events-none z-20"
-      viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-      preserveAspectRatio="none"
+      className="absolute inset-0 w-full h-full pointer-events-none z-20 overflow-visible"
     >
       <defs>
         <mask id={`mask-${strokes[0]?.id || 'empty'}`}>
-          <rect x={0} y={0} width={viewBoxWidth} height={viewBoxHeight} fill="white" />
+          <rect x="0" y="0" width="100%" height="100%" fill="white" />
           {strokes.filter(s => s.type === 'eraser').map(stroke => {
             if (!stroke.points || stroke.points.length === 0) return null;
             const strokeData = getStroke(stroke.points, { size: stroke.size, thinning: 0.5, smoothing: 0.5, streamline: 0.5 });

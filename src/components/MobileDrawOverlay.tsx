@@ -214,7 +214,7 @@ function getStrokeBoundingBox(stroke: Stroke) {
 
               {blockType === 'text' && (
                 <div 
-                  className="p-5 max-h-[58vh] overflow-y-auto text-sm leading-relaxed text-zinc-900 dark:text-zinc-100 prose dark:prose-invert"
+                  className="p-4 max-h-[58vh] overflow-y-auto text-[17.5px] leading-[1.55] text-zinc-900 dark:text-zinc-100 prose dark:prose-invert max-w-none prose-p:my-0.5 prose-p:leading-relaxed prose-p:whitespace-pre-wrap"
                   dangerouslySetInnerHTML={{ __html: targetBlock.content || '<p class="text-zinc-400 italic">Empty text note...</p>' }}
                 />
               )}
