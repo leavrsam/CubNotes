@@ -32,6 +32,47 @@ const SIZE_PRESETS = [
   { label: 'Thick', size: 8, iconSize: 12 },
 ];
 
+function getStrokeBoundingBox(stroke: Stroke) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of stroke.points) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  const sX = stroke.scaleX || 1;
+  const sY = stroke.scaleY || 1;
+  const tX = stroke.x || 0;
+  const tY = stroke.y || 0;
+  
+  return {
+    minX: minX * sX + tX,
+    minY: minY * sY + tY,
+    maxX: maxX * sX + tX,
+    maxY: maxY * sY + tY,
+  };
+}
+
+function getStrokeListExtent(strokeList: Stroke[]) {
+  if (!strokeList || strokeList.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0, hasStrokes: false };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  strokeList.forEach(s => {
+    if (!s.points || s.points.length === 0) return;
+    const box = getStrokeBoundingBox(s);
+    minX = Math.min(minX, box.minX);
+    minY = Math.min(minY, box.minY);
+    maxX = Math.max(maxX, box.maxX);
+    maxY = Math.max(maxY, box.maxY);
+  });
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    hasStrokes: isFinite(minY) && minY !== Infinity
+  };
+}
+
 export function MobileDrawOverlay({ 
   isOpen, 
   onClose, 
@@ -54,6 +95,21 @@ export function MobileDrawOverlay({
 
   const isContentBlockAnnotation = !!(annotateBlockId && blockType && blockType !== 'drawing' && targetBlock);
 
+  // Find all strokes for the active annotated block
+  const blockStrokes = strokes.filter(s => 
+    s.blockId === annotateBlockId || 
+    s.id === annotateBlockId || 
+    ('sketch-' + s.id) === annotateBlockId
+  );
+  const strokeExtent = getStrokeListExtent(blockStrokes);
+
+  // Expand the canvas and card height so all existing annotations plus extra bottom space are fully visible
+  const effectiveCardHeight = Math.max(
+    cardDims.height, 
+    strokeExtent.hasStrokes ? Math.round(strokeExtent.maxY + 100) : 0, 
+    260
+  );
+
   const getContextLabel = () => {
     if (!annotateBlockId) return '🎨 New Sketch Block';
     if (blockType === 'drawing') return '🎨 Editing Sketch';
@@ -64,27 +120,6 @@ export function MobileDrawOverlay({
     if (blockType === 'text') return '📝 Annotating Text';
     return '✏️ Annotating Block';
   };
-
-function getStrokeBoundingBox(stroke: Stroke) {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const [x, y] of stroke.points) {
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
-  }
-  const sX = stroke.scaleX || 1;
-  const sY = stroke.scaleY || 1;
-  const tX = stroke.x || 0;
-  const tY = stroke.y || 0;
-  
-  return {
-    minX: minX * sX + tX,
-    minY: minY * sY + tY,
-    maxX: maxX * sX + tX,
-    maxY: maxY * sY + tY,
-  };
-}
 
   const hasAutoCenteredRef = useRef(false);
 
@@ -105,36 +140,17 @@ function getStrokeBoundingBox(stroke: Stroke) {
       hasAutoCenteredRef.current = true;
 
       if (!isContentBlockAnnotation && annotateBlockId) {
-        // Find existing strokes for this sketch block
-        const blockStrokes = strokes.filter(s => 
-          s.blockId === annotateBlockId || 
-          s.id === annotateBlockId || 
-          ('sketch-' + s.id) === annotateBlockId
-        );
-
-        if (blockStrokes.length > 0) {
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          blockStrokes.forEach(s => {
-            if (!s.points || s.points.length === 0) return;
-            const box = getStrokeBoundingBox(s);
-            minX = Math.min(minX, box.minX);
-            minY = Math.min(minY, box.minY);
-            maxX = Math.max(maxX, box.maxX);
-            maxY = Math.max(maxY, box.maxY);
+        if (blockStrokes.length > 0 && strokeExtent.hasStrokes) {
+          const centerX = (strokeExtent.minX + strokeExtent.maxX) / 2;
+          const centerY = (strokeExtent.minY + strokeExtent.maxY) / 2;
+          const screenW = typeof window !== 'undefined' ? window.innerWidth : 390;
+          const screenH = typeof window !== 'undefined' ? window.innerHeight : 844;
+          setPan({
+            x: Math.round(screenW / 2 - centerX),
+            y: Math.round(screenH / 2 - centerY),
           });
-
-          if (isFinite(minX) && minX !== Infinity) {
-            const centerX = (minX + maxX) / 2;
-            const centerY = (minY + maxY) / 2;
-            const screenW = typeof window !== 'undefined' ? window.innerWidth : 390;
-            const screenH = typeof window !== 'undefined' ? window.innerHeight : 844;
-            setPan({
-              x: Math.round(screenW / 2 - centerX),
-              y: Math.round(screenH / 2 - centerY),
-            });
-            setZoom(1);
-            return;
-          }
+          setZoom(1);
+          return;
         }
       }
 
@@ -150,11 +166,11 @@ function getStrokeBoundingBox(stroke: Stroke) {
       const updateDimensions = () => {
         if (cardRef.current) {
           const rect = cardRef.current.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            setCardDims({
+          if (rect.width > 0) {
+            setCardDims(prev => ({
               width: Math.round(rect.width),
-              height: Math.round(rect.height),
-            });
+              height: Math.max(prev.height, Math.round(rect.height)),
+            }));
           }
         }
       };
@@ -199,14 +215,17 @@ function getStrokeBoundingBox(stroke: Stroke) {
 
       {/* Main Center Area */}
       {isContentBlockAnnotation ? (
-        /* Focused Content Block with Canvas Overlay */
-        <div className="flex-1 w-full h-full flex items-center justify-center p-4 pt-16 pb-28 relative z-[2050] overflow-hidden">
+        /* Focused Content Block with Canvas Overlay (Scrollable for extra-long annotations) */
+        <div className="flex-1 w-full h-full flex items-start justify-center p-4 pt-16 pb-28 relative z-[2050] overflow-y-auto overscroll-contain">
           <div 
             ref={cardRef}
-            className="relative w-full max-w-[420px] max-h-[62vh] rounded-2xl overflow-hidden shadow-2xl border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col justify-center"
+            style={{
+              minHeight: `${effectiveCardHeight}px`,
+            }}
+            className="relative w-full max-w-[420px] rounded-2xl overflow-hidden shadow-2xl border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col justify-start pb-20 my-auto"
           >
             {/* Underlying Block Content */}
-            <div className="w-full h-full overflow-hidden select-none pointer-events-none">
+            <div className="w-full h-full select-none pointer-events-none pb-12">
               {blockType === 'image' && (
                 <img 
                   src={targetBlock.url} 
@@ -217,13 +236,13 @@ function getStrokeBoundingBox(stroke: Stroke) {
                       setCardDims({ width: Math.round(rect.width), height: Math.round(rect.height) });
                     }
                   }}
-                  className="w-full h-auto max-h-[58vh] object-contain bg-black" 
+                  className="w-full h-auto max-h-[58vh] object-contain bg-black rounded-xl" 
                 />
               )}
 
               {blockType === 'text' && (
                 <div 
-                  className="p-4 max-h-[58vh] overflow-y-auto text-[17.5px] leading-[1.55] text-zinc-900 dark:text-zinc-100 prose dark:prose-invert max-w-none prose-p:my-0.5 prose-p:leading-relaxed prose-p:whitespace-pre-wrap"
+                  className="p-4 text-[17.5px] leading-[1.55] text-zinc-900 dark:text-zinc-100 prose dark:prose-invert max-w-none prose-p:my-0.5 prose-p:leading-relaxed prose-p:whitespace-pre-wrap"
                   dangerouslySetInnerHTML={{ __html: targetBlock.content || '<p class="text-zinc-400 italic">Empty text note...</p>' }}
                 />
               )}
@@ -279,7 +298,7 @@ function getStrokeBoundingBox(stroke: Stroke) {
                 zoom={1}
                 setZoom={() => {}}
                 width={cardDims.width}
-                height={cardDims.height}
+                height={effectiveCardHeight}
                 tool={tool}
                 activeColor={color}
                 activeSize={size}
