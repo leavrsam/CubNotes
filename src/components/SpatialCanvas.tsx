@@ -359,6 +359,13 @@ export function SpatialCanvas({
     }
   };
 
+  const visibleStrokes = useMemo(() => {
+    if (annotateBlockId) {
+      return strokes.filter(s => s.blockId === annotateBlockId);
+    }
+    return strokes;
+  }, [strokes, annotateBlockId]);
+
   return (
     <div className={`absolute inset-0 touch-none ${tool === 'pen' ? 'cursor-crosshair' : tool === 'home' ? 'cursor-text' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       <Stage
@@ -401,7 +408,7 @@ export function SpatialCanvas({
         ref={stageRef}
       >
         <Layer scaleX={zoom} scaleY={zoom}>
-          {strokes.map((stroke) => {
+          {visibleStrokes.map((stroke) => {
             const strokeData = getStroke(stroke.points, {
               size: stroke.size,
               thinning: 0.5,

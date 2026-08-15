@@ -93,26 +93,8 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType,
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex flex-col select-none overflow-hidden touch-none">
-      {/* Background Mask */}
-      {annotateBlockId && blockRect ? (
-        <div 
-          className="absolute inset-0 pointer-events-none bg-black/50 backdrop-blur-[2px] transition-all"
-          style={{
-            clipPath: `polygon(
-              0% 0%, 0% 100%, 100% 100%, 100% 0%, 0% 0%,
-              ${blockRect.x * zoom + pan.x}px ${blockRect.y * zoom + pan.y}px,
-              ${(blockRect.x + blockRect.width) * zoom + pan.x}px ${blockRect.y * zoom + pan.y}px,
-              ${(blockRect.x + blockRect.width) * zoom + pan.x}px ${(blockRect.y + blockRect.height) * zoom + pan.y}px,
-              ${blockRect.x * zoom + pan.x}px ${(blockRect.y + blockRect.height) * zoom + pan.y}px,
-              ${blockRect.x * zoom + pan.x}px ${blockRect.y * zoom + pan.y}px
-            )`
-          }}
-        />
-      ) : (
-        <div className="absolute inset-0 pointer-events-none bg-white/95 dark:bg-zinc-950/95 backdrop-blur-sm" />
-      )}
-
+    <div className="fixed inset-0 z-[2000] flex flex-col select-none overflow-hidden touch-none bg-zinc-50 dark:bg-zinc-950 animate-in fade-in duration-150">
+      
       {/* Top Header Bar */}
       <div 
         className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[2100] pointer-events-auto"
@@ -125,13 +107,14 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType,
         
         <button 
           onClick={onClose}
-          className="px-4 py-1.5 bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-100 text-white dark:text-zinc-900 rounded-full font-semibold text-xs shadow-md active:scale-95 transition-transform"
+          className="flex items-center gap-1 px-4 py-1.5 bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-100 text-white dark:text-zinc-900 rounded-full font-semibold text-xs shadow-md active:scale-95 transition-transform"
         >
-          Done
+          <Check size={14} />
+          <span>Done</span>
         </button>
       </div>
 
-      {/* Canvas Layer */}
+      {/* Clean Dedicated Canvas Layer */}
       <div className="absolute inset-0 z-[2050]">
         <SpatialCanvas 
           strokes={strokes}
@@ -146,7 +129,7 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType,
           activePresetType={tool === 'highlighter' ? 'highlighter' : 'pen'}
           eraserType="stroke"
           annotateBlockId={annotateBlockId}
-          blockOffsetMap={annotateBlockId && blockRect ? { [annotateBlockId]: { x: blockRect.x, y: blockRect.y } } : undefined}
+          blockOffsetMap={annotateBlockId ? { [annotateBlockId]: { x: 0, y: 0 } } : undefined}
         />
       </div>
 

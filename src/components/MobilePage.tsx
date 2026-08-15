@@ -317,8 +317,12 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   };
 
   const deleteDrawingBlock = (block: any) => {
-    const strokeIds = new Set(block.attachedStrokes.map((s: any) => s.id));
-    setStrokes(prev => prev.filter(s => !strokeIds.has(s.id) && s.blockId !== block.id));
+    const strokeIds = new Set((block.attachedStrokes || []).map((s: any) => s.id));
+    setStrokes(prev => prev.filter(s => {
+      if (strokeIds.has(s.id)) return false;
+      if (block.id && s.blockId === block.id) return false;
+      return true;
+    }));
     setActiveBlockId(null);
     toast.success("Sketch deleted");
   };
@@ -771,7 +775,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     {isSelected && !isRearranging && (
                       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-white/10">
                         <button 
-                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'image'); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            openDrawOverlay(block.id, 'image'); 
+                          }}
                           className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
                           title="Annotate"
                         >
@@ -780,7 +790,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                         </button>
                         <div className="w-px h-3 bg-white/20" />
                         <button 
-                          onClick={(e) => { e.stopPropagation(); setImages(prev => prev.filter(n => n.id !== block.id)); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            setImages(prev => prev.filter(n => n.id !== block.id)); 
+                          }}
                           className="p-1 text-red-400 hover:text-red-300 transition-colors"
                           title="Delete"
                         >
@@ -807,7 +823,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     <div className="flex items-center gap-1 relative z-30">
                       {isSelected && !isRearranging && (
                         <button 
-                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'file'); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            openDrawOverlay(block.id, 'file'); 
+                          }}
                           className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                           title="Annotate"
                         >
@@ -819,13 +841,21 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                         download 
                         target="_blank" 
                         rel="noopener noreferrer" 
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
                         className="p-1.5 text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                         title="Download"
                       >
                         <Download size={16} />
                       </a>
                       <button 
-                        onClick={(e) => { e.stopPropagation(); setFiles(prev => prev.filter(n => n.id !== block.id)); }} 
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onClick={(e) => { 
+                          e.preventDefault();
+                          e.stopPropagation(); 
+                          setFiles(prev => prev.filter(n => n.id !== block.id)); 
+                        }} 
                         className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                         title="Delete"
                       >
@@ -867,7 +897,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     {isSelected && !isRearranging && (
                       <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-white/10">
                         <button 
-                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'video'); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            openDrawOverlay(block.id, 'video'); 
+                          }}
                           className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
                           title="Annotate"
                         >
@@ -876,7 +912,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                         </button>
                         <div className="w-px h-3 bg-white/20" />
                         <button 
-                          onClick={(e) => { e.stopPropagation(); setVideos(prev => prev.filter(n => n.id !== block.id)); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            setVideos(prev => prev.filter(n => n.id !== block.id)); 
+                          }}
                           className="p-1 text-red-400 hover:text-red-300 transition-colors"
                           title="Delete"
                         >
@@ -901,7 +943,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     {isSelected && !isRearranging && (
                       <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/80 dark:bg-zinc-800/90 backdrop-blur-md rounded-full px-3 py-1.5 z-30 shadow-lg border border-white/10 animate-in fade-in zoom-in-95 duration-150">
                         <button 
-                          onClick={(e) => { e.stopPropagation(); openDrawOverlay(block.id, 'drawing'); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            openDrawOverlay(block.id, 'drawing'); 
+                          }}
                           className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
                           title="Edit Sketch"
                         >
@@ -910,7 +958,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                         </button>
                         <div className="w-px h-3 bg-white/20" />
                         <button 
-                          onClick={(e) => { e.stopPropagation(); deleteDrawingBlock(block); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            deleteDrawingBlock(block); 
+                          }}
                           className="p-1 text-red-400 hover:text-red-300 transition-colors"
                           title="Delete Sketch"
                         >
