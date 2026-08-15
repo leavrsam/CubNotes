@@ -480,9 +480,25 @@ export default function Home() {
               }}
               onSelectPage={(id) => setSelectedPageId(id)}
               onBackToFolders={() => setMobileView('folders')}
-              onAddNotebook={() => addNotebook("New Notebook")}
-              onAddSection={(nbId) => addSection(nbId, "New Section")}
-              onAddPage={(secId) => addPage(secId, "New Page")}
+              onAddNotebook={async (title) => {
+                const res = await addNotebook(title || "New Notebook");
+                return res;
+              }}
+              onAddSection={async (nbId, title) => {
+                const res = await addSection(nbId, title || "New Folder");
+                return res;
+              }}
+              onAddPage={async (secId, title) => {
+                const page = await addPage(secId, title || "Untitled Note");
+                if (page?.id) {
+                  setSelectedPageId(page.id);
+                }
+                return page;
+              }}
+              onDeletePage={deletePage}
+              onDeleteSection={deleteSection}
+              onDeleteNotebook={deleteNotebook}
+              onOpenSettings={() => setIsSettingsOpen(true)}
             />
           ) : (
             <div className="w-full h-full flex flex-col relative">
@@ -492,7 +508,10 @@ export default function Home() {
                 pageTitle={activePageTitle}
                 pageCreatedAt={activePageCreatedAt}
                 onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
-                onBack={() => setSelectedPageId(null)}
+                onBack={() => {
+                  setSelectedPageId(null);
+                  setMobileView('folders');
+                }}
                 isRecording={isAnyRecording}
                 isProcessing={isProcessing}
                 onToggleMeeting={handleToggleMeeting}

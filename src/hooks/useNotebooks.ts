@@ -137,7 +137,7 @@ export function useNotebooks() {
   }, [fetchNotebooks, supabase]);
 
   const addNotebook = async (title: string, is_journal: boolean = false) => {
-    if (!userId) return;
+    if (!userId) return null;
     
     // Create the notebook
     const { data: nbData, error: nbError } = await supabase
@@ -148,9 +148,10 @@ export function useNotebooks() {
       
     if (nbError) {
       console.error("Error creating notebook:", nbError);
-      return;
+      return null;
     }
     
+    let createdPageId: string | null = null;
     if (nbData) {
       // Auto-create a default section
       const { data: secData, error: secError } = await supabase
@@ -161,13 +162,17 @@ export function useNotebooks() {
         
       if (!secError && secData) {
         // Auto-create a default page
-        await supabase
+        const { data: pageData } = await supabase
           .from('pages')
-          .insert({ section_id: secData.id, title: 'Untitled Page', document_state: {} });
+          .insert({ section_id: secData.id, title: 'Untitled Page', document_state: {} })
+          .select()
+          .single();
+        if (pageData) createdPageId = pageData.id;
       }
     }
     
     await fetchNotebooks();
+    return { notebook: nbData, pageId: createdPageId };
   };
 
   const updateNotebook = async (id: string, title: string) => {
@@ -181,9 +186,10 @@ export function useNotebooks() {
   };
 
   const addSection = async (notebook_id: string, title: string) => {
-    const { error } = await supabase.from('sections').insert({ notebook_id, title });
+    const { data, error } = await supabase.from('sections').insert({ notebook_id, title }).select().single();
     if (error) console.error("Error creating section:", error);
     await fetchNotebooks();
+    return data as Section | null;
   };
 
   const updateSection = async (id: string, title: string) => {
@@ -197,9 +203,10 @@ export function useNotebooks() {
   };
 
   const addPage = async (section_id: string, title: string) => {
-    const { error } = await supabase.from('pages').insert({ section_id, title, document_state: {} });
+    const { data, error } = await supabase.from('pages').insert({ section_id, title, document_state: {} }).select().single();
     if (error) console.error("Error creating page:", error);
     await fetchNotebooks();
+    return data as Page | null;
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps

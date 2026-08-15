@@ -654,10 +654,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             <button 
               onClick={onBack}
               className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-primary-600 dark:text-primary-400 font-semibold text-sm active:scale-95 transition-all"
-              title="Back to Notes"
+              title="Back to Folders"
             >
               <ChevronLeft size={19} className="-ml-1" />
-              <span>Notes</span>
+              <span>Folders</span>
             </button>
           ) : <div />}
 
