@@ -254,16 +254,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [isDrawOverlayOpen, setIsDrawOverlayOpen] = useState(false);
   const [drawOverlayBlockId, setDrawOverlayBlockId] = useState<string | null>(null);
   const [drawOverlayBlockType, setDrawOverlayBlockType] = useState<string | null>(null);
+  const [drawOverlayInitialY, setDrawOverlayInitialY] = useState<number | undefined>(undefined);
 
-  const openDrawOverlay = (blockId: string | null = null, blockType: string | null = null) => {
+  const openDrawOverlay = (blockId: string | null = null, blockType: string | null = null, initialY?: number) => {
     setDrawOverlayBlockId(blockId);
     setDrawOverlayBlockType(blockType);
+    setDrawOverlayInitialY(initialY);
     setIsDrawOverlayOpen(true);
   };
 
   const startNewSketchBlock = () => {
     const newSketchId = `sketch-${uuidv4()}`;
-    openDrawOverlay(newSketchId, 'drawing');
+    openDrawOverlay(newSketchId, 'drawing', bottomY);
   };
   
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -449,7 +451,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               type: 'drawing',
               id: stroke.blockId,
               x: stroke.x || 50,
-              y: stroke.y || box.minY || 0,
+              y: stroke.blockY ?? stroke.y ?? box.minY ?? 0,
               minX: box.minX,
               minY: box.minY,
               maxX: box.maxX,
@@ -461,6 +463,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           } else {
             const sBlock = sketchBlocksMap.get(stroke.blockId)!;
             sBlock.attachedStrokes.push(stroke);
+            if (stroke.blockY !== undefined && sBlock.y === sBlock.minY) {
+              sBlock.y = stroke.blockY; // Update block Y if a later stroke defines it
+            }
             const box = getStrokeBoundingBox(stroke);
             sBlock.minX = Math.min(sBlock.minX, box.minX);
             sBlock.minY = Math.min(sBlock.minY, box.minY);
@@ -780,7 +785,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                           onClick={(e) => { 
                             e.preventDefault();
                             e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'image'); 
+                            openDrawOverlay(block.id, 'image', block.y); 
                           }}
                           className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
                           title="Annotate"
@@ -828,7 +833,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                           onClick={(e) => { 
                             e.preventDefault();
                             e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'file'); 
+                            openDrawOverlay(block.id, 'file', block.y); 
                           }}
                           className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                           title="Annotate"
@@ -902,7 +907,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                           onClick={(e) => { 
                             e.preventDefault();
                             e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'video'); 
+                            openDrawOverlay(block.id, 'video', block.y); 
                           }}
                           className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
                           title="Annotate"
@@ -948,7 +953,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                           onClick={(e) => { 
                             e.preventDefault();
                             e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'drawing'); 
+                            openDrawOverlay(block.id, 'drawing', block.y); 
                           }}
                           className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
                           title="Edit Sketch"
@@ -1039,7 +1044,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             onClick={() => {
               if (activeBlockId) {
                 const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
-                openDrawOverlay(activeBlockId, activeBlock?.type || 'block');
+                openDrawOverlay(activeBlockId, activeBlock?.type || 'block', activeBlock?.y);
               } else {
                 startNewSketchBlock();
               }
@@ -1064,6 +1069,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         onClose={() => setIsDrawOverlayOpen(false)}
         annotateBlockId={drawOverlayBlockId}
         blockType={drawOverlayBlockType}
+        initialBlockY={drawOverlayInitialY}
         strokes={strokes}
         setStrokes={setStrokes}
       />

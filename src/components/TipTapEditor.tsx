@@ -4,7 +4,6 @@ import React, { useEffect, useState, useRef } from "react";
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import FontFamily from "@tiptap/extension-font-family";
@@ -92,7 +91,6 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       StarterKit.configure({
         history: false,
       }),
-      Underline,
       TextStyle,
       Color,
       FontFamily,

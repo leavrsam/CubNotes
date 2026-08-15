@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Stage, Layer, Path, Transformer } from "react-konva";
 import { getStroke } from "perfect-freehand";
 import { v4 as uuidv4 } from "uuid";
@@ -43,6 +43,7 @@ interface SpatialCanvasProps {
   onLassoComplete?: (minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => void;
   annotateBlockId?: string | null;
   blockOffsetMap?: Record<string, {x: number, y: number}>;
+  initialBlockY?: number;
 }
 
 export function SpatialCanvas({ 
@@ -53,7 +54,7 @@ export function SpatialCanvas({
   selectedIds = [], setSelectedIds,
   onCanvasClick, onLassoComplete,
   onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
-  annotateBlockId, blockOffsetMap
+  annotateBlockId, blockOffsetMap, initialBlockY
 }: SpatialCanvasProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
@@ -263,7 +264,8 @@ export function SpatialCanvas({
       color: activeColor,
       size: activeSize,
       type: activePresetType,
-      blockId: annotateBlockId || undefined
+      blockId: annotateBlockId || undefined,
+      blockY: initialBlockY
     });
   };
 

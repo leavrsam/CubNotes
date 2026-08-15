@@ -11,6 +11,7 @@ interface MobileDrawOverlayProps {
   blockType?: string | null;
   strokes: Stroke[];
   setStrokes: React.Dispatch<React.SetStateAction<Stroke[]>>;
+  initialBlockY?: number;
 }
 
 const COLOR_PRESETS = [
@@ -28,7 +29,7 @@ const SIZE_PRESETS = [
   { label: 'Thick', size: 8, iconSize: 12 },
 ];
 
-export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType, strokes, setStrokes }: MobileDrawOverlayProps) {
+export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType, strokes, setStrokes, initialBlockY }: MobileDrawOverlayProps) {
   const { resolvedTheme } = useTheme();
   const [tool, setTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
   const [color, setColor] = useState('#FFFFFF');
@@ -130,6 +131,7 @@ export function MobileDrawOverlay({ isOpen, onClose, annotateBlockId, blockType,
           eraserType="stroke"
           annotateBlockId={annotateBlockId}
           blockOffsetMap={annotateBlockId ? { [annotateBlockId]: { x: 0, y: 0 } } : undefined}
+          initialBlockY={initialBlockY}
         />
       </div>
 

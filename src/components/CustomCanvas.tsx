@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
@@ -27,12 +27,13 @@ export type Stroke = {
   points: number[][]; // [x, y, pressure][]
   color: string;
   size: number;
-  type?: 'highlighter' | 'eraser';
+  type?: 'highlighter' | 'eraser' | 'pen';
   x?: number;
   y?: number;
   width?: number;
   height?: number;
   blockId?: string; // Links local strokes to specific blocks
+  blockY?: number; // The absolute vertical position in the block feed
 };
 
 export type TextNode = {
