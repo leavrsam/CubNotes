@@ -56,6 +56,9 @@ export type AudioNode = {
   notes?: string;
   enhancedNotes?: string;
   chatHistory?: { role: 'user' | 'assistant', text: string }[];
+  isLiveRecording?: boolean;
+  isTranscribing?: boolean;
+  recordingStartedAt?: number;
 };
 
 export type ImageNode = {
@@ -482,6 +485,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
+  const activeRecordingNodeIdRef = useRef<string | null>(null);
+
   // Recording Logic
   const startRecording = async () => {
     try {
@@ -489,6 +494,25 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+
+      const center = getCanvasCenter();
+      const nodeId = uuidv4();
+      activeRecordingNodeIdRef.current = nodeId;
+
+      // Spawn Audio Card immediately so user can type notes in real-time
+      setAudios(prev => [...(prev || []), {
+        id: nodeId,
+        x: center.x - 220,
+        y: center.y - 100,
+        width: 500,
+        url: "",
+        title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+        summary: "",
+        transcript: "",
+        notes: "",
+        isLiveRecording: true,
+        recordingStartedAt: Date.now()
+      }]);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -498,7 +522,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await uploadAndTranscribeRecording(audioBlob);
+        await uploadAndTranscribeRecording(audioBlob, nodeId);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -548,9 +572,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  const uploadAndTranscribeRecording = async (audioBlob: Blob) => {
-    const toastId = toast.loading("Saving meeting recording...");
+  const uploadAndTranscribeRecording = async (audioBlob: Blob, existingNodeId?: string) => {
+    const toastId = toast.loading("Processing meeting with Gemini...");
     setIsTranscribing(true);
+    const nodeId = existingNodeId || activeRecordingNodeIdRef.current || uuidv4();
+
+    // Mark node as transcribing
+    setAudios(prev => prev.map(a => a.id === nodeId ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
+
     try {
       const filename = `${pageId}/${uuidv4()}_meeting.webm`;
       
@@ -560,28 +589,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
       if (error) throw error;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('recordings')
-        .getPublicUrl(filename);
-
-      // Create initial audio node
-      const center = getCanvasCenter();
-      const nodeId = uuidv4();
-      
-      setAudios(prev => [...(prev || []), {
-        id: nodeId,
-        x: center.x - 200,
-        y: center.y - 100,
-        width: 400,
-        url: publicUrl,
-        title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
-        summary: "Transcribing and summarizing your meeting using Gemini AI...",
-        transcript: ""
-      }]);
-
-      toast.loading("Generating rich summary with Gemini...", { id: toastId });
-
-      // Call Edge Function for Transcription/Summary
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       
@@ -608,14 +615,22 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const transcript = edgeData?.transcript || "Transcript not available.";
       const summary = edgeData?.summary || "Summary not available.";
 
+      // Auto-purge audio file from Supabase storage for zero cloud storage usage
+      try {
+        await supabase.storage.from('recordings').remove([filename]);
+      } catch (e) {
+        console.warn("Storage auto-purge non-critical error:", e);
+      }
+
       setAudios(prev => prev.map(audio => {
         if (audio.id === nodeId) {
-          return { ...audio, transcript, summary };
+          return { ...audio, transcript, summary, isLiveRecording: false, isTranscribing: false, url: "" };
         }
         return audio;
       }));
 
       // Sync embedding for semantic search
+      const center = getCanvasCenter();
       fetch('/api/sync-embedding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -630,7 +645,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       toast.success("Meeting note generated!", { id: toastId });
 
     } catch (error: any) {
-      toast.error(`Recording failed: ${error.message}`, { id: toastId });
+      setAudios(prev => prev.map(a => a.id === nodeId ? { ...a, isLiveRecording: false, isTranscribing: false } : a));
+      toast.error(`Recording processing failed: ${error.message}`, { id: toastId });
     } finally {
       setIsTranscribing(false);
     }
@@ -671,13 +687,41 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   }, [tool, setTexts]);
 
   useEffect(() => {
+    const handleStartRecordingNode = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      const { id } = customEvent.detail;
+      const center = getCanvasCenter();
+      setAudios(prev => {
+        if (prev.some(a => a.id === id)) return prev;
+        return [...(prev || []), {
+          id,
+          url: "",
+          x: center.x - 220,
+          y: center.y - 100,
+          width: 500,
+          title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+          summary: "",
+          transcript: "",
+          notes: "",
+          isLiveRecording: true,
+          recordingStartedAt: Date.now()
+        }];
+      });
+    };
+
+    const handleInjectTranscribing = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      const { id } = customEvent.detail;
+      setAudios(prev => prev.map(a => a.id === id ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
+    };
+
     const handleInjectSummary = (e: Event) => {
       const customEvent = e as CustomEvent<{ id: string, summary: string, transcript: string }>;
       const { id, summary, transcript } = customEvent.detail;
       
       setAudios(prev => prev.map(audio => {
         if (audio.id === id) {
-          return { ...audio, summary, transcript };
+          return { ...audio, summary, transcript, isLiveRecording: false, isTranscribing: false, url: "" };
         }
         return audio;
       }));
@@ -687,23 +731,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const customEvent = e as CustomEvent<{ id: string, url: string }>;
       const { id, url } = customEvent.detail;
       
-      // Calculate center of screen for the audio node
-      const screenCenterX = window.innerWidth / 2;
-      const screenCenterY = window.innerHeight / 2;
-      
-      // Offset by half the width of the audio player (approx 160px) to truly center it
-      const worldX = (screenCenterX - 160 - pan.x) / zoom;
-      const worldY = (screenCenterY - pan.y) / zoom;
-      
-      setAudios(prev => [...(prev || []), {
-        id,
-        url,
-        x: worldX,
-        y: worldY,
-        title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
-        summary: "Transcribing and summarizing your meeting using Gemini AI...",
-        transcript: ""
-      }]);
+      setAudios(prev => prev.map(a => a.id === id ? { ...a, url } : a));
     };
 
     const handleJumpToCoordinates = (e: Event) => {
@@ -719,16 +747,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       });
     };
 
+    window.addEventListener('start-recording-node', handleStartRecordingNode);
+    window.addEventListener('inject-transcribing', handleInjectTranscribing);
     window.addEventListener('inject-summary', handleInjectSummary);
     window.addEventListener('inject-audio', handleInjectAudio);
     window.addEventListener('jump-to-coordinates', handleJumpToCoordinates);
-    
+
     return () => {
+      window.removeEventListener('start-recording-node', handleStartRecordingNode);
+      window.removeEventListener('inject-transcribing', handleInjectTranscribing);
       window.removeEventListener('inject-summary', handleInjectSummary);
       window.removeEventListener('inject-audio', handleInjectAudio);
       window.removeEventListener('jump-to-coordinates', handleJumpToCoordinates);
     };
-  }, [pan, zoom, setAudios]);
+  }, [getCanvasCenter, setAudios, setPan, zoom]);
 
   const getSelectionBounds = useCallback(() => {
     if (selectedIds.length === 0) return null;

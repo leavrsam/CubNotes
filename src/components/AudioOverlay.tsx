@@ -51,10 +51,30 @@ function AudioNodeCard({
   onDragSelectionStart?: (id: string) => void;
   onAnnotate?: (id: string) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<TabType>('summary');
+  const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'notes' : 'summary');
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
   const [chatInput, setChatInput] = useState("");
+
+  // Live timer for active recording
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  React.useEffect(() => {
+    if (node.isLiveRecording) {
+      setActiveTab('notes');
+      const start = node.recordingStartedAt || Date.now();
+      const interval = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [node.isLiveRecording, node.recordingStartedAt]);
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleEnhance = async () => {
     if (!node.notes || !node.transcript) return;
@@ -140,6 +160,7 @@ function AudioNodeCard({
               <div className="w-1 h-1 bg-zinc-500 rounded-full" />
               <div className="w-1 h-1 bg-zinc-500 rounded-full" />
             </div>
+            <div className="w-2" />
           </div>
 
           {/* Resize Handle (Right edge) */}
@@ -158,7 +179,7 @@ function AudioNodeCard({
 
       <div className="w-full flex flex-col bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 overflow-hidden">
         
-        {/* Header / Audio Player */}
+        {/* Header / Audio Player / Recording Status */}
         <div className="bg-white/95 dark:bg-zinc-900/95 pt-5 pb-3 px-5 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
           <div className="flex justify-between items-center mb-3">
             <input 
@@ -177,10 +198,34 @@ function AudioNodeCard({
             </button>
           </div>
           
-          <audio controls className={`w-full outline-none h-10`}>
-            <source src={node.url} type="audio/webm" />
-            Your browser does not support the audio element.
-          </audio>
+          {node.isLiveRecording ? (
+            <div className="flex items-center justify-between px-4 py-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl animate-pulse">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                <span className="text-xs font-bold text-red-600 dark:text-red-400">Recording live meeting in background...</span>
+              </div>
+              <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
+                {formatTimer(elapsedSeconds)}
+              </span>
+            </div>
+          ) : node.isTranscribing ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl">
+              <Sparkles size={16} className="text-amber-600 dark:text-amber-400 animate-spin" />
+              <span className="text-xs font-bold text-amber-700 dark:text-amber-300">Transcribing & summarizing with Gemini...</span>
+            </div>
+          ) : node.url ? (
+            <audio controls className={`w-full outline-none h-10`}>
+              <source src={node.url} type="audio/webm" />
+              Your browser does not support the audio element.
+            </audio>
+          ) : (
+            <div className="flex items-center justify-between px-3.5 py-2 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/50 dark:border-zinc-700/50 rounded-xl text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Sparkles size={14} className="text-primary-500" />
+                <span>Meeting Transcribed & Purged (Zero Cloud Storage Used)</span>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Tab Navigation */}
@@ -292,7 +337,7 @@ function AudioNodeCard({
                       {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                     </div>
                     <div className={`p-3 rounded-2xl max-w-[85%] text-sm ${msg.role === 'user' ? 'bg-primary-500 text-white rounded-tr-sm' : 'bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200/50 dark:border-zinc-700/50 rounded-tl-sm'}`}>
-                      {msg.role === 'user' ? msg.text : <ReactMarkdown className="prose prose-sm dark:prose-invert prose-p:my-1 max-w-none">{msg.text}</ReactMarkdown>}
+                      {msg.role === 'user' ? msg.text : <div className="prose prose-sm dark:prose-invert prose-p:my-1 max-w-none"><ReactMarkdown>{msg.text}</ReactMarkdown></div>}
                     </div>
                   </div>
                 ))}
@@ -309,7 +354,7 @@ function AudioNodeCard({
                   </div>
                 )}
               </div>
-              <div className="p-3 border-t border-zinc-200/50 dark:border-zinc-700/50 bg-white/50 dark:bg-zinc-800/50">
+              <div className="p-4 border-t border-zinc-200/50 dark:border-zinc-700/50 bg-white/50 dark:bg-zinc-800/50">
                 <form 
                   onSubmit={(e) => { e.preventDefault(); handleChat(); }}
                   className="flex items-center gap-2"
@@ -343,7 +388,8 @@ export function AudioOverlay({
   audios, setAudios, 
   pan, zoom, tool,
   selectedIds = [], setSelectedIds,
-  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd
+  onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
+  onAnnotate
 }: AudioOverlayProps) {
   
   // Dragging state

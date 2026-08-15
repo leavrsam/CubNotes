@@ -38,8 +38,7 @@ export async function POST(req: NextRequest) {
     // 2. Upload to Gemini File API
     const uploadResult = await ai.files.upload({
       file: tempFilePath,
-      mimeType: 'audio/webm',
-    });
+    } as any);
 
     // 3. Generate Content using the uploaded file
     const prompt = `
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
     `;
 
     const result = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
+      model: 'gemini-2.5-flash',
       contents: [
         uploadResult,
         prompt
@@ -66,11 +65,12 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    const responseText = typeof result.text === 'function' ? result.text() : (result.text || '');
     let parsed;
     try {
-      parsed = JSON.parse(result.text());
+      parsed = JSON.parse(responseText);
     } catch (e) {
-      console.error("Failed to parse JSON", result.text());
+      console.error("Failed to parse JSON", responseText);
       parsed = { transcript: "Failed to parse transcript", summary: "Failed to parse summary" };
     }
 
@@ -78,11 +78,13 @@ export async function POST(req: NextRequest) {
     fs.unlinkSync(tempFilePath);
     
     // Clean up Gemini File
-    await ai.files.delete({ name: uploadResult.name });
+    if (uploadResult?.name) {
+      await ai.files.delete({ name: uploadResult.name });
+    }
 
     return NextResponse.json({
-      transcript: parsed.transcript,
-      summary: parsed.summary
+      transcript: parsed.transcript || "",
+      summary: parsed.summary || ""
     });
 
   } catch (error: any) {

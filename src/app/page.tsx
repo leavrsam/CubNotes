@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNavigation } from "@/components/MobileNavigation";
 import dynamic from 'next/dynamic';
@@ -171,20 +171,22 @@ export default function Home() {
     }
   }, [notebooks, selectedPageId]);
 
+  const activeRecordingAudioIdRef = useRef<string | null>(null);
+
   const handleToggleMeeting = async () => {
     const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     
-    const processAudio = async (audioBase64: string, webMimeType?: string) => {
+    const processAudio = async (audioBase64: string, targetAudioId: string, webMimeType?: string) => {
       try {
         if (!selectedPageId) {
           toast.error("No page selected to save audio.");
           return;
         }
 
-        const audioId = uuidv4();
+        const audioId = targetAudioId;
 
         // 1. Upload audio to Supabase Storage
-        toast.loading("Uploading audio and generating summary...", { id: "audio-process" });
+        toast.loading("Uploading audio and generating summary with Gemini...", { id: "audio-process" });
         
         // Convert base64 to Blob
         const byteCharacters = atob(audioBase64);
@@ -205,10 +207,6 @@ export default function Home() {
           
         if (uploadError) {
           console.error("Upload error:", uploadError);
-          toast.error("Failed to upload audio.", { id: "audio-process" });
-        } else {
-          const { data: publicUrlData } = supabase.storage.from('recordings').getPublicUrl(fileName);
-          window.dispatchEvent(new CustomEvent('inject-audio', { detail: { id: audioId, url: publicUrlData.publicUrl } }));
         }
 
         // 2. Call Edge Function for Transcription/Summary
@@ -231,9 +229,22 @@ export default function Home() {
           }
           return;
         }
+
+        // 3. Auto-purge audio file from Supabase storage for zero cloud storage usage
+        try {
+          await supabase.storage.from('recordings').remove([fileName]);
+        } catch (e) {
+          console.warn("Storage auto-purge non-critical error:", e);
+        }
         
         if (data?.summary) {
-          window.dispatchEvent(new CustomEvent('inject-summary', { detail: { id: audioId, summary: data.summary, transcript: data.transcript || "Transcript not available." } }));
+          window.dispatchEvent(new CustomEvent('inject-summary', { 
+            detail: { 
+              id: audioId, 
+              summary: data.summary, 
+              transcript: data.transcript || "Transcript not available." 
+            } 
+          }));
           toast.success('Meeting summary added to canvas!', { id: "audio-process" });
         } else {
           toast.dismiss("audio-process");
@@ -247,10 +258,12 @@ export default function Home() {
     if (isDesktop) {
       if (isDesktopRecording) {
         setIsProcessing(true);
+        const targetId = activeRecordingAudioIdRef.current || uuidv4();
+        window.dispatchEvent(new CustomEvent('inject-transcribing', { detail: { id: targetId } }));
         try {
           const audioBase64 = await invoke<string>("stop_recording");
           console.log("Captured Desktop Audio (Base64 length):", audioBase64.length);
-          await processAudio(audioBase64);
+          await processAudio(audioBase64, targetId);
           setIsDesktopRecording(false);
         } catch (e) {
           console.error("Failed to stop desktop recording:", e);
@@ -259,6 +272,9 @@ export default function Home() {
         }
       } else {
         try {
+          const newAudioId = uuidv4();
+          activeRecordingAudioIdRef.current = newAudioId;
+          window.dispatchEvent(new CustomEvent('start-recording-node', { detail: { id: newAudioId } }));
           await invoke("start_recording");
           setIsDesktopRecording(true);
         } catch (e) {
@@ -266,19 +282,24 @@ export default function Home() {
         }
       }
     } else {
-      // Web fallback
+      // Web / Mobile fallback
       if (isWebRecording) {
         setIsProcessing(true);
+        const targetId = activeRecordingAudioIdRef.current || uuidv4();
+        window.dispatchEvent(new CustomEvent('inject-transcribing', { detail: { id: targetId } }));
         try {
           const { base64, mimeType } = await stopWeb();
           console.log("Captured Web Audio (Base64 length):", base64.length, "MIME:", mimeType);
-          await processAudio(base64, mimeType);
+          await processAudio(base64, targetId, mimeType);
         } catch (e) {
           console.error("Failed to stop web recording:", e);
         } finally {
           setIsProcessing(false);
         }
       } else {
+        const newAudioId = uuidv4();
+        activeRecordingAudioIdRef.current = newAudioId;
+        window.dispatchEvent(new CustomEvent('start-recording-node', { detail: { id: newAudioId } }));
         await startWeb();
       }
     }

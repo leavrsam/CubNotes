@@ -296,6 +296,63 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     });
   }, [supabase]);
 
+  useEffect(() => {
+    const handleStartRecordingNode = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      const { id } = customEvent.detail;
+      setAudios(prev => {
+        if (prev.some(a => a.id === id)) return prev;
+        return [{
+          id,
+          url: "",
+          x: 0,
+          y: 0,
+          title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+          summary: "",
+          transcript: "",
+          notes: "",
+          isLiveRecording: true,
+          recordingStartedAt: Date.now()
+        }, ...(prev || [])];
+      });
+    };
+
+    const handleInjectTranscribing = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      const { id } = customEvent.detail;
+      setAudios(prev => prev.map(a => a.id === id ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
+    };
+
+    const handleInjectSummary = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string, summary: string, transcript: string }>;
+      const { id, summary, transcript } = customEvent.detail;
+      setAudios(prev => prev.map(audio => {
+        if (audio.id === id) {
+          return { ...audio, summary, transcript, isLiveRecording: false, isTranscribing: false, url: "" };
+        }
+        return audio;
+      }));
+    };
+
+    const handleInjectAudio = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string, url: string }>;
+      const { id, url } = customEvent.detail;
+      setAudios(prev => prev.map(a => a.id === id ? { ...a, url } : a));
+    };
+
+    window.addEventListener('start-recording-node', handleStartRecordingNode);
+    window.addEventListener('inject-transcribing', handleInjectTranscribing);
+    window.addEventListener('inject-summary', handleInjectSummary);
+    window.addEventListener('inject-audio', handleInjectAudio);
+
+    return () => {
+      window.removeEventListener('start-recording-node', handleStartRecordingNode);
+      window.removeEventListener('inject-transcribing', handleInjectTranscribing);
+      window.removeEventListener('inject-summary', handleInjectSummary);
+      window.removeEventListener('inject-audio', handleInjectAudio);
+    };
+  }, [setAudios]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = "/login";
