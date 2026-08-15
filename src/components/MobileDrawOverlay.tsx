@@ -86,14 +86,23 @@ function getStrokeBoundingBox(stroke: Stroke) {
   };
 }
 
-  // Set default drawing color based on current theme and auto-center existing strokes for sketch blocks
+  const hasAutoCenteredRef = useRef(false);
+
+  // Set default drawing color based on current theme and auto-center existing strokes ONCE on open
   useEffect(() => {
-    if (isOpen) {
-      if (resolvedTheme === 'dark') {
-        setColor('#FFFFFF');
-      } else {
-        setColor('#000000');
-      }
+    if (!isOpen) {
+      hasAutoCenteredRef.current = false;
+      return;
+    }
+
+    if (resolvedTheme === 'dark') {
+      setColor('#FFFFFF');
+    } else {
+      setColor('#000000');
+    }
+
+    if (!hasAutoCenteredRef.current) {
+      hasAutoCenteredRef.current = true;
 
       if (!isContentBlockAnnotation && annotateBlockId) {
         // Find existing strokes for this sketch block
@@ -133,7 +142,7 @@ function getStrokeBoundingBox(stroke: Stroke) {
       setPan({ x: 0, y: 0 });
       setZoom(1);
     }
-  }, [isOpen, annotateBlockId, isContentBlockAnnotation, resolvedTheme, strokes]);
+  }, [isOpen, annotateBlockId, isContentBlockAnnotation, resolvedTheme]);
 
   // Measure card dimensions when annotating a content block
   useEffect(() => {
