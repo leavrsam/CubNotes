@@ -9,7 +9,7 @@ export const maxDuration = 60; // Allow Vercel functions to run up to 60 seconds
 
 export async function POST(req: NextRequest) {
   try {
-    const { audioUrl } = await req.json();
+    const { audioUrl, isJournal = false } = await req.json();
 
     if (!audioUrl) {
       return NextResponse.json({ error: 'audioUrl is required' }, { status: 400 });
@@ -41,11 +41,26 @@ export async function POST(req: NextRequest) {
     } as any);
 
     // 3. Generate Content using the uploaded file
-    const prompt = `
+    const prompt = isJournal ? `
+      You are an expert personal reflection and journal chronicler. I am providing you with a personal voice recording/diary audio.
+      Please analyze this audio and provide a JSON response with two keys:
+      1. "transcript": A highly accurate transcript of the spoken thoughts and reflections.
+      2. "summary": A beautifully written, reflective first-person journal entry in clean Markdown. Include structured sections such as:
+         - "### Daily Reflection" (a cohesive narrative of the thoughts and experiences shared)
+         - "### Key Insights & Lessons" (notable breakthroughs, takeaways, or realizations)
+         - "### Notable Memories & Highlights" (any specific events, conversations, or moments mentioned)
+         Do NOT use emojis anywhere.
+
+      Return ONLY valid JSON in the following format, with no markdown code blocks wrapping it:
+      {
+        "transcript": "...",
+        "summary": "### Daily Reflection\\n..."
+      }
+    ` : `
       You are an expert executive assistant. I am providing you with an audio recording of a meeting.
       Please analyze this audio and provide a JSON response with two keys:
       1. "transcript": A highly accurate, speaker-diarized transcript of the meeting. Label the speakers as "Speaker 1", "Speaker 2", etc.
-      2. "summary": A rich, formatted meeting summary in Markdown. Include sections like "Executive Summary", "Key Decisions", and "Action Items". Make it look professional and concise.
+      2. "summary": A rich, formatted meeting summary in Markdown. Include sections like "Executive Summary", "Key Decisions", and "Action Items". Make it look professional and concise. Do NOT use emojis.
 
       Return ONLY valid JSON in the following format, with no markdown code blocks wrapping it:
       {

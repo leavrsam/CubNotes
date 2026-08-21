@@ -210,9 +210,19 @@ export default function Home() {
           console.warn("Audio upload warning:", uploadErr);
         }
 
+        let isCurrentJournal = false;
+        if (selectedPageId) {
+          for (const nb of notebooks) {
+            for (const sec of nb.sections) {
+              const p = sec.pages.find(page => page.id === selectedPageId);
+              if (p && (nb.is_journal || p.is_journal_entry)) isCurrentJournal = true;
+            }
+          }
+        }
+
         // 2. Call Edge Function for Transcription/Summary
         const { data, error } = await supabase.functions.invoke('summarize-meeting', {
-          body: { audioBase64, mimeType: cleanMimeType }
+          body: { audioBase64, mimeType: cleanMimeType, isJournal: isCurrentJournal }
         });
         
         if (error || (data && data.success === false)) {
@@ -229,16 +239,6 @@ export default function Home() {
             toast.error(`Error: ${String(actualError)}`, { id: "audio-process", duration: 8000 });
           }
           return;
-        }
-
-        let isCurrentJournal = false;
-        if (selectedPageId) {
-          for (const nb of notebooks) {
-            for (const sec of nb.sections) {
-              const p = sec.pages.find(page => page.id === selectedPageId);
-              if (p && (nb.is_journal || p.is_journal_entry)) isCurrentJournal = true;
-            }
-          }
         }
 
         const audioCreatedAt = Date.now();

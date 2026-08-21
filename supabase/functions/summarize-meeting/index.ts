@@ -39,7 +39,7 @@ serve(async (req) => {
     }
 
     // 2. Parse request body
-    const { audioBase64, mimeType = 'audio/webm' } = await req.json();
+    const { audioBase64, mimeType = 'audio/webm', isJournal = false } = await req.json();
 
     if (!audioBase64) {
       return new Response(JSON.stringify({ error: 'Missing audioBase64' }), {
@@ -55,7 +55,9 @@ serve(async (req) => {
     }
 
     const ai = new GoogleGenerativeAI(geminiKey);
-    const prompt = "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript', and YOU MUST identify and separate different speakers (e.g., Speaker 1: ..., Speaker 2: ...). Then, summarize the meeting into key takeaways, action items, and decisions as 'summary' (formatted in clean, rich markdown). Return a JSON object with two string keys: 'summary' and 'transcript'.";
+    const prompt = isJournal
+      ? "You are an expert personal reflection and journal chronicler. Transcribe the audio clearly as 'transcript'. Then, convert the spoken thoughts into an authentic, beautifully written, reflective first-person journal entry as 'summary' (formatted in clean markdown with structured sections: '### Daily Reflection', '### Key Insights & Lessons', '### Notable Memories', and do NOT use emojis anywhere). Return a JSON object with two string keys: 'summary' and 'transcript'."
+      : "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript', and YOU MUST identify and separate different speakers (e.g., Speaker 1: ..., Speaker 2: ...). Then, summarize the meeting into key takeaways, action items, and decisions as 'summary' (formatted in clean, rich markdown, without emojis). Return a JSON object with two string keys: 'summary' and 'transcript'.";
     
     let result;
     try {
