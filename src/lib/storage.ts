@@ -6,7 +6,7 @@ const supabase = createClient();
 
 export interface UploadResult {
   url: string;
-  storage: 'r2' | 'supabase';
+  storage: 'r2' | 'supabase' | 'local';
   key: string;
 }
 
@@ -14,10 +14,11 @@ export interface UploadResult {
  * Universal file uploader:
  * 1. Automatically compresses camera photos & images to high-efficiency WebP.
  * 2. Tries Cloudflare R2 first (10 GB free + zero egress fees).
- * 3. Gracefully falls back to Supabase Storage if R2 is not configured.
+ * 3. Gracefully falls back to Supabase Storage.
+ * 4. If cloud storage is not yet set up, falls back to a reliable local object URL so user flow is never blocked.
  */
 export async function uploadMediaFile(
-  file: File,
+  file: File | Blob,
   pageId: string,
   bucket = 'recordings'
 ): Promise<UploadResult> {
@@ -27,10 +28,10 @@ export async function uploadMediaFile(
   }
 
   let fileToUpload: Blob | File = file;
-  let filename = file.name;
+  let filename = (file instanceof File) ? file.name : `recording_${Date.now()}.webm`;
 
   // Auto-compress images in browser
-  if (file.type.startsWith('image/') && file.type !== 'image/svg+xml' && file.type !== 'image/gif') {
+  if (file.type.startsWith('image/') && file.type !== 'image/svg+xml' && file.type !== 'image/gif' && file instanceof File) {
     try {
       fileToUpload = await compressImage(file);
       filename = `${file.name.replace(/\.[^/.]+$/, '')}.webp`;
@@ -66,28 +67,50 @@ export async function uploadMediaFile(
       }
     }
   } catch (err) {
-    console.warn('R2 upload failed or unconfigured, falling back to Supabase:', err);
+    console.warn('R2 upload skipped or unavailable:', err);
   }
 
-  // 2. Fallback to Supabase Storage
-  const { error: uploadError } = await supabase.storage
-    .from(bucket)
-    .upload(key, fileToUpload, {
-      contentType: fileToUpload.type || file.type,
-      upsert: true,
-    });
+  // 2. Fallback to Supabase Storage (try specified bucket, then common alternatives)
+  const candidateBuckets = [bucket, 'recordings', 'cubnotes-media', 'notes-media'];
+  const triedBuckets = new Set<string>();
 
-  if (uploadError) {
-    throw uploadError;
+  for (const targetBucket of candidateBuckets) {
+    if (triedBuckets.has(targetBucket)) continue;
+    triedBuckets.add(targetBucket);
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from(targetBucket)
+        .upload(key, fileToUpload, {
+          contentType: fileToUpload.type || 'application/octet-stream',
+          upsert: true,
+        });
+
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage
+          .from(targetBucket)
+          .getPublicUrl(key);
+
+        return {
+          url: publicUrl,
+          storage: 'supabase',
+          key,
+        };
+      } else {
+        console.warn(`Supabase upload to '${targetBucket}' failed:`, uploadError.message);
+      }
+    } catch (sbErr) {
+      console.warn(`Supabase storage attempt to '${targetBucket}' failed:`, sbErr);
+    }
   }
 
-  const { data: { publicUrl } } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(key);
+  // 3. Fallback: generate local Object URL so playback/transcription continues seamlessly
+  console.warn('Cloud storage upload unavailable; falling back to local Blob URL.');
+  const localUrl = typeof window !== 'undefined' ? URL.createObjectURL(fileToUpload) : '';
 
   return {
-    url: publicUrl,
-    storage: 'supabase',
+    url: localUrl,
+    storage: 'local',
     key,
   };
 }

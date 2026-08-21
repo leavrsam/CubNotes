@@ -193,3 +193,25 @@ WITH CHECK (
     )
 );
 
+-- Storage Bucket for Audio & Media Recordings
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('recordings', 'recordings', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage Policies for Recordings
+CREATE POLICY "Public Access for Recordings"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'recordings');
+
+CREATE POLICY "Authenticated users can upload recordings"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'recordings' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update recordings"
+ON storage.objects FOR UPDATE
+USING (bucket_id = 'recordings' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete recordings"
+ON storage.objects FOR DELETE
+USING (bucket_id = 'recordings' AND auth.role() = 'authenticated');
+
