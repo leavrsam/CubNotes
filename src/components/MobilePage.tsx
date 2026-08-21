@@ -303,19 +303,26 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       const { id } = customEvent.detail;
       setAudios(prev => {
         if (prev.some(a => a.id === id)) return prev;
-        return [{
+        return [...(prev || []), {
           id,
           url: "",
-          x: 0,
-          y: 0,
+          x: 50,
+          y: bottomY,
+          width: 400,
           title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
           summary: "",
           transcript: "",
           notes: "",
           isLiveRecording: true,
-          recordingStartedAt: Date.now()
-        }, ...(prev || [])];
+          recordingStartedAt: Date.now(),
+          audioCreatedAt: Date.now(),
+          audioExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          isAudioSavedPermanently: false,
+        }];
       });
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
     };
 
     const handleInjectTranscribing = (e: Event) => {
@@ -325,11 +332,29 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     };
 
     const handleInjectSummary = (e: Event) => {
-      const customEvent = e as CustomEvent<{ id: string, summary: string, transcript: string }>;
-      const { id, summary, transcript } = customEvent.detail;
+      const customEvent = e as CustomEvent<{ 
+        id: string; 
+        summary: string; 
+        transcript: string;
+        url?: string;
+        audioCreatedAt?: number;
+        audioExpiresAt?: number;
+        isAudioSavedPermanently?: boolean;
+      }>;
+      const { id, summary, transcript, url, audioCreatedAt, audioExpiresAt, isAudioSavedPermanently } = customEvent.detail;
       setAudios(prev => prev.map(audio => {
         if (audio.id === id) {
-          return { ...audio, summary, transcript, isLiveRecording: false, isTranscribing: false, url: "" };
+          return { 
+            ...audio, 
+            summary, 
+            transcript, 
+            isLiveRecording: false, 
+            isTranscribing: false, 
+            url: url !== undefined ? url : audio.url,
+            audioCreatedAt: audioCreatedAt || audio.audioCreatedAt || Date.now(),
+            audioExpiresAt: audioExpiresAt || audio.audioExpiresAt || (Date.now() + 7 * 24 * 60 * 60 * 1000),
+            isAudioSavedPermanently: isAudioSavedPermanently ?? audio.isAudioSavedPermanently ?? false,
+          };
         }
         return audio;
       }));
@@ -352,7 +377,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       window.removeEventListener('inject-summary', handleInjectSummary);
       window.removeEventListener('inject-audio', handleInjectAudio);
     };
-  }, [setAudios]);
+  }, [bottomY, setAudios]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -610,48 +635,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       setBottomY(100);
     }
   }, [sortedBlocks]);
-
-  useEffect(() => {
-    const handleInjectSummary = (e: Event) => {
-      const customEvent = e as CustomEvent<{ id: string, summary: string, transcript: string }>;
-      const { id, summary, transcript } = customEvent.detail;
-      
-      setAudios(prev => prev.map(audio => {
-        if (audio.id === id) {
-          return { ...audio, summary, transcript };
-        }
-        return audio;
-      }));
-    };
-
-    const handleInjectAudio = (e: Event) => {
-      const customEvent = e as CustomEvent<{ id: string, url: string }>;
-      const { id, url } = customEvent.detail;
-      
-      const newAudio = {
-        id: id || uuidv4(),
-        x: 50,
-        y: bottomY,
-        width: 400,
-        url,
-        title: "Meeting Recording"
-      };
-      
-      setAudios(prev => [...(prev || []), newAudio as any]);
-      
-      setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      }, 100);
-    };
-
-    window.addEventListener('inject-summary', handleInjectSummary);
-    window.addEventListener('inject-audio', handleInjectAudio);
-    
-    return () => {
-      window.removeEventListener('inject-summary', handleInjectSummary);
-      window.removeEventListener('inject-audio', handleInjectAudio);
-    };
-  }, [bottomY, setAudios]);
 
   const addTextBlock = () => {
     const newNode = {
