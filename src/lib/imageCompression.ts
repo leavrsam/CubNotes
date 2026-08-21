@@ -1,8 +1,9 @@
-﻿/**
+/**
  * Browser-side image compression and WebP conversion.
- * Resizes large camera photos (e.g. 10MB phone captures) down to high-fidelity ~250KB WebP files.
+ * Resizes large camera photos to crisp, ultra-high-res 2.5K (2560px) WebP files.
+ * Preserves full visual sharpness, fine text, and colors while eliminating multi-megabyte bloat.
  */
-export async function compressImage(file: File, maxDimension = 1920, quality = 0.85): Promise<Blob> {
+export async function compressImage(file: File, maxDimension = 2560, quality = 0.88): Promise<Blob> {
   // If not an image or SVG/GIF (preserve animation), return as-is
   if (!file.type.startsWith('image/') || file.type === 'image/svg+xml' || file.type === 'image/gif') {
     return file;
@@ -15,7 +16,7 @@ export async function compressImage(file: File, maxDimension = 1920, quality = 0
       img.onload = () => {
         let { width, height } = img;
 
-        // Calculate scaling if dimensions exceed max
+        // Calculate scaling if dimensions exceed max (2560px)
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
             height = Math.round((height * maxDimension) / width);
@@ -35,6 +36,10 @@ export async function compressImage(file: File, maxDimension = 1920, quality = 0
           resolve(file);
           return;
         }
+
+        // Enable high-fidelity smoothing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         ctx.drawImage(img, 0, 0, width, height);
 
