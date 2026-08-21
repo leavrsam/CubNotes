@@ -1,4 +1,4 @@
-﻿import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { compressImage } from './imageCompression';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -21,6 +21,11 @@ export async function uploadMediaFile(
   pageId: string,
   bucket = 'recordings'
 ): Promise<UploadResult> {
+  // Client-side file size guard (15 MB)
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error(`File size (${(file.size / 1024 / 1024).toFixed(1)} MB) exceeds the 15 MB limit.`);
+  }
+
   let fileToUpload: Blob | File = file;
   let filename = file.name;
 
