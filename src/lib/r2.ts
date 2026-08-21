@@ -100,7 +100,7 @@ export async function getBucketStorageUsage(): Promise<{ totalBytes: number; obj
 }
 
 export function getR2PublicUrl(key: string): string {
-  const publicDomain = process.env.R2_PUBLIC_DOMAIN;
+  const publicDomain = process.env.R2_PUBLIC_DOMAIN || process.env.R2_PUBLIC_URL;
   if (publicDomain) {
     const cleanDomain = publicDomain.replace(/\/+$/, '');
     return `${cleanDomain}/${key}`;
