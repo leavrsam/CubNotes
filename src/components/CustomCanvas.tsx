@@ -60,6 +60,9 @@ export type AudioNode = {
   isLiveRecording?: boolean;
   isTranscribing?: boolean;
   recordingStartedAt?: number;
+  audioCreatedAt?: number;
+  audioExpiresAt?: number;
+  isAudioSavedPermanently?: boolean;
 };
 
 export type ImageNode = {
@@ -480,8 +483,24 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   // Recording Logic
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1, // Mono voice capture
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true,
+        },
+      });
+
+      const mimeType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 28000, // 28 kbps Opus = crystal clear speech at ~12 MB/hr
+      });
+
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -501,7 +520,10 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         transcript: "",
         notes: "",
         isLiveRecording: true,
-        recordingStartedAt: Date.now()
+        recordingStartedAt: Date.now(),
+        audioCreatedAt: Date.now(),
+        audioExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        isAudioSavedPermanently: false,
       }]);
 
       mediaRecorder.ondataavailable = (event) => {
@@ -571,14 +593,12 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     setAudios(prev => prev.map(a => a.id === nodeId ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
 
     try {
-      const filename = `${pageId}/${uuidv4()}_meeting.webm`;
-      
-      const { data, error } = await supabase.storage
-        .from('recordings')
-        .upload(filename, audioBlob);
+      // 1. Upload audio to Cloudflare R2 (or fallback)
+      const audioFile = new File([audioBlob], `meeting_${Date.now()}.webm`, { type: 'audio/webm' });
+      const uploadResult = await uploadMediaFile(audioFile, pageId);
+      const audioUrl = uploadResult.url;
 
-      if (error) throw error;
-
+      // 2. Call Edge Function for Transcription/Summary
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       
@@ -605,16 +625,22 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const transcript = edgeData?.transcript || "Transcript not available.";
       const summary = edgeData?.summary || "Summary not available.";
 
-      // Auto-purge audio file from Supabase storage for zero cloud storage usage
-      try {
-        await supabase.storage.from('recordings').remove([filename]);
-      } catch (e) {
-        console.warn("Storage auto-purge non-critical error:", e);
-      }
+      const audioCreatedAt = Date.now();
+      const audioExpiresAt = audioCreatedAt + 7 * 24 * 60 * 60 * 1000; // 7-day retention
 
       setAudios(prev => prev.map(audio => {
         if (audio.id === nodeId) {
-          return { ...audio, transcript, summary, isLiveRecording: false, isTranscribing: false, url: "" };
+          return { 
+            ...audio, 
+            transcript, 
+            summary, 
+            isLiveRecording: false, 
+            isTranscribing: false, 
+            url: audioUrl,
+            audioCreatedAt,
+            audioExpiresAt,
+            isAudioSavedPermanently: false,
+          };
         }
         return audio;
       }));
@@ -706,12 +732,30 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     };
 
     const handleInjectSummary = (e: Event) => {
-      const customEvent = e as CustomEvent<{ id: string, summary: string, transcript: string }>;
-      const { id, summary, transcript } = customEvent.detail;
+      const customEvent = e as CustomEvent<{
+        id: string;
+        summary: string;
+        transcript: string;
+        url?: string;
+        audioCreatedAt?: number;
+        audioExpiresAt?: number;
+        isAudioSavedPermanently?: boolean;
+      }>;
+      const { id, summary, transcript, url, audioCreatedAt, audioExpiresAt, isAudioSavedPermanently } = customEvent.detail;
       
       setAudios(prev => prev.map(audio => {
         if (audio.id === id) {
-          return { ...audio, summary, transcript, isLiveRecording: false, isTranscribing: false, url: "" };
+          return {
+            ...audio,
+            summary,
+            transcript,
+            isLiveRecording: false,
+            isTranscribing: false,
+            url: url !== undefined ? url : audio.url,
+            audioCreatedAt: audioCreatedAt || audio.audioCreatedAt || Date.now(),
+            audioExpiresAt: audioExpiresAt || audio.audioExpiresAt || (Date.now() + 7 * 24 * 60 * 60 * 1000),
+            isAudioSavedPermanently: isAudioSavedPermanently ?? audio.isAudioSavedPermanently ?? false,
+          };
         }
         return audio;
       }));

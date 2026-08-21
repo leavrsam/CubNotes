@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
-import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText } from "lucide-react";
+import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { createClient } from "@/lib/supabase/client";
 
@@ -213,16 +213,47 @@ function AudioNodeCard({
               <Sparkles size={16} className="text-amber-600 dark:text-amber-400 animate-spin" />
               <span className="text-xs font-bold text-amber-700 dark:text-amber-300">Transcribing & summarizing with Gemini...</span>
             </div>
-          ) : node.url ? (
-            <audio controls className={`w-full outline-none h-10`}>
-              <source src={node.url} type="audio/webm" />
-              Your browser does not support the audio element.
-            </audio>
+          ) : node.url && !(!node.isAudioSavedPermanently && node.audioExpiresAt && Date.now() > node.audioExpiresAt) ? (
+            <div className="flex flex-col gap-2">
+              <audio controls className="w-full outline-none h-9">
+                <source src={node.url} type="audio/webm" />
+                Your browser does not support the audio element.
+              </audio>
+              <div className="flex items-center justify-between px-1 pt-0.5">
+                {node.isAudioSavedPermanently ? (
+                  <button 
+                    onClick={() => updateAudioField(node.id, 'isAudioSavedPermanently', false)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg hover:bg-emerald-100 transition-colors"
+                    title="Audio will be kept permanently. Click to allow 7-day auto-expiration."
+                  >
+                    <Check size={12} className="text-emerald-500" />
+                    <span>Saved Permanently</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
+                      <Clock size={12} className="text-amber-500" />
+                      <span>
+                        Expires in {node.audioExpiresAt ? Math.max(1, Math.ceil((node.audioExpiresAt - Date.now()) / (1000 * 60 * 60 * 24))) : 7} days
+                      </span>
+                    </span>
+                    <button 
+                      onClick={() => updateAudioField(node.id, 'isAudioSavedPermanently', true)}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/40 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200 dark:border-primary-800/60 rounded-lg transition-colors"
+                      title="Save this audio recording permanently so it never expires"
+                    >
+                      <Bookmark size={11} />
+                      <span>Save Audio Permanently</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="flex items-center justify-between px-3.5 py-2 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/50 dark:border-zinc-700/50 rounded-xl text-xs text-zinc-500 dark:text-zinc-400">
               <span className="flex items-center gap-1.5 font-medium">
-                <Sparkles size={14} className="text-primary-500" />
-                <span>Meeting Transcribed & Purged (Zero Cloud Storage Used)</span>
+                <Clock size={13} className="text-zinc-400" />
+                <span>Audio recording expired (7-day policy) — Transcript & AI Notes preserved</span>
               </span>
             </div>
           )}

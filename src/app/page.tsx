@@ -23,6 +23,7 @@ import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize } f
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
+import { uploadMediaFile } from "@/lib/storage";
 
 export default function Home() {
   const { 
@@ -185,7 +186,7 @@ export default function Home() {
 
         const audioId = targetAudioId;
 
-        // 1. Upload audio to Supabase Storage
+        // 1. Upload audio to Cloudflare R2 (or fallback)
         toast.loading("Uploading audio and generating summary with Gemini...", { id: "audio-process" });
         
         // Convert base64 to Blob
@@ -199,14 +200,14 @@ export default function Home() {
         const cleanMimeType = rawMimeType.split(';')[0];
         const fileExt = cleanMimeType.split('/')[1] || 'webm';
         const blob = new Blob([byteArray], { type: cleanMimeType });
-        
-        const fileName = `${selectedPageId}/${uuidv4()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('recordings')
-          .upload(fileName, blob, { contentType: cleanMimeType });
-          
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
+        const audioFile = new File([blob], `meeting_${Date.now()}.${fileExt}`, { type: cleanMimeType });
+
+        let audioUrl = "";
+        try {
+          const uploadResult = await uploadMediaFile(audioFile, selectedPageId);
+          audioUrl = uploadResult.url;
+        } catch (uploadErr) {
+          console.warn("Audio upload warning:", uploadErr);
         }
 
         // 2. Call Edge Function for Transcription/Summary
@@ -230,19 +231,19 @@ export default function Home() {
           return;
         }
 
-        // 3. Auto-purge audio file from Supabase storage for zero cloud storage usage
-        try {
-          await supabase.storage.from('recordings').remove([fileName]);
-        } catch (e) {
-          console.warn("Storage auto-purge non-critical error:", e);
-        }
-        
+        const audioCreatedAt = Date.now();
+        const audioExpiresAt = audioCreatedAt + 7 * 24 * 60 * 60 * 1000; // 7-day retention
+
         if (data?.summary) {
           window.dispatchEvent(new CustomEvent('inject-summary', { 
             detail: { 
               id: audioId, 
               summary: data.summary, 
-              transcript: data.transcript || "Transcript not available." 
+              transcript: data.transcript || "Transcript not available.",
+              url: audioUrl,
+              audioCreatedAt,
+              audioExpiresAt,
+              isAudioSavedPermanently: false,
             } 
           }));
           toast.success('Meeting summary added to canvas!', { id: "audio-process" });
