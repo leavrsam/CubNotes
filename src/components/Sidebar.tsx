@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose } from "lucide-react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 
 interface SidebarProps {
@@ -11,6 +11,7 @@ interface SidebarProps {
   onAddNotebook: () => void;
   onUpdateNotebook: (id: string, title: string) => void;
   onDeleteNotebook: (id: string) => void;
+  onToggleJournalMode?: (id: string, is_journal: boolean) => void;
   onAddSection: (notebookId: string) => void;
   onUpdateSection: (id: string, title: string) => void;
   onDeleteSection: (id: string) => void;
@@ -23,13 +24,14 @@ interface SidebarProps {
   user?: any;
 }
 
-export function Sidebar({ 
-  notebooks, selectedPageId, onSelectPage,
-  onAddNotebook, onUpdateNotebook, onDeleteNotebook,
-  onAddSection, onUpdateSection, onDeleteSection,
-  onAddPage, onUpdatePage, onDeletePage,
-  onClose, onOpenSettings, onJumpToCoordinates, user
-}: SidebarProps) {
+export function Sidebar(props: SidebarProps) {
+  const { 
+    notebooks, selectedPageId, onSelectPage,
+    onAddNotebook, onUpdateNotebook, onDeleteNotebook, onToggleJournalMode,
+    onAddSection, onUpdateSection, onDeleteSection,
+    onAddPage, onUpdatePage, onDeletePage,
+    onClose, onOpenSettings, onJumpToCoordinates, user
+  } = props;
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<'global' | 'local'>('global');
   const [isSearching, setIsSearching] = useState(false);
@@ -139,6 +141,7 @@ export function Sidebar({
             onAddSection={() => onAddSection(nb.id)}
             onUpdate={(title: string) => onUpdateNotebook(nb.id, title)}
             onDelete={() => onDeleteNotebook(nb.id)}
+            onToggleJournalMode={onToggleJournalMode}
             onUpdateSection={onUpdateSection}
             onDeleteSection={onDeleteSection}
             onAddPage={onAddPage}
@@ -214,14 +217,23 @@ function EditableItem({
 }
 
 function ItemActions({ 
-  onEdit, onDelete, onAdd, addTitle 
+  onEdit, onDelete, onAdd, addTitle, onToggleJournal, isJournal 
 }: { 
-  onEdit: () => void, onDelete: () => void, onAdd?: () => void, addTitle?: string 
+  onEdit: () => void, onDelete: () => void, onAdd?: () => void, addTitle?: string, onToggleJournal?: () => void, isJournal?: boolean 
 }) {
   return (
     <div className="hidden group-hover:flex items-center absolute right-2 bg-zinc-800 rounded shadow-lg border border-zinc-700">
+      {onToggleJournal && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); onToggleJournal(); }} 
+          className={`p-1 hover:bg-zinc-700 rounded-l ${isJournal ? 'text-amber-400 hover:text-amber-300' : 'text-zinc-400 hover:text-white'}`} 
+          title={isJournal ? "Switch to Standard Notebook" : "Convert to Journal Mode"}
+        >
+          <BookOpen size={14} />
+        </button>
+      )}
       {onAdd && (
-        <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className="p-1 hover:bg-zinc-700 hover:text-white rounded-l text-zinc-400" title={addTitle}>
+        <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className={`p-1 hover:bg-zinc-700 hover:text-white ${!onToggleJournal ? 'rounded-l' : ''} text-zinc-400`} title={addTitle}>
           <Plus size={14} />
         </button>
       )}
@@ -237,7 +249,7 @@ function ItemActions({
 
 function NotebookItem({
   notebook, selectedPageId, onSelectPage,
-  onAddSection, onUpdate, onDelete,
+  onAddSection, onUpdate, onDelete, onToggleJournalMode,
   onUpdateSection, onDeleteSection,
   onAddPage, onUpdatePage, onDeletePage
 }: any) {
@@ -247,7 +259,10 @@ function NotebookItem({
   return (
     <div className="space-y-1">
       <EditableItem 
-        icon={Book} title={notebook.title} isEditing={isEditing} iconColor="text-primary-400"
+        icon={notebook.is_journal ? BookOpen : Book} 
+        title={notebook.title} 
+        isEditing={isEditing} 
+        iconColor={notebook.is_journal ? "text-amber-400" : "text-primary-400"}
         onSave={(val) => { onUpdate(val); setIsEditing(false); }}
         onCancel={() => setIsEditing(false)}
       >
@@ -258,9 +273,27 @@ function NotebookItem({
           <div className="w-4 flex items-center justify-center">
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </div>
-          <Book size={16} className="text-primary-400 flex-shrink-0" />
-          <span className="truncate flex-1 text-left">{notebook.title}</span>
-          <ItemActions onEdit={() => setIsEditing(true)} onDelete={onDelete} onAdd={() => { setExpanded(true); onAddSection(); }} addTitle="Add Section" />
+          {notebook.is_journal ? (
+            <BookOpen size={16} className="text-amber-400 flex-shrink-0" />
+          ) : (
+            <Book size={16} className="text-primary-400 flex-shrink-0" />
+          )}
+          <span className="truncate flex-1 text-left flex items-center gap-1.5">
+            {notebook.title}
+            {notebook.is_journal && (
+              <span className="text-[10px] uppercase font-semibold px-1.5 py-0.2 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded">
+                Journal
+              </span>
+            )}
+          </span>
+          <ItemActions 
+            onEdit={() => setIsEditing(true)} 
+            onDelete={onDelete} 
+            onAdd={() => { setExpanded(true); onAddSection(); }} 
+            addTitle="Add Section"
+            onToggleJournal={() => onToggleJournalMode?.(notebook.id, !notebook.is_journal)}
+            isJournal={notebook.is_journal}
+          />
         </div>
       </EditableItem>
 

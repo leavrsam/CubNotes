@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -23,16 +23,13 @@ function getStrokeBoundingBox(stroke: Stroke) {
     maxX = Math.max(maxX, x);
     maxY = Math.max(maxY, y);
   }
-  const sX = stroke.scaleX || 1;
-  const sY = stroke.scaleY || 1;
-  const tX = stroke.x || 0;
-  const tY = stroke.y || 0;
-  
+  const sX = stroke.x || 0;
+  const sY = stroke.y || 0;
   return {
-    minX: minX * sX + tX,
-    minY: minY * sY + tY,
-    maxX: maxX * sX + tX,
-    maxY: maxY * sY + tY,
+    minX: minX + sX,
+    minY: minY + sY,
+    maxX: maxX + sX,
+    maxY: maxY + sY,
   };
 }
 
@@ -240,9 +237,10 @@ interface MobilePageProps {
   isProcessing?: boolean;
   onToggleMeeting?: () => void;
   onOpenSettings?: () => void;
+  isJournal?: boolean;
 }
 
-export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting, onOpenSettings }: MobilePageProps) {
+export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting, onOpenSettings, isJournal }: MobilePageProps) {
   const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -301,27 +299,36 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     const handleStartRecordingNode = (e: Event) => {
       const customEvent = e as CustomEvent<{ id: string }>;
       const { id } = customEvent.detail;
+      const targetY = isJournal 
+        ? (sortedBlocks.length > 0 ? Math.min(...sortedBlocks.map(b => b.y ?? 0)) - 200 : 0)
+        : bottomY;
+      const newAudio = {
+        id,
+        url: "",
+        x: 50,
+        y: targetY,
+        width: 400,
+        title: isJournal ? `Journal Entry - ${format(new Date(), 'MMM d, yyyy')}` : `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+        summary: "",
+        transcript: "",
+        notes: "",
+        isLiveRecording: true,
+        recordingStartedAt: Date.now(),
+        audioCreatedAt: Date.now(),
+        audioExpiresAt: isJournal ? undefined : Date.now() + 7 * 24 * 60 * 60 * 1000,
+        isAudioSavedPermanently: isJournal ? true : false,
+      };
+
       setAudios(prev => {
         if (prev.some(a => a.id === id)) return prev;
-        return [...(prev || []), {
-          id,
-          url: "",
-          x: 50,
-          y: bottomY,
-          width: 400,
-          title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
-          summary: "",
-          transcript: "",
-          notes: "",
-          isLiveRecording: true,
-          recordingStartedAt: Date.now(),
-          audioCreatedAt: Date.now(),
-          audioExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-          isAudioSavedPermanently: false,
-        }];
+        return isJournal ? [{ ...newAudio }, ...(prev || [])] : [...(prev || []), { ...newAudio }];
       });
       setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        if (isJournal) {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
       }, 100);
     };
 
@@ -637,17 +644,61 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   }, [sortedBlocks]);
 
   const addTextBlock = () => {
+    const targetY = isJournal 
+      ? (sortedBlocks.length > 0 ? Math.min(...sortedBlocks.map(b => b.y ?? 0)) - 200 : 0)
+      : bottomY;
     const newNode = {
       id: uuidv4(),
       x: 50,
-      y: bottomY,
+      y: targetY,
       width: 400,
       content: "<p></p>"
     };
-    setTexts(prev => [...prev, newNode]);
-    setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
+    if (isJournal) {
+      setTexts(prev => [newNode, ...prev]);
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+    } else {
+      setTexts(prev => [...prev, newNode]);
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
+    }
+  };
+
+  const getBlockDate = (block: any) => {
+    const time = block.audioCreatedAt || block.recordingStartedAt || block.createdAt;
+    if (time) return new Date(time);
+    if (pageCreatedAt) return new Date(pageCreatedAt);
+    return new Date();
+  };
+
+  const formatDailyDivider = (d: Date) => {
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    if (d.toDateString() === today.toDateString()) {
+      return `Today — ${format(d, "EEEE, MMMM d")}`;
+    }
+    if (d.toDateString() === yesterday.toDateString()) {
+      return `Yesterday — ${format(d, "EEEE, MMMM d")}`;
+    }
+    return format(d, "EEEE, MMMM d, yyyy");
+  };
+
+  const shouldRenderDateDivider = (block: any, prevBlock: any | null) => {
+    if (!isJournal) return null;
+    const currentD = getBlockDate(block);
+    if (!prevBlock) {
+      return formatDailyDivider(currentD);
+    }
+    const prevD = getBlockDate(prevBlock);
+    if (currentD.toDateString() !== prevD.toDateString()) {
+      return formatDailyDivider(currentD);
+    }
+    return null;
   };
 
   if (loading) {
@@ -718,7 +769,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       >
         
         {/* Title area (scrolls with content) */}
-        <div className="px-5 pt-4 pb-4">
+        <div className="px-5 pt-4 pb-3">
           <input
             type="text"
             value={pageTitle}
@@ -733,6 +784,19 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           )}
         </div>
 
+        {/* Journal Mode Indicator Banner */}
+        {isJournal && (
+          <div className="mx-5 mb-4 px-3.5 py-2 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/25 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-700 dark:text-amber-400">
+              <BookOpen size={14} className="text-amber-500" />
+              <span>Journal Mode</span>
+            </div>
+            <span className="text-[11px] font-medium text-amber-700/80 dark:text-amber-400/80">
+              Permanent Audio &bull; Daily Timeline
+            </span>
+          </div>
+        )}
+
         {/* Linear feed of blocks */}
         <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
           {sortedBlocks.map((block, index) => {
@@ -740,20 +804,31 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             const strokeExtent = getAttachedStrokesExtent(block.attachedStrokes);
             const reverseZ = 500 - index;
             const isSelected = activeBlockId === block.id;
+            const dateDivider = shouldRenderDateDivider(block, index > 0 ? sortedBlocks[index - 1] : null);
 
             return (
-              <div 
-                key={block.id}
-                onTouchStart={(e) => handleCardTouchStart(block.id, e)}
-                onTouchMove={handleCardTouchMove}
-                onTouchEnd={handleCardTouchEnd}
-                className={`relative transition-all duration-200 ${
-                  isRearranging 
-                    ? 'p-3 rounded-2xl border-2 border-dashed border-primary-500/40 dark:border-primary-400/40 bg-zinc-50/70 dark:bg-zinc-900/70 shadow-sm' 
-                    : ''
-                }`}
-                style={{ zIndex: reverseZ }}
-              >
+              <React.Fragment key={block.id}>
+                {dateDivider && (
+                  <div className="flex items-center gap-3 my-2 px-1 select-none">
+                    <div className="h-px bg-zinc-200/80 dark:bg-zinc-800 flex-1" />
+                    <span className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 dark:bg-zinc-800/90 border border-zinc-200/60 dark:border-zinc-700/60 rounded-full text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 shadow-sm">
+                      <Calendar size={12} className="text-amber-500" />
+                      <span>{dateDivider}</span>
+                    </span>
+                    <div className="h-px bg-zinc-200/80 dark:bg-zinc-800 flex-1" />
+                  </div>
+                )}
+                <div 
+                  onTouchStart={(e) => handleCardTouchStart(block.id, e)}
+                  onTouchMove={handleCardTouchMove}
+                  onTouchEnd={handleCardTouchEnd}
+                  className={`relative transition-all duration-200 ${
+                    isRearranging 
+                      ? 'p-3 rounded-2xl border-2 border-dashed border-primary-500/40 dark:border-primary-400/40 bg-zinc-50/70 dark:bg-zinc-900/70 shadow-sm' 
+                      : ''
+                  }`}
+                  style={{ zIndex: reverseZ }}
+                >
                 {/* Rearrange Reorder Pill */}
                 {isRearranging && (
                   <div className="flex items-center justify-between mb-2 bg-zinc-200/80 dark:bg-zinc-800/90 border border-zinc-300 dark:border-zinc-700/60 rounded-full px-3 py-1 w-full shadow-sm z-30">
@@ -825,6 +900,12 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                         >
                           <Trash2 size={13} />
                         </button>
+                      </div>
+                    )}
+                    {isJournal && (
+                      <div className="flex items-center gap-1.5 px-3 pt-2 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 select-none">
+                        <Clock size={11} className="text-amber-500/80" />
+                        <span>{format(getBlockDate(block), "h:mm a")}</span>
                       </div>
                     )}
                     <TipTapEditor 
@@ -1093,8 +1174,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                   </div>
                 )}
               </div>
-            );
-          })}
+            </React.Fragment>
+          );
+        })}
           
           {/* Tap Zone at bottom to append text or sketch */}
           <div 

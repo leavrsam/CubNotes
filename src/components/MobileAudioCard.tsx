@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Trash2, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
+import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import type { AudioNode } from "./CustomCanvas";
 
@@ -100,7 +101,7 @@ export function MobileAudioCard({
         
         {/* Header / Audio Player / Recording Status */}
         <div className="bg-white/95 dark:bg-zinc-900/95 pt-4 pb-3 px-4 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
-          <div className="flex justify-between items-center mb-2.5">
+          <div className="flex justify-between items-center mb-1">
             <input 
               type="text"
               value={node.title || "Meeting Recording"}
@@ -124,6 +125,16 @@ export function MobileAudioCard({
                 <Trash2 size={15} />
               </button>
             </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-0.5 mb-2 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+            <Clock size={11} className="text-zinc-400" />
+            <span>{format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}</span>
+            {node.isAudioSavedPermanently && (
+              <span className="ml-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800/50">
+                Saved Permanently
+              </span>
+            )}
           </div>
 
           {node.isLiveRecording ? (

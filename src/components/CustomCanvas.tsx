@@ -21,6 +21,7 @@ interface CustomCanvasProps {
   pageCreatedAt: string;
   onUpdatePageTitle: (title: string) => void;
   headerControls?: React.ReactNode;
+  isJournal?: boolean;
 }
 
 export type Stroke = {
@@ -240,7 +241,7 @@ function getSvgPathFromStroke(stroke: number[][]) {
   return d.join(" ");
 }
 
-export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls }: CustomCanvasProps) {
+export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls, isJournal }: CustomCanvasProps) {
   const { 
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
     images, setImages, files, setFiles, videos, setVideos,
@@ -512,18 +513,18 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       setAudios(prev => [...(prev || []), {
         id: nodeId,
         x: center.x - 220,
-        y: center.y - 100,
+        y: isJournal ? 80 : center.y - 100,
         width: 500,
         url: "",
-        title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+        title: isJournal ? `Journal Entry - ${format(new Date(), 'MMM d, yyyy')}` : `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
         summary: "",
         transcript: "",
         notes: "",
         isLiveRecording: true,
         recordingStartedAt: Date.now(),
         audioCreatedAt: Date.now(),
-        audioExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-        isAudioSavedPermanently: false,
+        audioExpiresAt: isJournal ? undefined : Date.now() + 7 * 24 * 60 * 60 * 1000,
+        isAudioSavedPermanently: isJournal ? true : false,
       }]);
 
       mediaRecorder.ondataavailable = (event) => {
@@ -626,7 +627,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const summary = edgeData?.summary || "Summary not available.";
 
       const audioCreatedAt = Date.now();
-      const audioExpiresAt = audioCreatedAt + 7 * 24 * 60 * 60 * 1000; // 7-day retention
+      const audioExpiresAt = isJournal ? undefined : audioCreatedAt + 7 * 24 * 60 * 60 * 1000;
+      const isAudioSavedPermanently = isJournal ? true : false;
 
       setAudios(prev => prev.map(audio => {
         if (audio.id === nodeId) {
@@ -639,7 +641,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
             url: audioUrl,
             audioCreatedAt,
             audioExpiresAt,
-            isAudioSavedPermanently: false,
+            isAudioSavedPermanently: isAudioSavedPermanently ?? audio.isAudioSavedPermanently ?? false,
           };
         }
         return audio;

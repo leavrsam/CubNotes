@@ -28,7 +28,7 @@ import { uploadMediaFile } from "@/lib/storage";
 export default function Home() {
   const { 
     notebooks, loading, 
-    addNotebook, updateNotebook, deleteNotebook,
+    addNotebook, updateNotebook, deleteNotebook, toggleJournalMode,
     addSection, updateSection, deleteSection,
     addPage, updatePage, deletePage
   } = useNotebooks();
@@ -231,8 +231,19 @@ export default function Home() {
           return;
         }
 
+        let isCurrentJournal = false;
+        if (selectedPageId) {
+          for (const nb of notebooks) {
+            for (const sec of nb.sections) {
+              const p = sec.pages.find(page => page.id === selectedPageId);
+              if (p && (nb.is_journal || p.is_journal_entry)) isCurrentJournal = true;
+            }
+          }
+        }
+
         const audioCreatedAt = Date.now();
-        const audioExpiresAt = audioCreatedAt + 7 * 24 * 60 * 60 * 1000; // 7-day retention
+        const audioExpiresAt = isCurrentJournal ? undefined : audioCreatedAt + 7 * 24 * 60 * 60 * 1000;
+        const isAudioSavedPermanently = isCurrentJournal;
 
         if (data?.summary) {
           window.dispatchEvent(new CustomEvent('inject-summary', { 
@@ -243,7 +254,7 @@ export default function Home() {
               url: audioUrl,
               audioCreatedAt,
               audioExpiresAt,
-              isAudioSavedPermanently: false,
+              isAudioSavedPermanently,
             } 
           }));
           toast.success('Meeting summary added to canvas!', { id: "audio-process" });
@@ -323,6 +334,7 @@ export default function Home() {
 
   let activePageTitle = "Untitled Page";
   let activePageCreatedAt = "";
+  let isActiveJournal = false;
   if (selectedPageId) {
     for (const nb of notebooks) {
       for (const sec of nb.sections) {
@@ -330,6 +342,7 @@ export default function Home() {
         if (page) {
           activePageTitle = page.title;
           activePageCreatedAt = page.created_at;
+          isActiveJournal = Boolean(nb.is_journal || page.is_journal_entry);
         }
       }
     }
@@ -355,6 +368,7 @@ export default function Home() {
             onAddNotebook={() => addNotebook("New Notebook")}
             onUpdateNotebook={updateNotebook}
             onDeleteNotebook={deleteNotebook}
+            onToggleJournalMode={toggleJournalMode}
             onAddSection={(nbId) => addSection(nbId, "New Section")}
             onUpdateSection={updateSection}
             onDeleteSection={deleteSection}

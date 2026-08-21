@@ -358,8 +358,18 @@ export function MobileNavigation({
               <div key={nb.id} className="space-y-2">
                 <div className="flex items-center justify-between px-2">
                   <div className="flex items-center gap-1.5">
-                    <h2 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    {nb.is_journal ? (
+                      <BookOpen size={14} className="text-amber-500 flex-shrink-0" />
+                    ) : (
+                      <Folder size={14} className="text-zinc-400 flex-shrink-0" />
+                    )}
+                    <h2 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                       {nb.title}
+                      {nb.is_journal && (
+                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 rounded">
+                          Journal
+                        </span>
+                      )}
                     </h2>
                   </div>
 
