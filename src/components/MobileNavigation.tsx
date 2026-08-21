@@ -275,7 +275,7 @@ export function MobileNavigation({
       >
         <div className="flex items-center justify-between px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <BookOpen size={20} className="text-primary-600 dark:text-primary-400" />
+            <img src="/logo.png" alt="CubNotes" className="w-6 h-6 rounded-md object-cover shadow-sm ring-1 ring-black/5 dark:ring-white/10" />
             <span className="font-bold text-sm text-zinc-700 dark:text-zinc-300">CubNotes</span>
           </div>
 

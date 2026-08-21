@@ -5,6 +5,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CubNotes",
   description: "AI-powered infinite canvas workspace",
+  icons: {
+    icon: [
+      { url: "/icon.png" },
+      { url: "/logo.png" }
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png" }
+    ],
+  },
 };
 
 export const viewport: Viewport = {

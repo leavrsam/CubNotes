@@ -260,9 +260,9 @@ export default function LoginPage() {
       <div className="w-full max-w-[420px] rounded-2xl border border-zinc-800/90 bg-zinc-900/90 backdrop-blur-xl p-7 sm:p-8 shadow-2xl space-y-6">
         
         {/* Brand Header */}
-        <div className="flex flex-col items-center text-center space-y-1.5">
-          <div className="w-12 h-12 rounded-xl bg-primary-600/10 border border-primary-500/20 flex items-center justify-center text-primary-400 mb-1 shadow-sm">
-            <BookOpen size={24} />
+        <div className="flex flex-col items-center text-center space-y-2">
+          <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-xl mb-1 ring-1 ring-white/15">
+            <img src="/logo.png" alt="CubNotes" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">CubNotes</h1>
           <p className="text-xs text-zinc-400">
