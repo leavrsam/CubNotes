@@ -250,12 +250,7 @@ function AudioNodeCard({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between px-3.5 py-2 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/50 dark:border-zinc-700/50 rounded-xl text-xs text-zinc-500 dark:text-zinc-400">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Clock size={13} className="text-zinc-400" />
-                <span>Audio recording expired (7-day policy) — Transcript & AI Notes preserved</span>
-              </span>
-            </div>
+            null
           )}
         </div>
 
