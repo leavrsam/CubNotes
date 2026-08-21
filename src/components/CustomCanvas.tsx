@@ -13,6 +13,7 @@ import { RichTextOverlay } from "./RichTextOverlay";
 import { AudioOverlay } from "./AudioOverlay";
 import { MediaOverlay } from "./MediaOverlay";
 import { Minimap } from "./Minimap";
+import { uploadMediaFile } from "@/lib/storage";
 
 interface CustomCanvasProps {
   pageId: string;
@@ -438,19 +439,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
     const toastId = toast.loading(`Uploading ${type}...`);
     try {
-      const ext = file.name.split('.').pop();
-      const filename = `${pageId}/${uuidv4()}.${ext}`;
-
-      const { data, error } = await supabase.storage
-        .from('recordings')
-        .upload(filename, file);
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('recordings')
-        .getPublicUrl(filename);
-
+      const result = await uploadMediaFile(file, pageId);
+      const publicUrl = result.url;
       const center = getCanvasCenter();
       
       if (type === 'image') {
@@ -477,7 +467,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           filename: file.name
         }]);
       }
-      toast.success(`${type} uploaded!`, { id: toastId });
+      toast.success(`${type} uploaded (${result.storage === 'r2' ? 'Cloudflare R2' : 'Storage'})!`, { id: toastId });
     } catch (error: any) {
       toast.error(`Upload failed: ${error.message}`, { id: toastId });
     } finally {

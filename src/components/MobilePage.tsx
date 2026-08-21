@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import { SettingsModal } from "./SettingsModal";
 import { MobileAudioCard } from "./MobileAudioCard";
 import { MobileDrawOverlay } from "./MobileDrawOverlay";
+import { uploadMediaFile } from "@/lib/storage";
 import type { Stroke, TextNode, ImageNode, AudioNode, FileNode, VideoNode } from "./CustomCanvas";
 
 function getStrokeBoundingBox(stroke: Stroke) {
@@ -466,18 +467,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
     const toastId = toast.loading(`Uploading image...`);
     try {
-      const ext = file.name.split('.').pop();
-      const filename = `${pageId}/${uuidv4()}.${ext}`;
-
-      const { data, error } = await supabase.storage
-        .from('recordings')
-        .upload(filename, file);
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('recordings')
-        .getPublicUrl(filename);
+      const result = await uploadMediaFile(file, pageId);
+      const publicUrl = result.url;
 
       setImages(prev => [...(prev || []), {
         id: uuidv4(),
@@ -485,7 +476,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         y: bottomY,
         url: publicUrl
       }]);
-      toast.success(`Image uploaded!`, { id: toastId });
+      toast.success(`Image uploaded (${result.storage === 'r2' ? 'Cloudflare R2' : 'Storage'})!`, { id: toastId });
       setTimeout(() => {
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       }, 100);
