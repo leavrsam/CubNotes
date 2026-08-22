@@ -458,7 +458,12 @@ export function AudioOverlay({
   pan, zoom, tool,
   selectedIds = [], setSelectedIds,
   onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
-  onAnnotate
+  onAnnotate,
+  activeRecordingDuration,
+  isActiveRecordingPaused,
+  onPauseRecording,
+  onResumeRecording,
+  onStopRecording
 }: AudioOverlayProps) {
   
   // Dragging state
