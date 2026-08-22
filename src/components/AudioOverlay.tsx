@@ -21,6 +21,11 @@ interface AudioOverlayProps {
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
   onAnnotate?: (id: string) => void;
+  activeRecordingDuration?: number;
+  isActiveRecordingPaused?: boolean;
+  onPauseRecording?: () => void;
+  onResumeRecording?: () => void;
+  onStopRecording?: () => void;
 }
 
 type TabType = 'notes' | 'enhanced' | 'transcript' | 'summary' | 'chat';
@@ -37,7 +42,12 @@ function AudioNodeCard({
   setResizingId,
   resizeStartRef,
   onDragSelectionStart,
-  onAnnotate
+  onAnnotate,
+  activeRecordingDuration = 0,
+  isActiveRecordingPaused = false,
+  onPauseRecording,
+  onResumeRecording,
+  onStopRecording
 }: {
   node: AudioNode;
   tool: ToolType;
@@ -51,25 +61,25 @@ function AudioNodeCard({
   resizeStartRef: React.MutableRefObject<{ x: number, nodeWidth: number } | null>;
   onDragSelectionStart?: (id: string) => void;
   onAnnotate?: (id: string) => void;
+  activeRecordingDuration?: number;
+  isActiveRecordingPaused?: boolean;
+  onPauseRecording?: () => void;
+  onResumeRecording?: () => void;
+  onStopRecording?: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'notes' : 'summary');
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
   const [chatInput, setChatInput] = useState("");
 
-  // Live timer for active recording
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Sync with global timer for active recording
+  const elapsedSeconds = node.isLiveRecording ? activeRecordingDuration : 0;
 
   React.useEffect(() => {
     if (node.isLiveRecording) {
       setActiveTab('notes');
-      const start = node.recordingStartedAt || Date.now();
-      const interval = setInterval(() => {
-        setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
-      }, 1000);
-      return () => clearInterval(interval);
     }
-  }, [node.isLiveRecording, node.recordingStartedAt]);
+  }, [node.isLiveRecording]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -210,14 +220,34 @@ function AudioNodeCard({
           </div>
           
           {node.isLiveRecording ? (
-            <div className="flex items-center justify-between px-4 py-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl animate-pulse">
+            <div className="flex items-center justify-between px-4 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                <span className="text-xs font-bold text-red-600 dark:text-red-400">Recording live meeting in background...</span>
+                <span className={`w-2.5 h-2.5 rounded-full bg-red-500 ${!isActiveRecordingPaused ? 'animate-ping' : ''}`} />
+                <span className="text-xs font-bold text-red-600 dark:text-red-400">
+                  {isActiveRecordingPaused ? 'Recording Paused' : 'Recording live meeting...'}
+                </span>
               </div>
-              <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
-                {formatTimer(elapsedSeconds)}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
+                  {formatTimer(elapsedSeconds)}
+                </span>
+                {onStopRecording && (
+                  <div className="flex items-center gap-1 border-l border-red-200 dark:border-red-800/60 pl-3">
+                    {isActiveRecordingPaused ? (
+                      <button onClick={onResumeRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Resume">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                      </button>
+                    ) : (
+                      <button onClick={onPauseRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Pause">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                      </button>
+                    )}
+                    <button onClick={onStopRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Stop">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ) : node.isTranscribing ? (
             <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl">
@@ -514,6 +544,11 @@ export function AudioOverlay({
             setResizingId={setResizingId}
             resizeStartRef={resizeStartRef}
             onAnnotate={onAnnotate}
+            activeRecordingDuration={activeRecordingDuration}
+            isActiveRecordingPaused={isActiveRecordingPaused}
+            onPauseRecording={onPauseRecording}
+            onResumeRecording={onResumeRecording}
+            onStopRecording={onStopRecording}
             onDragSelectionStart={(id) => {
               if (tool === 'home') {
                 setSelectedIds?.([id]);

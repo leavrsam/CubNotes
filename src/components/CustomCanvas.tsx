@@ -1905,6 +1905,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionStart={handleDragSelectionStart}
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
+          activeRecordingDuration={recordingDuration}
+          isActiveRecordingPaused={isPaused}
+          onPauseRecording={pauseRecording}
+          onResumeRecording={resumeRecording}
+          onStopRecording={stopRecording}
         />
         <MediaOverlay
           images={images || []}
