@@ -29,8 +29,8 @@ export default function Home() {
   const { 
     notebooks, loading, 
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode,
-    addSection, updateSection, deleteSection,
-    addPage, updatePage, deletePage
+    addSection, updateSection, deleteSection, moveSection,
+    addPage, updatePage, deletePage, movePage
   } = useNotebooks();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
@@ -537,6 +537,8 @@ export default function Home() {
               onDeletePage={deletePage}
               onDeleteSection={deleteSection}
               onDeleteNotebook={deleteNotebook}
+              onMovePage={movePage}
+              onMoveSection={moveSection}
               onOpenSettings={() => setIsSettingsOpen(true)}
             />
           ) : (

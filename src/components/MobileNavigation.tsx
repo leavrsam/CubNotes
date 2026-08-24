@@ -14,8 +14,13 @@ import {
   FolderPlus, 
   BookOpen, 
   Edit3,
-  X
+  X,
+  Share2,
+  FolderInput,
+  Check
 } from "lucide-react";
+import { SwipeableRow } from "./SwipeableRow";
+import toast from "react-hot-toast";
 
 interface MobileNavigationProps {
   notebooks: Notebook[];
@@ -30,6 +35,8 @@ interface MobileNavigationProps {
   onDeletePage?: (pageId: string) => Promise<void>;
   onDeleteSection?: (sectionId: string) => Promise<void>;
   onDeleteNotebook?: (notebookId: string) => Promise<void>;
+  onMovePage?: (pageId: string, targetSectionId: string) => Promise<void>;
+  onMoveSection?: (sectionId: string, targetNotebookId: string) => Promise<void>;
   onOpenSettings?: () => void;
 }
 
@@ -46,10 +53,15 @@ export function MobileNavigation({
   onDeletePage,
   onDeleteSection,
   onDeleteNotebook,
+  onMovePage,
+  onMoveSection,
   onOpenSettings
 }: MobileNavigationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   
+  // Track swiped open item
+  const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
+
   // Modals
   const [isNewNotebookModalOpen, setIsNewNotebookModalOpen] = useState(false);
   const [newNotebookTitle, setNewNotebookTitle] = useState("");
@@ -57,6 +69,11 @@ export function MobileNavigation({
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
   const [newFolderTitle, setNewFolderTitle] = useState("");
   const [selectedNotebookIdForFolder, setSelectedNotebookIdForFolder] = useState<string>("");
+
+  // Move Modals
+  const [moveTargetNote, setMoveTargetNote] = useState<Page | null>(null);
+  const [moveTargetFolder, setMoveTargetFolder] = useState<Section | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
 
   // Total pages across all folders
   const totalNotesCount = useMemo(() => {
@@ -112,6 +129,108 @@ export function MobileNavigation({
       if (nbRes?.pageId) {
         onSelectPage(nbRes.pageId);
       }
+    }
+  };
+
+  // Cross-platform Share (iOS, Android, Web)
+  const handleShareNote = async (page: Page) => {
+    const title = page.title || 'Untitled Note';
+    const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/?page=${page.id}` : '';
+    const shareData = {
+      title,
+      text: `CubNotes: ${title}`,
+      url: shareUrl,
+    };
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share(shareData);
+        toast.success("Note shared!");
+        return;
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return; // User dismissed native share sheet
+    }
+
+    // Fallback: Copy link/title to clipboard
+    try {
+      await navigator.clipboard.writeText(shareUrl || window.location.href);
+      toast.success("Note link copied to clipboard!");
+    } catch {
+      toast.error("Could not copy note link");
+    }
+  };
+
+  const handleShareFolder = async (section: Section) => {
+    const title = section.title || 'Folder';
+    const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareData = {
+      title,
+      text: `CubNotes Folder: ${title} (${section.pages.length} notes)`,
+      url: shareUrl,
+    };
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share(shareData);
+        toast.success("Folder shared!");
+        return;
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(`${title} - ${shareUrl}`);
+      toast.success("Folder info copied to clipboard!");
+    } catch {
+      toast.error("Could not copy folder info");
+    }
+  };
+
+  const handleDeleteNote = async (page: Page) => {
+    if (!onDeletePage) return;
+    if (confirm(`Delete "${page.title || 'Untitled Note'}"?`)) {
+      await onDeletePage(page.id);
+      toast.success("Note deleted");
+    }
+  };
+
+  const handleDeleteFolder = async (section: Section) => {
+    if (!onDeleteSection) return;
+    if (confirm(`Delete folder "${section.title}" and its ${section.pages.length} note(s)?`)) {
+      await onDeleteSection(section.id);
+      toast.success("Folder deleted");
+    }
+  };
+
+  const handleConfirmMoveNote = async (targetSectionId: string) => {
+    if (!moveTargetNote || !onMovePage) return;
+    setIsMoving(true);
+    try {
+      await onMovePage(moveTargetNote.id, targetSectionId);
+      toast.success("Note moved!");
+      setMoveTargetNote(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to move note");
+    } finally {
+      setIsMoving(false);
+    }
+  };
+
+  const handleConfirmMoveFolder = async (targetNotebookId: string) => {
+    if (!moveTargetFolder || !onMoveSection) return;
+    setIsMoving(true);
+    try {
+      await onMoveSection(moveTargetFolder.id, targetNotebookId);
+      toast.success("Folder moved!");
+      setMoveTargetFolder(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to move folder");
+    } finally {
+      setIsMoving(false);
     }
   };
 
@@ -205,40 +324,36 @@ export function MobileNavigation({
           ) : (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-sm border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {filteredPages.map((page) => (
-                <div 
+                <SwipeableRow
                   key={page.id}
-                  className="flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+                  id={`note-${page.id}`}
+                  isOpen={openSwipeId === `note-${page.id}`}
+                  onOpen={(id) => setOpenSwipeId(id)}
+                  onClose={() => setOpenSwipeId(null)}
+                  onShare={() => handleShareNote(page)}
+                  onMove={() => setMoveTargetNote(page)}
+                  onDelete={() => handleDeleteNote(page)}
+                  shareLabel="Share"
+                  moveLabel="Move"
                 >
-                  <button
-                    onClick={() => onSelectPage(page.id)}
-                    className="flex-1 text-left flex flex-col min-w-0 pr-3"
-                  >
-                    <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
-                      {page.title || 'Untitled Note'}
-                    </span>
-                    <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">
-                      {new Date(page.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  </button>
+                  <div className="flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors">
+                    <button
+                      onClick={() => onSelectPage(page.id)}
+                      className="flex-1 text-left flex flex-col min-w-0 pr-3"
+                    >
+                      <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
+                        {page.title || 'Untitled Note'}
+                      </span>
+                      <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">
+                        {new Date(page.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </button>
 
-                  <div className="flex items-center gap-2">
-                    {onDeletePage && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(`Delete "${page.title || 'Untitled Note'}"?`)) {
-                            onDeletePage(page.id);
-                          }
-                        }}
-                        className="p-1.5 text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                        title="Delete Note"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                    <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
+                    <div className="flex items-center gap-1">
+                      <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
+                    </div>
                   </div>
-                </div>
+                </SwipeableRow>
               ))}
             </div>
           )}
@@ -404,27 +519,39 @@ export function MobileNavigation({
                     </div>
                   ) : (
                     nb.sections.map((sec) => (
-                      <button
+                      <SwipeableRow
                         key={sec.id}
-                        onClick={() => onSelectSection(sec.id)}
-                        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors text-left"
+                        id={`folder-${sec.id}`}
+                        isOpen={openSwipeId === `folder-${sec.id}`}
+                        onOpen={(id) => setOpenSwipeId(id)}
+                        onClose={() => setOpenSwipeId(null)}
+                        onShare={() => handleShareFolder(sec)}
+                        onMove={() => setMoveTargetFolder(sec)}
+                        onDelete={() => handleDeleteFolder(sec)}
+                        shareLabel="Share"
+                        moveLabel="Move"
                       >
-                        <div className="flex items-center gap-3 min-w-0 pr-2">
-                          <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center flex-shrink-0">
-                            <Folder size={18} className="text-primary-600 dark:text-primary-400" />
+                        <button
+                          onClick={() => onSelectSection(sec.id)}
+                          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 pr-2">
+                            <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center flex-shrink-0">
+                              <Folder size={18} className="text-primary-600 dark:text-primary-400" />
+                            </div>
+                            <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
+                              {sec.title}
+                            </span>
                           </div>
-                          <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
-                            {sec.title}
-                          </span>
-                        </div>
 
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
-                            {sec.pages.length}
-                          </span>
-                          <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
-                        </div>
-                      </button>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                              {sec.pages.length}
+                            </span>
+                            <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
+                          </div>
+                        </button>
+                      </SwipeableRow>
                     ))
                   )}
                 </div>
@@ -547,6 +674,158 @@ export function MobileNavigation({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal: Move Note to Folder */}
+      {moveTargetNote && (
+        <div className="fixed inset-0 z-[3000] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Move Note</h3>
+                <p className="text-xs text-zinc-400 truncate max-w-[280px]">
+                  &quot;{moveTargetNote.title || 'Untitled Note'}&quot;
+                </p>
+              </div>
+              <button 
+                onClick={() => setMoveTargetNote(null)}
+                className="p-1.5 rounded-full text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 py-1 pr-1 custom-scrollbar">
+              {notebooks.map((nb) => (
+                <div key={nb.id} className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 px-2">
+                    <BookOpen size={13} className="text-zinc-400" />
+                    <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">{nb.title}</span>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80 overflow-hidden bg-zinc-50/50 dark:bg-zinc-950/40">
+                    {nb.sections.length === 0 ? (
+                      <div className="p-3 text-xs text-zinc-400 italic">No folders</div>
+                    ) : (
+                      nb.sections.map((sec) => {
+                        const isCurrent = sec.id === moveTargetNote.section_id;
+                        return (
+                          <button
+                            key={sec.id}
+                            disabled={isMoving}
+                            onClick={() => handleConfirmMoveNote(sec.id)}
+                            className={`w-full flex items-center justify-between p-3 text-left transition-colors ${
+                              isCurrent 
+                                ? 'bg-primary-50 dark:bg-primary-950/30' 
+                                : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/60 active:bg-zinc-200 dark:active:bg-zinc-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <Folder size={16} className={isCurrent ? "text-primary-600 dark:text-primary-400" : "text-zinc-400"} />
+                              <span className={`text-sm truncate ${isCurrent ? 'font-bold text-primary-600 dark:text-primary-400' : 'font-medium text-zinc-800 dark:text-zinc-200'}`}>
+                                {sec.title}
+                              </span>
+                            </div>
+
+                            {isCurrent ? (
+                              <span className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-1">
+                                <Check size={14} /> Current
+                              </span>
+                            ) : (
+                              <span className="text-xs text-zinc-400 font-medium">
+                                {sec.pages.length}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
+              <button 
+                type="button"
+                onClick={() => setMoveTargetNote(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Move Folder to Notebook */}
+      {moveTargetFolder && (
+        <div className="fixed inset-0 z-[3000] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Move Folder</h3>
+                <p className="text-xs text-zinc-400 truncate max-w-[280px]">
+                  &quot;{moveTargetFolder.title}&quot;
+                </p>
+              </div>
+              <button 
+                onClick={() => setMoveTargetFolder(null)}
+                className="p-1.5 rounded-full text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 py-1 custom-scrollbar">
+              <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 px-1">Select Destination Notebook</label>
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80 overflow-hidden bg-zinc-50/50 dark:bg-zinc-950/40">
+                {notebooks.map((nb) => {
+                  const isCurrent = nb.id === moveTargetFolder.notebook_id;
+                  return (
+                    <button
+                      key={nb.id}
+                      disabled={isMoving}
+                      onClick={() => handleConfirmMoveFolder(nb.id)}
+                      className={`w-full flex items-center justify-between p-3.5 text-left transition-colors ${
+                        isCurrent 
+                          ? 'bg-primary-50 dark:bg-primary-950/30' 
+                          : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/60 active:bg-zinc-200 dark:active:bg-zinc-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 pr-2">
+                        <BookOpen size={18} className={isCurrent ? "text-primary-600 dark:text-primary-400" : "text-zinc-400"} />
+                        <span className={`text-sm truncate ${isCurrent ? 'font-bold text-primary-600 dark:text-primary-400' : 'font-medium text-zinc-800 dark:text-zinc-200'}`}>
+                          {nb.title}
+                        </span>
+                      </div>
+
+                      {isCurrent ? (
+                        <span className="text-[11px] font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-1">
+                          <Check size={14} /> Current
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-400 font-medium">
+                          {nb.sections.length} {nb.sections.length === 1 ? 'folder' : 'folders'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
+              <button 
+                type="button"
+                onClick={() => setMoveTargetFolder(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

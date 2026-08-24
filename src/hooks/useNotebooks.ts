@@ -243,10 +243,86 @@ export function useNotebooks() {
     await fetchNotebooks();
   };
 
+  const movePage = async (pageId: string, targetSectionId: string) => {
+    // Optimistic update
+    setNotebooks(prev => {
+      let movedPage: Page | null = null;
+      // Remove from current section
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: nb.sections.map(sec => {
+          const found = sec.pages.find(p => p.id === pageId);
+          if (found) {
+            movedPage = { ...found, section_id: targetSectionId };
+            return {
+              ...sec,
+              pages: sec.pages.filter(p => p.id !== pageId)
+            };
+          }
+          return sec;
+        })
+      }));
+      if (!movedPage) return prev;
+      // Add to target section
+      return updated.map(nb => ({
+        ...nb,
+        sections: nb.sections.map(sec => {
+          if (sec.id === targetSectionId) {
+            return {
+              ...sec,
+              pages: [movedPage!, ...sec.pages]
+            };
+          }
+          return sec;
+        })
+      }));
+    });
+
+    const { error } = await supabase.from('pages').update({ section_id: targetSectionId }).eq('id', pageId);
+    if (error) {
+      console.error("Error moving page:", error);
+    }
+    await fetchNotebooks();
+  };
+
+  const moveSection = async (sectionId: string, targetNotebookId: string) => {
+    // Optimistic update
+    setNotebooks(prev => {
+      let movedSection: Section | null = null;
+      const updated = prev.map(nb => {
+        const found = nb.sections.find(s => s.id === sectionId);
+        if (found) {
+          movedSection = { ...found, notebook_id: targetNotebookId };
+          return {
+            ...nb,
+            sections: nb.sections.filter(s => s.id !== sectionId)
+          };
+        }
+        return nb;
+      });
+      if (!movedSection) return prev;
+      return updated.map(nb => {
+        if (nb.id === targetNotebookId) {
+          return {
+            ...nb,
+            sections: [...nb.sections, movedSection!]
+          };
+        }
+        return nb;
+      });
+    });
+
+    const { error } = await supabase.from('sections').update({ notebook_id: targetNotebookId }).eq('id', sectionId);
+    if (error) {
+      console.error("Error moving section:", error);
+    }
+    await fetchNotebooks();
+  };
+
   return { 
     notebooks, loading, userId,
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode,
-    addSection, updateSection, deleteSection,
-    addPage, updatePage, deletePage
+    addSection, updateSection, deleteSection, moveSection,
+    addPage, updatePage, deletePage, movePage
   };
 }
