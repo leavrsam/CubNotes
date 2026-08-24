@@ -1311,32 +1311,20 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           );
         })}
           
-          {/* Tap Zone at bottom to append text or sketch */}
+          {/* Tap Zone at bottom to append text */}
           <div 
-            className="flex-1 min-h-[160px] w-full cursor-text flex flex-col items-center justify-center text-center p-6 select-none" 
+            className="flex-1 min-h-[160px] w-full cursor-text" 
             onClick={addTextBlock}
-          >
-            <div className="text-xs font-medium text-zinc-400/80 dark:text-zinc-600 flex items-center gap-2">
-              <span>Tap empty area to write</span>
-              <span>•</span>
-              <button 
-                onClick={(e) => { e.stopPropagation(); startNewSketchBlock(); }}
-                className="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline font-semibold"
-              >
-                <PenTool size={12} />
-                <span>Add sketch</span>
-              </button>
-            </div>
-          </div>
+          />
         </div>
       </div>
 
       {/* Floating Glassmorphic Dock */}
       <div 
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}
       >
-        <div className="pointer-events-auto flex items-center gap-6 px-7 py-2.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-2xl shadow-black/15 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 transition-all">
+        <div className="pointer-events-auto flex items-center gap-4 px-4 py-1.5 rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-xl shadow-black/15 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 transition-all">
           <input 
             type="file" 
             ref={imageInputRef} 
@@ -1347,23 +1335,23 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           
           <button 
             onClick={() => imageInputRef.current?.click()} 
-            className="p-2 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+            className="p-1.5 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
             title="Add Photo / Image"
           >
-            <ImageIcon size={22} />
+            <ImageIcon size={19} />
           </button>
 
           <button 
             onClick={onToggleMeeting}
             disabled={isProcessing}
-            className={`p-2 transition-all rounded-full active:scale-90 ${
+            className={`p-1.5 transition-all rounded-full active:scale-90 ${
               isRecording 
                 ? 'text-red-500 animate-pulse bg-red-500/10' 
                 : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
             }`}
             title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
           >
-            <Mic size={22} />
+            <Mic size={19} />
           </button>
 
           <button 
@@ -1375,16 +1363,16 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 startNewSketchBlock();
               }
             }}
-            className={`p-2 transition-all rounded-full active:scale-90 relative ${
+            className={`p-1.5 transition-all rounded-full active:scale-90 relative ${
               activeBlockId 
                 ? 'text-primary-600 dark:text-primary-400 bg-primary-500/10 dark:bg-primary-400/10 ring-1 ring-primary-500/30' 
                 : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
             }`}
             title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
           >
-            <PenTool size={22} />
+            <PenTool size={19} />
             {activeBlockId && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
             )}
           </button>
         </div>
