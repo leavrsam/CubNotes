@@ -311,6 +311,31 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const imageInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
+  // Virtual Keyboard / Viewport tracking for flush dock attachment
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const updateViewport = () => {
+      if (!window.visualViewport) return;
+      const offset = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
+      const isOpen = offset > 40;
+      setKeyboardOffset(Math.max(0, offset));
+      setIsKeyboardOpen(isOpen);
+    };
+
+    window.visualViewport.addEventListener("resize", updateViewport);
+    window.visualViewport.addEventListener("scroll", updateViewport);
+
+    return () => {
+      if (!window.visualViewport) return;
+      window.visualViewport.removeEventListener("resize", updateViewport);
+      window.visualViewport.removeEventListener("scroll", updateViewport);
+    };
+  }, []);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
@@ -1319,64 +1344,140 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         </div>
       </div>
 
-      {/* Floating Glassmorphic Dock */}
-      <div 
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}
-      >
-        <div className="pointer-events-auto flex items-center gap-4 px-4 py-1.5 rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-xl shadow-black/15 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 transition-all">
-          <input 
-            type="file" 
-            ref={imageInputRef} 
-            onChange={handleFileUpload} 
-            accept="image/*" 
-            className="hidden" 
-          />
-          
-          <button 
-            onClick={() => imageInputRef.current?.click()} 
-            className="p-1.5 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
-            title="Add Photo / Image"
-          >
-            <ImageIcon size={19} />
-          </button>
+      {/* Dynamic Dock & Keyboard Accessory Bar */}
+      {isKeyboardOpen ? (
+        /* Keyboard Accessory Bar (Attached directly flush on top of the keyboard) */
+        <div 
+          className="fixed left-0 right-0 z-[1500] pointer-events-none transition-[bottom] duration-75 ease-out"
+          style={{ bottom: `${keyboardOffset}px` }}
+        >
+          <div className="pointer-events-auto w-full bg-white/95 dark:bg-zinc-900/95 backdrop-blur-2xl border-t border-zinc-200/80 dark:border-zinc-800/80 px-4 py-1.5 flex items-center justify-between shadow-lg">
+            <input 
+              type="file" 
+              ref={imageInputRef} 
+              onChange={handleFileUpload} 
+              accept="image/*" 
+              className="hidden" 
+            />
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onPointerDown={(e) => { e.preventDefault(); imageInputRef.current?.click(); }}
+                className="p-1.5 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
+                title="Add Photo / Image"
+              >
+                <ImageIcon size={19} />
+              </button>
 
-          <button 
-            onClick={onToggleMeeting}
-            disabled={isProcessing}
-            className={`p-1.5 transition-all rounded-full active:scale-90 ${
-              isRecording 
-                ? 'text-red-500 animate-pulse bg-red-500/10' 
-                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
-            }`}
-            title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
-          >
-            <Mic size={19} />
-          </button>
+              <button 
+                onPointerDown={(e) => { e.preventDefault(); onToggleMeeting?.(); }}
+                disabled={isProcessing}
+                className={`p-1.5 transition-all rounded-lg active:scale-90 ${
+                  isRecording 
+                    ? 'text-red-500 animate-pulse bg-red-500/10' 
+                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                }`}
+                title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
+              >
+                <Mic size={19} />
+              </button>
 
-          <button 
-            onClick={() => {
-              if (activeBlockId) {
-                const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
-                openDrawOverlay(activeBlockId, activeBlock?.type || 'block', activeBlock?.y);
-              } else {
-                startNewSketchBlock();
-              }
-            }}
-            className={`p-1.5 transition-all rounded-full active:scale-90 relative ${
-              activeBlockId 
-                ? 'text-primary-600 dark:text-primary-400 bg-primary-500/10 dark:bg-primary-400/10 ring-1 ring-primary-500/30' 
-                : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
-            }`}
-            title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
-          >
-            <PenTool size={19} />
-            {activeBlockId && (
-              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
-            )}
-          </button>
+              <button 
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  if (activeBlockId) {
+                    const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
+                    openDrawOverlay(activeBlockId, activeBlock?.type || 'block', activeBlock?.y);
+                  } else {
+                    startNewSketchBlock();
+                  }
+                }}
+                className={`p-1.5 transition-all rounded-lg active:scale-90 relative ${
+                  activeBlockId 
+                    ? 'text-primary-600 dark:text-primary-400 bg-primary-500/10 dark:bg-primary-400/10 ring-1 ring-primary-500/30' 
+                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                }`}
+                title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
+              >
+                <PenTool size={19} />
+                {activeBlockId && (
+                  <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+                )}
+              </button>
+            </div>
+
+            {/* Done button to dismiss keyboard */}
+            <button 
+              onPointerDown={(e) => {
+                e.preventDefault();
+                (document.activeElement as HTMLElement)?.blur();
+              }}
+              className="text-xs font-bold text-primary-600 dark:text-primary-400 px-3 py-1 rounded-full bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 active:scale-95 transition-all"
+            >
+              Done
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Floating Glassmorphic Pill when keyboard is closed */
+        <div 
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}
+        >
+          <div className="pointer-events-auto flex items-center gap-4 px-4 py-1.5 rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-xl shadow-black/15 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 transition-all">
+            <input 
+              type="file" 
+              ref={imageInputRef} 
+              onChange={handleFileUpload} 
+              accept="image/*" 
+              className="hidden" 
+            />
+            
+            <button 
+              onClick={() => imageInputRef.current?.click()} 
+              className="p-1.5 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+              title="Add Photo / Image"
+            >
+              <ImageIcon size={19} />
+            </button>
+
+            <button 
+              onClick={onToggleMeeting}
+              disabled={isProcessing}
+              className={`p-1.5 transition-all rounded-full active:scale-90 ${
+                isRecording 
+                  ? 'text-red-500 animate-pulse bg-red-500/10' 
+                  : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+              }`}
+              title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
+            >
+              <Mic size={19} />
+            </button>
+
+            <button 
+              onClick={() => {
+                if (activeBlockId) {
+                  const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
+                  openDrawOverlay(activeBlockId, activeBlock?.type || 'block', activeBlock?.y);
+                } else {
+                  startNewSketchBlock();
+                }
+              }}
+              className={`p-1.5 transition-all rounded-full active:scale-90 relative ${
+                activeBlockId 
+                  ? 'text-primary-600 dark:text-primary-400 bg-primary-500/10 dark:bg-primary-400/10 ring-1 ring-primary-500/30' 
+                  : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+              }`}
+              title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
+            >
+              <PenTool size={19} />
+              {activeBlockId && (
+                <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       <MobileDrawOverlay 
         isOpen={isDrawOverlayOpen}
