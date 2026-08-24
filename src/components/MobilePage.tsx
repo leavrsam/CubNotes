@@ -1117,6 +1117,24 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       onDelete={() => {
                         setTexts(prev => prev.filter(t => t.id !== block.id));
                       }}
+                      setActiveEditor={(editor) => {
+                        if (editor) setIsKeyboardOpen(true);
+                      }}
+                      onBlurText={() => {
+                        setTimeout(() => {
+                          const active = document.activeElement;
+                          const isStillEditing = active && (
+                            active.tagName === 'INPUT' || 
+                            active.tagName === 'TEXTAREA' || 
+                            (active as HTMLElement).isContentEditable ||
+                            Boolean(active.closest('.ProseMirror'))
+                          );
+                          if (!isStillEditing) {
+                            setIsKeyboardOpen(false);
+                            setKeyboardOffset(0);
+                          }
+                        }, 120);
+                      }}
                     />
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                   </div>
