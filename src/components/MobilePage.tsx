@@ -1463,10 +1463,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       ) : (
         /* Floating Glassmorphic Pill when keyboard is closed */
         <div 
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}
+          className="fixed bottom-2 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)' }}
         >
-          <div className="pointer-events-auto flex items-center gap-4 px-4 py-1.5 rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-xl shadow-black/15 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 transition-all">
+          <div className="pointer-events-auto flex items-center gap-4 px-4 py-1.5 rounded-full bg-white/25 dark:bg-black/35 backdrop-blur-xl border border-white/40 dark:border-white/15 shadow-lg shadow-black/10 dark:shadow-black/40 ring-1 ring-white/10 dark:ring-white/5 transition-all">
             <input 
               type="file" 
               ref={imageInputRef} 
@@ -1477,7 +1477,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             
             <button 
               onClick={() => imageInputRef.current?.click()} 
-              className="p-1.5 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+              className="p-1.5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/10 dark:hover:bg-white/10"
               title="Add Photo / Image"
             >
               <ImageIcon size={19} />
@@ -1488,8 +1488,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               disabled={isProcessing}
               className={`p-1.5 transition-all rounded-full active:scale-90 ${
                 isRecording 
-                  ? 'text-red-500 animate-pulse bg-red-500/10' 
-                  : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                  ? 'text-red-500 animate-pulse bg-red-500/20' 
+                  : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10'
               }`}
               title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
             >
@@ -1507,8 +1507,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               }}
               className={`p-1.5 transition-all rounded-full active:scale-90 relative ${
                 activeBlockId 
-                  ? 'text-primary-600 dark:text-primary-400 bg-primary-500/10 dark:bg-primary-400/10 ring-1 ring-primary-500/30' 
-                  : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                  ? 'text-primary-600 dark:text-primary-400 bg-primary-500/20 dark:bg-primary-400/20 ring-1 ring-primary-500/40' 
+                  : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10'
               }`}
               title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
             >
