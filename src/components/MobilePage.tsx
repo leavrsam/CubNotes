@@ -312,27 +312,69 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const supabase = createClient();
 
   // Virtual Keyboard / Viewport tracking for flush dock attachment
+  // Virtual Keyboard & Viewport tracking for seamless accessory attachment
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.visualViewport) return;
+    if (typeof window === "undefined") return;
+
+    const isEditable = (el: Element | null): boolean => {
+      if (!el) return false;
+      const htmlEl = el as HTMLElement;
+      return (
+        htmlEl.tagName === 'INPUT' || 
+        htmlEl.tagName === 'TEXTAREA' || 
+        htmlEl.isContentEditable || 
+        Boolean(htmlEl.closest('.ProseMirror')) ||
+        Boolean(htmlEl.closest('[contenteditable="true"]'))
+      );
+    };
+
+    const handleFocusIn = (e: FocusEvent) => {
+      if (isEditable(e.target as Element)) {
+        setIsKeyboardOpen(true);
+      }
+    };
+
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        if (!isEditable(document.activeElement)) {
+          setIsKeyboardOpen(false);
+          setKeyboardOffset(0);
+        }
+      }, 120);
+    };
 
     const updateViewport = () => {
       if (!window.visualViewport) return;
       const offset = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
-      const isOpen = offset > 40;
-      setKeyboardOffset(Math.max(0, offset));
-      setIsKeyboardOpen(isOpen);
+      const isViewportShrunk = offset > 40 || (window.screen.height - window.visualViewport.height > 180);
+      
+      if (isEditable(document.activeElement) || isViewportShrunk) {
+        setIsKeyboardOpen(true);
+        setKeyboardOffset(Math.max(0, offset));
+      } else {
+        setIsKeyboardOpen(false);
+        setKeyboardOffset(0);
+      }
     };
 
-    window.visualViewport.addEventListener("resize", updateViewport);
-    window.visualViewport.addEventListener("scroll", updateViewport);
+    window.addEventListener("focusin", handleFocusIn);
+    window.addEventListener("focusout", handleFocusOut);
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", updateViewport);
+      window.visualViewport.addEventListener("scroll", updateViewport);
+    }
 
     return () => {
-      if (!window.visualViewport) return;
-      window.visualViewport.removeEventListener("resize", updateViewport);
-      window.visualViewport.removeEventListener("scroll", updateViewport);
+      window.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("focusout", handleFocusOut);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", updateViewport);
+        window.visualViewport.removeEventListener("scroll", updateViewport);
+      }
     };
   }, []);
 
