@@ -17,9 +17,12 @@ import {
   X,
   Share2,
   FolderInput,
-  Check
+  Check,
+  Pin,
+  PinOff,
+  Edit2
 } from "lucide-react";
-import { SwipeableRow } from "./SwipeableRow";
+import { SwipeableRow, SwipeDirection } from "./SwipeableRow";
 import toast from "react-hot-toast";
 
 interface MobileNavigationProps {
@@ -35,6 +38,9 @@ interface MobileNavigationProps {
   onDeletePage?: (pageId: string) => Promise<void>;
   onDeleteSection?: (sectionId: string) => Promise<void>;
   onDeleteNotebook?: (notebookId: string) => Promise<void>;
+  onUpdatePage?: (id: string, title: string) => Promise<void> | void;
+  onUpdateSection?: (id: string, title: string) => Promise<void> | void;
+  onUpdateNotebook?: (id: string, title: string) => Promise<void> | void;
   onMovePage?: (pageId: string, targetSectionId: string) => Promise<void>;
   onMoveSection?: (sectionId: string, targetNotebookId: string) => Promise<void>;
   onOpenSettings?: () => void;
@@ -53,14 +59,64 @@ export function MobileNavigation({
   onDeletePage,
   onDeleteSection,
   onDeleteNotebook,
+  onUpdatePage,
+  onUpdateSection,
+  onUpdateNotebook,
   onMovePage,
   onMoveSection,
   onOpenSettings
 }: MobileNavigationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Track swiped open item
-  const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
+  // Track swiped open item and direction: e.g. { id: 'note-123', direction: 'left' }
+  const [openSwipe, setOpenSwipe] = useState<{ id: string; direction: "left" | "right" } | null>(null);
+
+  // Pinned Items State (saved in localStorage for persistence)
+  const [pinnedPageIds, setPinnedPageIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('cubnotes_pinned_pages');
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [pinnedSectionIds, setPinnedSectionIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('cubnotes_pinned_sections');
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const togglePinNote = (pageId: string) => {
+    setPinnedPageIds(prev => {
+      const next = prev.includes(pageId) ? prev.filter(id => id !== pageId) : [...prev, pageId];
+      try {
+        localStorage.setItem('cubnotes_pinned_pages', JSON.stringify(next));
+      } catch {}
+      toast.success(next.includes(pageId) ? "Note pinned to top!" : "Note unpinned");
+      return next;
+    });
+  };
+
+  const togglePinFolder = (sectionId: string) => {
+    setPinnedSectionIds(prev => {
+      const next = prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId];
+      try {
+        localStorage.setItem('cubnotes_pinned_sections', JSON.stringify(next));
+      } catch {}
+      toast.success(next.includes(sectionId) ? "Folder pinned to top!" : "Folder unpinned");
+      return next;
+    });
+  };
 
   // Modals
   const [isNewNotebookModalOpen, setIsNewNotebookModalOpen] = useState(false);
@@ -69,6 +125,13 @@ export function MobileNavigation({
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
   const [newFolderTitle, setNewFolderTitle] = useState("");
   const [selectedNotebookIdForFolder, setSelectedNotebookIdForFolder] = useState<string>("");
+
+  // Rename Modals
+  const [renameNote, setRenameNote] = useState<{ id: string; title: string } | null>(null);
+  const [renameNoteTitle, setRenameNoteTitle] = useState("");
+
+  const [renameFolder, setRenameFolder] = useState<{ id: string; title: string } | null>(null);
+  const [renameFolderTitle, setRenameFolderTitle] = useState("");
 
   // Move Modals
   const [moveTargetNote, setMoveTargetNote] = useState<Page | null>(null);
@@ -234,6 +297,34 @@ export function MobileNavigation({
     }
   };
 
+  const handleOpenRenameNote = (page: Page) => {
+    setRenameNote(page);
+    setRenameNoteTitle(page.title || "Untitled Note");
+  };
+
+  const handleConfirmRenameNote = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!renameNote || !onUpdatePage) return;
+    const newTitle = renameNoteTitle.trim() || "Untitled Note";
+    await onUpdatePage(renameNote.id, newTitle);
+    toast.success("Note renamed");
+    setRenameNote(null);
+  };
+
+  const handleOpenRenameFolder = (section: Section) => {
+    setRenameFolder(section);
+    setRenameFolderTitle(section.title || "New Folder");
+  };
+
+  const handleConfirmRenameFolder = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!renameFolder || !onUpdateSection) return;
+    const newTitle = renameFolderTitle.trim() || "New Folder";
+    await onUpdateSection(renameFolder.id, newTitle);
+    toast.success("Folder renamed");
+    setRenameFolder(null);
+  };
+
   // --- NOTES VIEW (Inside a specific folder) ---
   if (view === 'notes' && sectionId) {
     let activeSection: Section | null = null;
@@ -322,39 +413,102 @@ export function MobileNavigation({
               </button>
             </div>
           ) : (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-sm border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80">
-              {filteredPages.map((page) => (
-                <SwipeableRow
-                  key={page.id}
-                  id={`note-${page.id}`}
-                  isOpen={openSwipeId === `note-${page.id}`}
-                  onOpen={(id) => setOpenSwipeId(id)}
-                  onClose={() => setOpenSwipeId(null)}
-                  onShare={() => handleShareNote(page)}
-                  onMove={() => setMoveTargetNote(page)}
-                  onDelete={() => handleDeleteNote(page)}
-                  shareLabel="Share"
-                  moveLabel="Move"
-                >
-                  <div className="flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors">
-                    <button
-                      onClick={() => onSelectPage(page.id)}
-                      className="flex-1 text-left flex flex-col min-w-0 pr-3"
-                    >
-                      <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
-                        {page.title || 'Untitled Note'}
-                      </span>
-                      <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">
-                        {new Date(page.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
-                    </div>
+            <div className="space-y-4">
+              {/* Pinned Notes Section */}
+              {filteredPages.some(p => pinnedPageIds.includes(p.id)) && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 px-2 text-xs font-bold text-amber-500 uppercase tracking-wider">
+                    <Pin size={13} className="fill-amber-500" />
+                    <span>Pinned</span>
                   </div>
-                </SwipeableRow>
-              ))}
+                  <div className="bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-sm border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                    {filteredPages.filter(p => pinnedPageIds.includes(p.id)).map((page) => (
+                      <SwipeableRow
+                        key={page.id}
+                        id={`note-${page.id}`}
+                        openDirection={openSwipe?.id === `note-${page.id}` ? openSwipe.direction : null}
+                        onOpen={(id, direction) => setOpenSwipe({ id, direction })}
+                        onClose={() => setOpenSwipe(null)}
+                        onShare={() => handleShareNote(page)}
+                        onMove={() => setMoveTargetNote(page)}
+                        onDelete={() => handleDeleteNote(page)}
+                        onPin={() => togglePinNote(page.id)}
+                        isPinned={true}
+                        onRename={() => handleOpenRenameNote(page)}
+                        shareLabel="Share"
+                        moveLabel="Move"
+                      >
+                        <div className="flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors">
+                          <button
+                            onClick={() => onSelectPage(page.id)}
+                            className="flex-1 text-left flex flex-col min-w-0 pr-3"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Pin size={13} className="text-amber-500 fill-amber-500 flex-shrink-0" />
+                              <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
+                                {page.title || 'Untitled Note'}
+                              </span>
+                            </div>
+                            <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">
+                              {new Date(page.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
+                          </div>
+                        </div>
+                      </SwipeableRow>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Regular Notes Section */}
+              <div className="space-y-1.5">
+                {filteredPages.some(p => pinnedPageIds.includes(p.id)) && (
+                  <div className="px-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                    Notes
+                  </div>
+                )}
+                <div className="bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-sm border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                  {filteredPages.filter(p => !pinnedPageIds.includes(p.id)).map((page) => (
+                    <SwipeableRow
+                      key={page.id}
+                      id={`note-${page.id}`}
+                      openDirection={openSwipe?.id === `note-${page.id}` ? openSwipe.direction : null}
+                      onOpen={(id, direction) => setOpenSwipe({ id, direction })}
+                      onClose={() => setOpenSwipe(null)}
+                      onShare={() => handleShareNote(page)}
+                      onMove={() => setMoveTargetNote(page)}
+                      onDelete={() => handleDeleteNote(page)}
+                      onPin={() => togglePinNote(page.id)}
+                      isPinned={false}
+                      onRename={() => handleOpenRenameNote(page)}
+                      shareLabel="Share"
+                      moveLabel="Move"
+                    >
+                      <div className="flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors">
+                        <button
+                          onClick={() => onSelectPage(page.id)}
+                          className="flex-1 text-left flex flex-col min-w-0 pr-3"
+                        >
+                          <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
+                            {page.title || 'Untitled Note'}
+                          </span>
+                          <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">
+                            {new Date(page.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </button>
+
+                        <div className="flex items-center gap-1">
+                          <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
+                        </div>
+                      </div>
+                    </SwipeableRow>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -518,41 +672,57 @@ export function MobileNavigation({
                       </button>
                     </div>
                   ) : (
-                    nb.sections.map((sec) => (
-                      <SwipeableRow
-                        key={sec.id}
-                        id={`folder-${sec.id}`}
-                        isOpen={openSwipeId === `folder-${sec.id}`}
-                        onOpen={(id) => setOpenSwipeId(id)}
-                        onClose={() => setOpenSwipeId(null)}
-                        onShare={() => handleShareFolder(sec)}
-                        onMove={() => setMoveTargetFolder(sec)}
-                        onDelete={() => handleDeleteFolder(sec)}
-                        shareLabel="Share"
-                        moveLabel="Move"
-                      >
-                        <button
-                          onClick={() => onSelectSection(sec.id)}
-                          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors text-left"
+                    [...nb.sections]
+                      .sort((a, b) => {
+                        const aPinned = pinnedSectionIds.includes(a.id);
+                        const bPinned = pinnedSectionIds.includes(b.id);
+                        if (aPinned && !bPinned) return -1;
+                        if (!aPinned && bPinned) return 1;
+                        return (a.sort_order || 0) - (b.sort_order || 0);
+                      })
+                      .map((sec) => (
+                        <SwipeableRow
+                          key={sec.id}
+                          id={`folder-${sec.id}`}
+                          openDirection={openSwipe?.id === `folder-${sec.id}` ? openSwipe.direction : null}
+                          onOpen={(id, direction) => setOpenSwipe({ id, direction })}
+                          onClose={() => setOpenSwipe(null)}
+                          onShare={() => handleShareFolder(sec)}
+                          onMove={() => setMoveTargetFolder(sec)}
+                          onDelete={() => handleDeleteFolder(sec)}
+                          onPin={() => togglePinFolder(sec.id)}
+                          isPinned={pinnedSectionIds.includes(sec.id)}
+                          onRename={() => handleOpenRenameFolder(sec)}
+                          shareLabel="Share"
+                          moveLabel="Move"
                         >
-                          <div className="flex items-center gap-3 min-w-0 pr-2">
-                            <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center flex-shrink-0">
-                              <Folder size={18} className="text-primary-600 dark:text-primary-400" />
+                          <button
+                            onClick={() => onSelectSection(sec.id)}
+                            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 pr-2">
+                              <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center flex-shrink-0">
+                                <Folder size={18} className="text-primary-600 dark:text-primary-400" />
+                              </div>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {pinnedSectionIds.includes(sec.id) && (
+                                  <Pin size={13} className="text-amber-500 fill-amber-500 flex-shrink-0" />
+                                )}
+                                <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
+                                  {sec.title}
+                                </span>
+                              </div>
                             </div>
-                            <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
-                              {sec.title}
-                            </span>
-                          </div>
 
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
-                              {sec.pages.length}
-                            </span>
-                            <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
-                          </div>
-                        </button>
-                      </SwipeableRow>
-                    ))
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                                {sec.pages.length}
+                              </span>
+                              <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
+                            </div>
+                          </button>
+                        </SwipeableRow>
+                      ))
                   )}
                 </div>
               </div>
@@ -826,6 +996,76 @@ export function MobileNavigation({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal: Rename Note */}
+      {renameNote && (
+        <div className="fixed inset-0 z-[3000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <form 
+            onSubmit={handleConfirmRenameNote}
+            className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4"
+          >
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Rename Note</h3>
+            <input 
+              type="text"
+              autoFocus
+              value={renameNoteTitle}
+              onChange={(e) => setRenameNoteTitle(e.target.value)}
+              placeholder="Note Title"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button 
+                type="button"
+                onClick={() => setRenameNote(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-sm transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal: Rename Folder */}
+      {renameFolder && (
+        <div className="fixed inset-0 z-[3000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <form 
+            onSubmit={handleConfirmRenameFolder}
+            className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4"
+          >
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Rename Folder</h3>
+            <input 
+              type="text"
+              autoFocus
+              value={renameFolderTitle}
+              onChange={(e) => setRenameFolderTitle(e.target.value)}
+              placeholder="Folder Name"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button 
+                type="button"
+                onClick={() => setRenameFolder(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-sm transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

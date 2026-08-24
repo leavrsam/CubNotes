@@ -537,6 +537,9 @@ export default function Home() {
               onDeletePage={deletePage}
               onDeleteSection={deleteSection}
               onDeleteNotebook={deleteNotebook}
+              onUpdatePage={updatePage}
+              onUpdateSection={updateSection}
+              onUpdateNotebook={updateNotebook}
               onMovePage={movePage}
               onMoveSection={moveSection}
               onOpenSettings={() => setIsSettingsOpen(true)}
