@@ -197,7 +197,7 @@ export function MobileDrawOverlay({
       {/* Top Header Bar */}
       <div 
         className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-[2200] pointer-events-auto"
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
       >
         <div className="flex items-center gap-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-zinc-200/60 dark:border-zinc-800 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
           <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
@@ -334,7 +334,7 @@ export function MobileDrawOverlay({
       {/* Bottom Floating Drawing Toolbar */}
       <div 
         className="absolute bottom-0 left-0 right-0 p-3 z-[2200] pointer-events-auto flex flex-col items-center gap-2"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 18px)' }}
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}
       >
         {/* Tool Size Sub-bar (if pen or highlighter) */}
         {tool !== 'eraser' && (

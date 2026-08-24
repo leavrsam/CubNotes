@@ -14,6 +14,11 @@ export const metadata: Metadata = {
       { url: "/apple-touch-icon.png" }
     ],
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "CubNotes",
+  },
 };
 
 export const viewport: Viewport = {

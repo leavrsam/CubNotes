@@ -391,7 +391,10 @@ export default function Home() {
           
           {/* Floating Meeting Toggle (Only show if no page selected, else it's in ribbon) */}
           {!selectedPageId && (
-            <div className="absolute top-4 right-4 z-50">
+            <div 
+              className="absolute right-4 z-50"
+              style={{ top: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
+            >
               <button
                 onClick={handleToggleMeeting}
                 disabled={isProcessing}

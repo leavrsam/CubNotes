@@ -138,7 +138,7 @@ export function MobileNavigation({
         {/* Top Header */}
         <div 
           className="sticky top-0 z-20 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800"
-          style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
         >
           <div className="flex items-center justify-between px-4 py-2.5">
             <button 
@@ -247,7 +247,7 @@ export function MobileNavigation({
         {/* Bottom Toolbar */}
         <div 
           className="fixed bottom-0 left-0 right-0 z-20 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800/80 px-5 py-2.5 flex items-center justify-between"
-          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
         >
           <span className="text-xs text-zinc-400 font-medium">
             {activeSection?.pages.length || 0} {activeSection?.pages.length === 1 ? 'Note' : 'Notes'}
@@ -271,7 +271,7 @@ export function MobileNavigation({
       {/* Top Header */}
       <div 
         className="sticky top-0 z-20 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800"
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
       >
         <div className="flex items-center justify-between px-4 py-2.5">
           <div className="flex items-center gap-2">
@@ -437,7 +437,7 @@ export function MobileNavigation({
       {/* Bottom Sticky Toolbar (Apple Notes Style) */}
       <div 
         className="fixed bottom-0 left-0 right-0 z-20 bg-white/85 dark:bg-zinc-950/85 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800/80 px-5 py-2.5 flex items-center justify-between shadow-lg"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 10px)' }}
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
       >
         <button 
           onClick={() => {

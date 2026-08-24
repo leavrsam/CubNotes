@@ -60,7 +60,10 @@ export function Sidebar(props: SidebarProps) {
   };
 
   return (
-    <aside className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800 flex-shrink-0">
+    <aside 
+      className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800 flex-shrink-0"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
       <div className="p-4 border-b border-zinc-800 flex items-center justify-between group">
         <h1 className="text-lg font-bold text-zinc-100 tracking-tight flex items-center gap-2.5">
           <img src="/logo.png" alt="CubNotes" className="w-6 h-6 rounded-md object-cover shadow-sm ring-1 ring-white/10" />

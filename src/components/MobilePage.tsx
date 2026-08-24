@@ -786,7 +786,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       {isRearranging ? (
         <div 
           className="fixed top-0 left-0 right-0 z-[1600] pointer-events-none px-4 flex items-center justify-between transition-all"
-          style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
         >
           <div className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-600 dark:bg-primary-500 text-white dark:text-zinc-950 shadow-lg backdrop-blur-2xl font-bold text-xs animate-in fade-in">
             <GripVertical size={15} />
@@ -804,7 +804,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       ) : (
         <div 
           className="fixed top-0 left-0 right-0 z-[1500] pointer-events-none px-4 flex items-center justify-between transition-all"
-          style={{ paddingTop: 'max(env(safe-area-inset-top), 14px)' }}
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
         >
           {onBack ? (
             <button 
@@ -837,7 +837,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative scroll-smooth overscroll-contain select-text" 
         style={{ 
           WebkitOverflowScrolling: 'touch',
-          paddingTop: 'calc(max(env(safe-area-inset-top), 14px) + 50px)'
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)'
         }}
         onClick={() => setActiveBlockId(null)}
       >
@@ -1334,7 +1334,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       {/* Floating Glassmorphic Dock */}
       <div 
         className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1500] pointer-events-none"
-        style={{ bottom: 'max(env(safe-area-inset-bottom), 24px)' }}
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
       >
         <div className="pointer-events-auto flex items-center gap-6 px-7 py-2.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-2xl shadow-black/15 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 transition-all">
           <input 
