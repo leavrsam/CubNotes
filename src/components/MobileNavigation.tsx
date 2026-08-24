@@ -32,7 +32,7 @@ interface MobileNavigationProps {
   onSelectSection: (sectionId: string) => void;
   onSelectPage: (pageId: string) => void;
   onBackToFolders: () => void;
-  onAddNotebook: (title?: string) => Promise<any>;
+  onAddNotebook: (title?: string, isJournal?: boolean) => Promise<any>;
   onAddSection: (notebookId: string, title?: string) => Promise<any>;
   onAddPage: (sectionId: string, title?: string) => Promise<any>;
   onDeletePage?: (pageId: string) => Promise<void>;
@@ -41,6 +41,7 @@ interface MobileNavigationProps {
   onUpdatePage?: (id: string, title: string) => Promise<void> | void;
   onUpdateSection?: (id: string, title: string) => Promise<void> | void;
   onUpdateNotebook?: (id: string, title: string) => Promise<void> | void;
+  onToggleJournalMode?: (id: string, is_journal: boolean) => Promise<void> | void;
   onMovePage?: (pageId: string, targetSectionId: string) => Promise<void>;
   onMoveSection?: (sectionId: string, targetNotebookId: string) => Promise<void>;
   onOpenSettings?: () => void;
@@ -62,6 +63,7 @@ export function MobileNavigation({
   onUpdatePage,
   onUpdateSection,
   onUpdateNotebook,
+  onToggleJournalMode,
   onMovePage,
   onMoveSection,
   onOpenSettings
@@ -121,6 +123,7 @@ export function MobileNavigation({
   // Modals
   const [isNewNotebookModalOpen, setIsNewNotebookModalOpen] = useState(false);
   const [newNotebookTitle, setNewNotebookTitle] = useState("");
+  const [isNewNotebookJournal, setIsNewNotebookJournal] = useState(false);
   
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
   const [newFolderTitle, setNewFolderTitle] = useState("");
@@ -160,9 +163,11 @@ export function MobileNavigation({
   const handleCreateNotebook = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const title = newNotebookTitle.trim() || "New Notebook";
-    await onAddNotebook(title);
+    await onAddNotebook(title, isNewNotebookJournal);
     setNewNotebookTitle("");
+    setIsNewNotebookJournal(false);
     setIsNewNotebookModalOpen(false);
+    toast.success(isNewNotebookJournal ? "Journal Notebook created!" : "Notebook created!");
   };
 
   const handleCreateFolder = async (e?: React.FormEvent) => {
@@ -634,10 +639,23 @@ export function MobileNavigation({
                     )}
                     <h2 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                       {nb.title}
-                      {nb.is_journal && (
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 rounded">
-                          Journal
-                        </span>
+                      {onToggleJournalMode && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleJournalMode(nb.id, !nb.is_journal);
+                            toast.success(!nb.is_journal ? `"${nb.title}" switched to Journal mode` : `"${nb.title}" switched to Standard mode`);
+                          }}
+                          className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-colors ${
+                            nb.is_journal 
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30' 
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400'
+                          }`}
+                          title="Toggle Journal Mode"
+                        >
+                          {nb.is_journal ? "Journal Mode" : "+ Journal"}
+                        </button>
                       )}
                     </h2>
                   </div>
@@ -776,6 +794,32 @@ export function MobileNavigation({
               placeholder="Notebook Name"
               className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-primary-500"
             />
+
+            {/* Journal Mode Toggle Switch */}
+            <div 
+              onClick={() => setIsNewNotebookJournal(!isNewNotebookJournal)}
+              className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
+                isNewNotebookJournal 
+                  ? 'bg-amber-500/10 border-amber-500/30' 
+                  : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <BookOpen size={18} className={isNewNotebookJournal ? "text-amber-500" : "text-zinc-400"} />
+                <div>
+                  <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Journal Mode</div>
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">Permanent audio & daily reflection prompts</div>
+                </div>
+              </div>
+              <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors ${
+                isNewNotebookJournal 
+                  ? 'bg-amber-500 border-amber-500 text-white' 
+                  : 'border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800'
+              }`}>
+                {isNewNotebookJournal && <Check size={13} strokeWidth={3} />}
+              </div>
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-2">
               <button 
                 type="button"

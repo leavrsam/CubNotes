@@ -519,8 +519,8 @@ export default function Home() {
               }}
               onSelectPage={(id) => setSelectedPageId(id)}
               onBackToFolders={() => setMobileView('folders')}
-              onAddNotebook={async (title) => {
-                const res = await addNotebook(title || "New Notebook");
+              onAddNotebook={async (title, isJournal) => {
+                const res = await addNotebook(title || "New Notebook", isJournal);
                 return res;
               }}
               onAddSection={async (nbId, title) => {
@@ -540,6 +540,7 @@ export default function Home() {
               onUpdatePage={updatePage}
               onUpdateSection={updateSection}
               onUpdateNotebook={updateNotebook}
+              onToggleJournalMode={toggleJournalMode}
               onMovePage={movePage}
               onMoveSection={moveSection}
               onOpenSettings={() => setIsSettingsOpen(true)}
@@ -560,6 +561,7 @@ export default function Home() {
                 isProcessing={isProcessing}
                 onToggleMeeting={handleToggleMeeting}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                isJournal={isActiveJournal}
               />
             </div>
           )}
