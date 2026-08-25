@@ -44,6 +44,58 @@ export function SettingsModal({
   );
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+
+  // Page Style state (synced with active note)
+  const [activeBackgroundStyle, setActiveBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
+  const [activePageColor, setActivePageColor] = useState<string>('default');
+  const [customHexColor, setCustomHexColor] = useState<string>('');
+
+  useEffect(() => {
+    if (!activePageId || typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(`cubnotes_page_style_${activePageId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.backgroundStyle) setActiveBackgroundStyle(parsed.backgroundStyle);
+        if (parsed.pageColor) {
+          setActivePageColor(parsed.pageColor);
+          if (parsed.pageColor !== 'default') setCustomHexColor(parsed.pageColor);
+        }
+      } else {
+        setActiveBackgroundStyle('none');
+        setActivePageColor('default');
+      }
+    } catch {}
+  }, [activePageId, isOpen]);
+
+  const handleSetBackgroundStyle = (style: 'none' | 'ruled' | 'grid' | 'dots') => {
+    setActiveBackgroundStyle(style);
+    if (!activePageId || typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(`cubnotes_page_style_${activePageId}`, JSON.stringify({
+        backgroundStyle: style,
+        pageColor: activePageColor
+      }));
+      window.dispatchEvent(new CustomEvent('cubnotes:page_style_changed', {
+        detail: { pageId: activePageId, backgroundStyle: style, pageColor: activePageColor }
+      }));
+    } catch {}
+  };
+
+  const handleSetPageColor = (color: string) => {
+    setActivePageColor(color);
+    if (color !== 'default') setCustomHexColor(color);
+    if (!activePageId || typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(`cubnotes_page_style_${activePageId}`, JSON.stringify({
+        backgroundStyle: activeBackgroundStyle,
+        pageColor: color
+      }));
+      window.dispatchEvent(new CustomEvent('cubnotes:page_style_changed', {
+        detail: { pageId: activePageId, backgroundStyle: activeBackgroundStyle, pageColor: color }
+      }));
+    } catch {}
+  };
   
   // Profile State
   const [displayName, setDisplayName] = useState("");
@@ -351,11 +403,11 @@ export function SettingsModal({
                 <div>
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Page Settings</h3>
                   <p className="text-xs text-zinc-500 mb-4">
-                    Configure settings and journal mode for the active note.
+                    Configure paper background, color theme, and journal mode for the active note.
                   </p>
 
                   {activePageTitle ? (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                       {/* Active Note Card */}
                       <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 shadow-sm space-y-4">
                         <div className="flex items-center justify-between gap-3">
@@ -451,6 +503,151 @@ export function SettingsModal({
                             </button>
                           </div>
                         )}
+                      </div>
+
+                      {/* Paper Pattern & Style */}
+                      <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 shadow-sm space-y-3">
+                        <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Paper Style</div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {/* None (Blank) */}
+                          <button
+                            type="button"
+                            onClick={() => handleSetBackgroundStyle('none')}
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all ${
+                              activeBackgroundStyle === 'none'
+                                ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400 font-semibold'
+                                : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            <div className="w-6 h-6 border border-zinc-400 dark:border-zinc-500 rounded bg-white dark:bg-zinc-950 mb-1.5 shadow-xs" />
+                            <span className="text-[11px]">None</span>
+                          </button>
+
+                          {/* Ruled (Lined) */}
+                          <button
+                            type="button"
+                            onClick={() => handleSetBackgroundStyle('ruled')}
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all ${
+                              activeBackgroundStyle === 'ruled'
+                                ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400 font-semibold'
+                                : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            <div className="w-6 h-6 border border-zinc-400 dark:border-zinc-500 rounded bg-white dark:bg-zinc-950 mb-1.5 flex flex-col justify-evenly px-0.5 shadow-xs">
+                              <div className="w-full h-[1px] bg-zinc-400 dark:bg-zinc-600" />
+                              <div className="w-full h-[1px] bg-zinc-400 dark:bg-zinc-600" />
+                              <div className="w-full h-[1px] bg-zinc-400 dark:bg-zinc-600" />
+                            </div>
+                            <span className="text-[11px]">Ruled</span>
+                          </button>
+
+                          {/* Grid (Graph) */}
+                          <button
+                            type="button"
+                            onClick={() => handleSetBackgroundStyle('grid')}
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all ${
+                              activeBackgroundStyle === 'grid'
+                                ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400 font-semibold'
+                                : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            <div className="w-6 h-6 border border-zinc-400 dark:border-zinc-500 rounded bg-white dark:bg-zinc-950 mb-1.5 grid grid-cols-2 grid-rows-2 gap-px bg-zinc-300 dark:bg-zinc-700 shadow-xs">
+                              <div className="bg-white dark:bg-zinc-950" />
+                              <div className="bg-white dark:bg-zinc-950" />
+                              <div className="bg-white dark:bg-zinc-950" />
+                              <div className="bg-white dark:bg-zinc-950" />
+                            </div>
+                            <span className="text-[11px]">Grid</span>
+                          </button>
+
+                          {/* Dot Grid */}
+                          <button
+                            type="button"
+                            onClick={() => handleSetBackgroundStyle('dots')}
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all ${
+                              activeBackgroundStyle === 'dots'
+                                ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400 font-semibold'
+                                : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            <div className="w-6 h-6 border border-zinc-400 dark:border-zinc-500 rounded bg-white dark:bg-zinc-950 mb-1.5 flex items-center justify-center gap-1 shadow-xs">
+                              <div className="w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+                              <div className="w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+                            </div>
+                            <span className="text-[11px]">Dots</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Page Color Settings */}
+                      <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 shadow-sm space-y-3">
+                        <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Page Color</div>
+                        
+                        {/* Preset Swatches */}
+                        <div className="flex gap-2 flex-wrap">
+                          {[
+                            { id: 'default', label: 'Default', hex: 'transparent', border: true },
+                            { id: '#fdfbf7', label: 'Cream', hex: '#fdfbf7' },
+                            { id: '#f0fdf4', label: 'Mint', hex: '#f0fdf4' },
+                            { id: '#fff1f2', label: 'Rose', hex: '#fff1f2' },
+                            { id: '#faf5ff', label: 'Lavender', hex: '#faf5ff' },
+                            { id: '#f0f9ff', label: 'Sky', hex: '#f0f9ff' },
+                            { id: '#18181b', label: 'Charcoal', hex: '#18181b' },
+                            { id: '#0f172a', label: 'Slate', hex: '#0f172a' },
+                          ].map((c) => {
+                            const isSelected = activePageColor.toLowerCase() === c.id.toLowerCase();
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => handleSetPageColor(c.id)}
+                                className={`w-8 h-8 rounded-full border flex items-center justify-center transition-transform ${
+                                  isSelected 
+                                    ? 'ring-2 ring-offset-2 ring-primary-500 dark:ring-offset-zinc-900 scale-110' 
+                                    : 'border-zinc-300 dark:border-zinc-700 hover:scale-105'
+                                }`}
+                                style={{ backgroundColor: c.hex === 'transparent' ? undefined : c.hex }}
+                                title={c.label}
+                              >
+                                {c.id === 'default' && (
+                                  <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400">Auto</span>
+                                )}
+                                {isSelected && c.id !== 'default' && (
+                                  <Check size={14} className={c.id === '#18181b' || c.id === '#0f172a' ? 'text-white' : 'text-zinc-800'} />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Custom Hex Code & Picker */}
+                        <div className="pt-2 flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              type="text"
+                              value={customHexColor}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCustomHexColor(val);
+                                if (/^#([0-9A-F]{3}){1,2}$/i.test(val)) {
+                                  handleSetPageColor(val);
+                                }
+                              }}
+                              placeholder="#hex color (e.g. #f5f5f4)"
+                              className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-primary-500"
+                            />
+                          </div>
+
+                          <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">
+                            <input
+                              type="color"
+                              value={activePageColor.startsWith('#') ? activePageColor : '#ffffff'}
+                              onChange={(e) => handleSetPageColor(e.target.value)}
+                              className="w-4 h-4 rounded cursor-pointer border-none bg-transparent"
+                            />
+                            <span>Picker</span>
+                          </label>
+                        </div>
                       </div>
 
                       {/* Delete Page Option */}

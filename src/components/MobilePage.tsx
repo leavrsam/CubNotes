@@ -269,6 +269,37 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [userEmail, setUserEmail] = useState<string>("");
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // Paper & Background Style State
+  const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
+  const [pageColor, setPageColor] = useState<string>('default');
+
+  useEffect(() => {
+    if (!pageId || typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(`cubnotes_page_style_${pageId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.backgroundStyle) setBackgroundStyle(parsed.backgroundStyle);
+        if (parsed.pageColor) setPageColor(parsed.pageColor);
+      } else {
+        setBackgroundStyle('none');
+        setPageColor('default');
+      }
+    } catch {}
+  }, [pageId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStyleChange = (e: any) => {
+      if (e.detail?.pageId === pageId) {
+        if (e.detail.backgroundStyle !== undefined) setBackgroundStyle(e.detail.backgroundStyle);
+        if (e.detail.pageColor !== undefined) setPageColor(e.detail.pageColor);
+      }
+    };
+    window.addEventListener('cubnotes:page_style_changed', handleStyleChange);
+    return () => window.removeEventListener('cubnotes:page_style_changed', handleStyleChange);
+  }, [pageId]);
+
   // Journal Prompt & Mood State
   const [currentPromptIdx, setCurrentPromptIdx] = useState(0);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
@@ -847,7 +878,33 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   }
 
   return (
-    <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-white dark:bg-black overflow-hidden select-none">
+    <div 
+      className={`fixed inset-0 w-full h-[100dvh] flex flex-col overflow-hidden select-none ${
+        pageColor === 'default' ? 'bg-white dark:bg-black' : ''
+      }`}
+      style={{
+        backgroundColor: pageColor === 'default' ? undefined : pageColor
+      }}
+    >
+      {/* Paper Pattern Overlay */}
+      {backgroundStyle !== 'none' && (
+        <div 
+          className="absolute inset-0 pointer-events-none z-0"
+          style={{
+            backgroundImage: backgroundStyle === 'ruled' 
+              ? `linear-gradient(transparent 0px, transparent 31px, var(--line-color) 31px, var(--line-color) 32px)`
+              : backgroundStyle === 'grid'
+              ? `linear-gradient(to right, var(--line-color) 1px, transparent 1px), linear-gradient(to bottom, var(--line-color) 1px, transparent 1px)`
+              : `radial-gradient(var(--line-color) 1.5px, transparent 1.5px)`,
+            backgroundSize: backgroundStyle === 'ruled'
+              ? `100% 32px`
+              : backgroundStyle === 'grid'
+              ? `32px 32px`
+              : `24px 24px`,
+            ['--line-color' as string]: 'var(--tw-prose-hr, rgba(161, 161, 170, 0.2))',
+          }}
+        />
+      )}
       
       {/* Floating Top Navigation / Rearrange Bar */}
       {isRearranging ? (

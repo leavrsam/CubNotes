@@ -311,9 +311,50 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   // View state
-  const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid'>('none');
+  const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
   const [pageColor, setPageColor] = useState<string>('default');
   const [openColorMenu, setOpenColorMenu] = useState<'text' | 'drawing' | 'page' | null>(null);
+
+  // Load per-page style settings
+  useEffect(() => {
+    if (!pageId || typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(`cubnotes_page_style_${pageId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.backgroundStyle) setBackgroundStyle(parsed.backgroundStyle);
+        if (parsed.pageColor) setPageColor(parsed.pageColor);
+      } else {
+        setBackgroundStyle('none');
+        setPageColor('default');
+      }
+    } catch {}
+  }, [pageId]);
+
+  // Listen for global/settings style changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStyleChange = (e: any) => {
+      if (e.detail?.pageId === pageId) {
+        if (e.detail.backgroundStyle !== undefined) setBackgroundStyle(e.detail.backgroundStyle);
+        if (e.detail.pageColor !== undefined) setPageColor(e.detail.pageColor);
+      }
+    };
+    window.addEventListener('cubnotes:page_style_changed', handleStyleChange);
+    return () => window.removeEventListener('cubnotes:page_style_changed', handleStyleChange);
+  }, [pageId]);
+
+  const updatePageStyle = (newBg?: 'none' | 'ruled' | 'grid' | 'dots', newColor?: string) => {
+    const bg = newBg !== undefined ? newBg : backgroundStyle;
+    const color = newColor !== undefined ? newColor : pageColor;
+    if (newBg !== undefined) setBackgroundStyle(newBg);
+    if (newColor !== undefined) setPageColor(newColor);
+    if (pageId && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`cubnotes_page_style_${pageId}`, JSON.stringify({ backgroundStyle: bg, pageColor: color }));
+      } catch {}
+    }
+  };
 
   const PAGE_COLORS = ['default', '#fef9c3', '#dcfce7', '#e0f2fe', '#f3e8ff', '#fce7f3'];
   const [presets, setPresets] = useState<ToolPreset[]>([
@@ -1737,10 +1778,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           style={{
             backgroundImage: backgroundStyle === 'ruled' 
               ? `linear-gradient(transparent 0px, transparent calc(32px * ${zoom} - 1px), var(--line-color) calc(32px * ${zoom} - 1px), var(--line-color) calc(32px * ${zoom}))`
-              : `linear-gradient(to right, var(--line-color) 1px, transparent 1px), linear-gradient(to bottom, var(--line-color) 1px, transparent 1px)`,
+              : backgroundStyle === 'grid'
+              ? `linear-gradient(to right, var(--line-color) 1px, transparent 1px), linear-gradient(to bottom, var(--line-color) 1px, transparent 1px)`
+              : `radial-gradient(var(--line-color) calc(1.5px * ${zoom}), transparent calc(1.5px * ${zoom}))`,
             backgroundSize: backgroundStyle === 'ruled'
               ? `100% calc(32px * ${zoom})`
-              : `calc(32px * ${zoom}) calc(32px * ${zoom})`,
+              : backgroundStyle === 'grid'
+              ? `calc(32px * ${zoom}) calc(32px * ${zoom})`
+              : `calc(24px * ${zoom}) calc(24px * ${zoom})`,
             backgroundPosition: `${pan.x}px ${pan.y}px`,
             ['--line-color' as string]: 'var(--tw-prose-hr, rgba(161, 161, 170, 0.2))',
             zIndex: 1
