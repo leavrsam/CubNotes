@@ -238,6 +238,19 @@ export function useNotebooks() {
     await fetchNotebooks();
   };
 
+  const togglePageJournalMode = async (pageId: string, is_journal_entry: boolean) => {
+    // Optimistic update
+    setNotebooks(prev => prev.map(nb => ({
+      ...nb,
+      sections: (nb.sections || []).map(sec => ({
+        ...sec,
+        pages: (sec.pages || []).map(p => p.id === pageId ? { ...p, is_journal_entry } : p)
+      }))
+    })));
+    await supabase.from('pages').update({ is_journal_entry }).eq('id', pageId);
+    await fetchNotebooks();
+  };
+
   const deletePage = async (id: string) => {
     await supabase.from('pages').delete().eq('id', id);
     await fetchNotebooks();
@@ -321,7 +334,7 @@ export function useNotebooks() {
 
   return { 
     notebooks, loading, userId,
-    addNotebook, updateNotebook, deleteNotebook, toggleJournalMode,
+    addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
     addPage, updatePage, deletePage, movePage
   };

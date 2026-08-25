@@ -1484,6 +1484,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         onSignOut={handleSignOut}
         activePageId={pageId}
         activePageTitle={pageTitle}
+        isJournal={isJournal}
         onUpdatePageTitle={onUpdatePageTitle}
       />
     </div>

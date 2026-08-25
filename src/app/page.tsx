@@ -28,7 +28,7 @@ import { uploadMediaFile } from "@/lib/storage";
 export default function Home() {
   const { 
     notebooks, loading, 
-    addNotebook, updateNotebook, deleteNotebook, toggleJournalMode,
+    addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
     addPage, updatePage, deletePage, movePage
   } = useNotebooks();
@@ -341,14 +341,18 @@ export default function Home() {
 
   let activePageTitle = "Untitled Page";
   let activePageCreatedAt = "";
+  let activeNotebookTitle = "";
+  let activeNotebookId = "";
   let isActiveJournal = false;
   if (selectedPageId) {
     for (const nb of notebooks) {
-      for (const sec of nb.sections) {
-        const page = sec.pages.find(p => p.id === selectedPageId);
+      for (const sec of (nb.sections || [])) {
+        const page = (sec.pages || []).find(p => p.id === selectedPageId);
         if (page) {
           activePageTitle = page.title;
           activePageCreatedAt = page.created_at;
+          activeNotebookTitle = nb.title;
+          activeNotebookId = nb.id;
           isActiveJournal = Boolean(nb.is_journal || page.is_journal_entry);
         }
       }
@@ -581,12 +585,17 @@ export default function Home() {
         userEmail={userEmail}
         user={currentUser}
         onSignOut={handleSignOut}
-        notebooks={notebooks}
-        onUpdateNotebook={updateNotebook}
-        onDeleteNotebook={deleteNotebook}
-        onToggleJournalMode={toggleJournalMode}
         activePageId={selectedPageId || undefined}
-        activePageTitle={activePageTitle}
+        activePageTitle={selectedPageId ? activePageTitle : undefined}
+        isJournal={isActiveJournal}
+        onToggleJournalMode={async (newIsJournal) => {
+          if (selectedPageId) {
+            await togglePageJournalMode(selectedPageId, newIsJournal);
+          } else if (activeNotebookId) {
+            await toggleJournalMode(activeNotebookId, newIsJournal);
+          }
+        }}
+        activeNotebookTitle={activeNotebookTitle}
         onUpdatePageTitle={(title) => selectedPageId && updatePage(selectedPageId, title)}
         onDeletePage={async (id) => {
           await deletePage(id);

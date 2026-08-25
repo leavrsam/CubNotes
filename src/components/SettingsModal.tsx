@@ -13,14 +13,11 @@ interface SettingsModalProps {
   userEmail?: string;
   user?: any;
   onSignOut: () => void;
-  notebooks?: Notebook[];
-  onUpdateNotebook?: (id: string, title: string) => Promise<void> | void;
-  onDeleteNotebook?: (id: string) => Promise<void> | void;
-  onToggleJournalMode?: (id: string, is_journal: boolean) => Promise<void> | void;
-  activeNotebookId?: string | null;
-  activeSectionId?: string | null;
   activePageId?: string | null;
   activePageTitle?: string;
+  isJournal?: boolean;
+  onToggleJournalMode?: (isJournal: boolean) => Promise<void> | void;
+  activeNotebookTitle?: string;
   onUpdatePageTitle?: (title: string) => void;
   onDeletePage?: (id: string) => Promise<void>;
 }
@@ -31,21 +28,22 @@ export function SettingsModal({
   userEmail, 
   user, 
   onSignOut,
-  notebooks = [],
-  onUpdateNotebook,
-  onDeleteNotebook,
-  onToggleJournalMode,
   activePageId,
   activePageTitle,
+  isJournal = false,
+  onToggleJournalMode,
+  activeNotebookTitle,
   onUpdatePageTitle,
   onDeletePage
 }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccent();
   const { showMinimap, setShowMinimap } = useMinimapSettings();
-  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "notebooks" | "account">("profile");
-  const [editingNotebookId, setEditingNotebookId] = useState<string | null>(null);
-  const [editNotebookTitle, setEditNotebookTitle] = useState("");
+  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "page" | "account">(
+    activePageId ? "page" : "profile"
+  );
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
   
   // Profile State
   const [displayName, setDisplayName] = useState("");
@@ -167,15 +165,15 @@ export function SettingsModal({
               Appearance
             </button>
             <button
-              onClick={() => setActiveTab("notebooks")}
+              onClick={() => setActiveTab("page")}
               className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 flex items-center justify-center sm:justify-start gap-1.5 ${
-                activeTab === "notebooks"
+                activeTab === "page"
                   ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
                   : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
               }`}
             >
-              <BookOpen size={14} />
-              <span>Notebooks</span>
+              <FileText size={14} />
+              <span>Page</span>
             </button>
             <button
               onClick={() => setActiveTab("account")}
@@ -348,168 +346,138 @@ export function SettingsModal({
               </div>
             )}
 
-            {activeTab === "notebooks" && (
+            {activeTab === "page" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Notebook Settings</h3>
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">Page Settings</h3>
                   <p className="text-xs text-zinc-500 mb-4">
-                    Configure notebook modes and organization. Journal mode enables reflection prompts, date-organized notes, and persistent recordings.
+                    Configure settings and journal mode for the active note.
                   </p>
 
-                  {/* Active Note Card if available */}
-                  {activePageTitle && (
-                    <div className="mb-5 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 flex items-center justify-between">
-                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                        <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center flex-shrink-0">
-                          <FileText size={16} className="text-primary-600 dark:text-primary-400" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs text-zinc-400 font-medium">Currently Active Note</div>
-                          <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                            {activePageTitle}
-                          </div>
-                        </div>
-                      </div>
-                      {onDeletePage && activePageId && (
-                        <button
-                          onClick={async () => {
-                            if (window.confirm(`Delete "${activePageTitle}"?`)) {
-                              await onDeletePage(activePageId);
-                              onClose();
-                            }
-                          }}
-                          className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors flex-shrink-0"
-                          title="Delete active note"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  {activePageTitle ? (
+                    <div className="space-y-4">
+                      {/* Active Note Card */}
+                      <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              isJournal ? 'bg-amber-500/15 text-amber-500' : 'bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400'
+                            }`}>
+                              {isJournal ? <BookOpen size={18} /> : <FileText size={18} />}
+                            </div>
 
-                  {/* Notebooks List */}
-                  <div className="space-y-3">
-                    {notebooks.length === 0 ? (
-                      <p className="text-xs text-zinc-400 italic">No notebooks found.</p>
-                    ) : (
-                      notebooks.map((nb) => {
-                        const totalFolders = (nb.sections || []).length;
-                        const totalNotes = (nb.sections || []).reduce((acc, s) => acc + (s.pages || []).length, 0);
-                        const isEditingThis = editingNotebookId === nb.id;
-
-                        return (
-                          <div 
-                            key={nb.id}
-                            className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 shadow-sm space-y-3"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  nb.is_journal ? 'bg-amber-500/15 text-amber-500' : 'bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400'
-                                }`}>
-                                  {nb.is_journal ? <BookOpen size={16} /> : <Folder size={16} />}
-                                </div>
-
-                                {isEditingThis ? (
-                                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    <input
-                                      type="text"
-                                      value={editNotebookTitle}
-                                      onChange={(e) => setEditNotebookTitle(e.target.value)}
-                                      className="px-2.5 py-1 text-sm rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white w-full"
-                                      autoFocus
-                                    />
+                            {isEditingTitle ? (
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <input
+                                  type="text"
+                                  value={editTitle}
+                                  onChange={(e) => setEditTitle(e.target.value)}
+                                  className="px-2.5 py-1 text-sm rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white w-full outline-none focus:ring-2 focus:ring-primary-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => {
+                                    if (onUpdatePageTitle && editTitle.trim()) {
+                                      onUpdatePageTitle(editTitle.trim());
+                                      toast.success("Page renamed");
+                                    }
+                                    setIsEditingTitle(false);
+                                  }}
+                                  className="px-2.5 py-1 bg-primary-600 text-white rounded-lg text-xs font-semibold hover:bg-primary-700 transition-colors"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => setIsEditingTitle(false)}
+                                  className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-600"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                                    {activePageTitle}
+                                  </span>
+                                  {onUpdatePageTitle && (
                                     <button
-                                      onClick={async () => {
-                                        if (onUpdateNotebook && editNotebookTitle.trim()) {
-                                          await onUpdateNotebook(nb.id, editNotebookTitle.trim());
-                                          toast.success("Notebook renamed");
-                                        }
-                                        setEditingNotebookId(null);
+                                      onClick={() => {
+                                        setIsEditingTitle(true);
+                                        setEditTitle(activePageTitle);
                                       }}
-                                      className="px-2.5 py-1 bg-primary-600 text-white rounded-lg text-xs font-semibold"
+                                      className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded"
+                                      title="Rename page"
                                     >
-                                      Save
+                                      <Edit2 size={13} />
                                     </button>
-                                    <button
-                                      onClick={() => setEditingNotebookId(null)}
-                                      className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-600"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                                        {nb.title}
-                                      </span>
-                                      <button
-                                        onClick={() => {
-                                          setEditingNotebookId(nb.id);
-                                          setEditNotebookTitle(nb.title);
-                                        }}
-                                        className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                                        title="Rename notebook"
-                                      >
-                                        <Edit2 size={12} />
-                                      </button>
-                                    </div>
-                                    <div className="text-[11px] text-zinc-400">
-                                      {totalFolders} {totalFolders === 1 ? 'folder' : 'folders'} • {totalNotes} {totalNotes === 1 ? 'note' : 'notes'}
-                                    </div>
+                                  )}
+                                </div>
+                                {activeNotebookTitle && (
+                                  <div className="text-[11px] text-zinc-400">
+                                    Notebook: {activeNotebookTitle}
                                   </div>
                                 )}
                               </div>
-
-                              {onDeleteNotebook && !isEditingThis && (
-                                <button
-                                  onClick={async () => {
-                                    if (window.confirm(`Delete notebook "${nb.title}" and all its contents?`)) {
-                                      await onDeleteNotebook(nb.id);
-                                    }
-                                  }}
-                                  className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                                  title="Delete notebook"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Journal Mode Switch */}
-                            {onToggleJournalMode && (
-                              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <BookOpen size={14} className={nb.is_journal ? "text-amber-500" : "text-zinc-400"} />
-                                  <div>
-                                    <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Journal Mode</div>
-                                    <div className="text-[10px] text-zinc-400">Daily prompts & permanent audio storage</div>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    await onToggleJournalMode(nb.id, !nb.is_journal);
-                                    toast.success(!nb.is_journal ? `"${nb.title}" switched to Journal mode` : `"${nb.title}" switched to Standard mode`);
-                                  }}
-                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                                    nb.is_journal ? 'bg-amber-500' : 'bg-zinc-200 dark:bg-zinc-700'
-                                  }`}
-                                >
-                                  <span
-                                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                                      nb.is_journal ? 'translate-x-4' : 'translate-x-0.5'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
                             )}
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+                        </div>
+
+                        {/* Journal Mode Switch Toggle */}
+                        {onToggleJournalMode && (
+                          <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
+                            <div className="flex items-center gap-2.5 pr-2">
+                              <BookOpen size={16} className={isJournal ? "text-amber-500" : "text-zinc-400"} />
+                              <div>
+                                <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Journal Mode</div>
+                                <div className="text-[11px] text-zinc-400">Reflection prompts & permanent audio storage</div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await onToggleJournalMode(!isJournal);
+                                toast.success(!isJournal ? "Switched to Journal mode" : "Switched to Standard mode");
+                              }}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${
+                                isJournal ? 'bg-amber-500' : 'bg-zinc-200 dark:bg-zinc-700'
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                                  isJournal ? 'translate-x-4' : 'translate-x-0.5'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Delete Page Option */}
+                      {onDeletePage && activePageId && (
+                        <div className="pt-2">
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`Delete "${activePageTitle}"?`)) {
+                                await onDeletePage(activePageId);
+                                onClose();
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200/80 dark:border-red-900/40 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                            <span>Delete this Note</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-8 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 text-center text-zinc-400">
+                      <FileText size={32} className="mx-auto mb-2 opacity-40" />
+                      <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">No active note selected</p>
+                      <p className="text-xs text-zinc-400 mt-1">Open a note to configure its journal mode and settings.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
