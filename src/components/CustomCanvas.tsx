@@ -5,8 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { getStroke } from "perfect-freehand";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, RotateCw, Sparkles, ArrowRight } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -241,26 +240,6 @@ function getSvgPathFromStroke(stroke: number[][]) {
   return d.join(" ");
 }
 
-const JOURNAL_PROMPTS = [
-  "What gave you energy or brought you clarity today?",
-  "What is something you are genuinely grateful for right now?",
-  "What was a challenge you navigated, and what did it teach you?",
-  "What is one insight, lesson, or idea that caught your attention?",
-  "What is currently on your mind as you start this entry?",
-  "Who was someone that made a positive impact on your day?",
-  "What is a small win or quiet moment worth remembering?",
-  "What is something you would like to focus on tomorrow?"
-];
-
-const MOOD_OPTIONS = [
-  { id: 'focused', label: 'Focused' },
-  { id: 'calm', label: 'Calm' },
-  { id: 'reflective', label: 'Reflective' },
-  { id: 'grateful', label: 'Grateful' },
-  { id: 'energized', label: 'Energized' },
-  { id: 'fatigued', label: 'Fatigued' }
-];
-
 export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls, isJournal }: CustomCanvasProps) {
   const { 
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
@@ -268,10 +247,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     undo, redo, canUndo, canRedo,
     pageVersions, fetchVersions, restoreVersion
   } = useCanvasData(pageId);
-
-  // Journal Prompt & Mood State
-  const [currentPromptIdx, setCurrentPromptIdx] = useState(0);
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
 
   const streakCount = useMemo(() => {
     if (!isJournal) return 1;
@@ -295,20 +270,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
     return Math.max(1, count);
   }, [texts, audios, isJournal]);
-
-  const handleAnswerPrompt = (promptText: string) => {
-    const minExistingY = texts.length > 0 ? Math.min(...texts.map(t => t.y)) : 350;
-    const targetY = minExistingY - 200;
-    const newNode: TextNode = {
-      id: uuidv4(),
-      x: 64,
-      y: targetY,
-      width: 500,
-      content: `<h3>${promptText}</h3><p></p>`
-    };
-    setTexts(prev => [newNode, ...prev]);
-    toast.success("Prompt inserted into your journal!", { id: "prompt-insert" });
-  };
 
   // View state
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
@@ -1808,90 +1769,33 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           transform: `translate(${pan.x + 64 * zoom}px, ${pan.y + 100 * zoom}px) scale(${zoom})`
         }}
       >
-        <input
-          type="text"
-          value={pageTitle}
-          onChange={(e) => onUpdatePageTitle(e.target.value)}
-          placeholder="Page Title"
-          className="bg-transparent text-4xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 w-[500px] pointer-events-auto"
-        />
+        <div className="flex items-center gap-3 w-[600px]">
+          <input
+            type="text"
+            value={pageTitle}
+            onChange={(e) => onUpdatePageTitle(e.target.value)}
+            placeholder="Page Title"
+            className="bg-transparent text-4xl font-bold text-zinc-900 dark:text-zinc-100 border-none outline-none focus:ring-0 placeholder:text-zinc-300 dark:placeholder:text-zinc-700 flex-1 min-w-0 pointer-events-auto"
+          />
+          {isJournal && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-xs font-bold text-amber-700 dark:text-amber-300 pointer-events-auto shadow-xs flex-shrink-0">
+              <Flame size={14} className="text-amber-500 fill-amber-500/50" />
+              <span>{streakCount} {streakCount === 1 ? 'Day' : 'Days'}</span>
+            </div>
+          )}
+        </div>
         {/* Decorative OneNote-style underline */}
-        <div className="w-[500px] h-[1px] bg-gradient-to-r from-zinc-300 to-transparent dark:from-zinc-700 mt-2"></div>
+        <div className="w-[600px] h-[1px] bg-gradient-to-r from-zinc-300 to-transparent dark:from-zinc-700 mt-2"></div>
         {pageCreatedAt && (
-          <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 whitespace-pre">
-            {format(new Date(pageCreatedAt), "EEEE, MMMM d, yyyy     h:mm a")}
-          </div>
-        )}
-
-        {/* Desktop Journal Mode Indicator, Streak & Reflection Prompt */}
-        {isJournal && (
-          <div className="w-[500px] mt-4 rounded-2xl bg-amber-500/10 dark:bg-amber-950/25 border border-amber-500/20 p-4 space-y-3 shadow-sm pointer-events-auto">
-            {/* Header: Mode & Streak */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen size={15} className="text-amber-500" />
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">Journal Mode</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                <Flame size={12} className="text-amber-500 fill-amber-500/40" />
-                <span>{streakCount} {streakCount === 1 ? 'Day' : 'Days'} Active Streak</span>
-              </div>
-            </div>
-
-            {/* Daily Prompt Card */}
-            <div className="bg-white/80 dark:bg-zinc-900/80 rounded-xl p-3 border border-amber-500/15 space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
-                <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                  <Sparkles size={12} />
-                  <span>Daily Reflection Prompt</span>
-                </div>
-                <button
-                  onClick={() => setCurrentPromptIdx((prev) => (prev + 1) % JOURNAL_PROMPTS.length)}
-                  className="flex items-center gap-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors p-0.5"
-                  title="Next Prompt"
-                >
-                  <RotateCw size={11} />
-                  <span>Next</span>
-                </button>
-              </div>
-
-              <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 leading-snug">
-                {JOURNAL_PROMPTS[currentPromptIdx]}
-              </p>
-
-              <button
-                onClick={() => handleAnswerPrompt(JOURNAL_PROMPTS[currentPromptIdx])}
-                className="w-full mt-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 font-semibold text-xs transition-colors active:scale-98"
-              >
-                <span>Write about this</span>
-                <ArrowRight size={12} />
-              </button>
-            </div>
-
-            {/* Mood Selector Row */}
-            <div className="space-y-1.5">
-              <div className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 px-0.5">
-                How are you feeling right now?
-              </div>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                {MOOD_OPTIONS.map((mood) => {
-                  const isSelected = selectedMood === mood.id;
-                  return (
-                    <button
-                      key={mood.id}
-                      onClick={() => setSelectedMood(selectedMood === mood.id ? null : mood.id)}
-                      className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                        isSelected
-                          ? 'bg-amber-500 text-white dark:text-zinc-950 shadow-sm ring-2 ring-amber-500/30'
-                          : 'bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-amber-500/40'
-                      }`}
-                    >
-                      {mood.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 whitespace-pre flex items-center gap-2">
+            {isJournal && (
+              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold text-xs">
+                <BookOpen size={13} />
+                <span>Journal</span>
+                <span>•</span>
+              </span>
+            )}
+            <span>{format(new Date(pageCreatedAt), "EEEE, MMMM d, yyyy     h:mm a")}</span>
           </div>
         )}
       </div>
