@@ -66,7 +66,7 @@ export function Sidebar(props: SidebarProps) {
     >
       <div className="p-4 border-b border-zinc-800 flex items-center justify-between group">
         <h1 className="text-lg font-bold text-zinc-100 tracking-tight flex items-center gap-2.5">
-          <img src="/logo.png" alt="CubNotes" className="w-6 h-6 rounded-md object-cover shadow-sm ring-1 ring-white/10" />
+          <img src="/logo.png" alt="CubNotes" className="w-6 h-6 object-contain" />
           <span>CubNotes</span>
         </h1>
         <div className="flex items-center gap-1">
