@@ -99,6 +99,13 @@ export default function Home() {
     }
   }, []);
 
+  // Ensure window scroll is always reset on mobile navigation
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+    }
+  }, [selectedPageId, mobileView]);
+
   useEffect(() => {
     // Client-side auth check
     const checkAuth = async () => {

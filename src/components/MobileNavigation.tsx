@@ -98,6 +98,13 @@ export function MobileNavigation({
     return [];
   });
 
+  // Ensure window scroll is always reset when switching views
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+    }
+  }, [view, sectionId]);
+
   const togglePinNote = (pageId: string) => {
     setPinnedPageIds(prev => {
       const next = prev.includes(pageId) ? prev.filter(id => id !== pageId) : [...prev, pageId];
@@ -349,11 +356,11 @@ export function MobileNavigation({
     );
 
     return (
-      <div className="flex flex-col w-full h-full bg-zinc-50 dark:bg-black select-none">
+      <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none">
         {/* Top Header */}
         <div 
-          className="sticky top-0 z-20 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+          className="flex-shrink-0 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 z-20"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
         >
           <div className="flex items-center justify-between px-4 py-2.5">
             <button 
@@ -541,11 +548,11 @@ export function MobileNavigation({
 
   // --- MAIN FOLDERS VIEW ---
   return (
-    <div className="flex flex-col w-full h-full bg-zinc-50 dark:bg-black select-none">
+    <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none">
       {/* Top Header */}
       <div 
-        className="sticky top-0 z-20 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+        className="flex-shrink-0 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 z-20"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
       >
         <div className="flex items-center justify-between px-4 py-2.5">
           <div className="flex items-center gap-2">
