@@ -581,6 +581,17 @@ export default function Home() {
         userEmail={userEmail}
         user={currentUser}
         onSignOut={handleSignOut}
+        notebooks={notebooks}
+        onUpdateNotebook={updateNotebook}
+        onDeleteNotebook={deleteNotebook}
+        onToggleJournalMode={toggleJournalMode}
+        activePageId={selectedPageId || undefined}
+        activePageTitle={activePageTitle}
+        onUpdatePageTitle={(title) => selectedPageId && updatePage(selectedPageId, title)}
+        onDeletePage={async (id) => {
+          await deletePage(id);
+          setSelectedPageId(null);
+        }}
       />
     </main>
   );

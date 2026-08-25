@@ -1482,6 +1482,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         userEmail={userEmail}
         user={currentUser}
         onSignOut={handleSignOut}
+        activePageId={pageId}
+        activePageTitle={pageTitle}
+        onUpdatePageTitle={onUpdatePageTitle}
       />
     </div>
   );

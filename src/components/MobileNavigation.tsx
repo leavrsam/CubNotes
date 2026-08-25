@@ -638,14 +638,14 @@ export function MobileNavigation({
                   onToggleJournalMode(activeNotebook.id, !activeNotebook.is_journal);
                   toast.success(!activeNotebook.is_journal ? `"${activeNotebook.title}" switched to Journal mode` : `"${activeNotebook.title}" switched to Standard mode`);
                 }}
-                className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full transition-colors ${
+                className={`p-1.5 rounded-lg transition-colors flex items-center justify-center ${
                   activeNotebook.is_journal 
-                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30' 
+                    ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30' 
                     : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400'
                 }`}
-                title="Toggle Journal Mode"
+                title={activeNotebook.is_journal ? "Journal Mode enabled (Click to switch to Standard)" : "Enable Journal Mode"}
               >
-                {activeNotebook.is_journal ? "Journal Mode" : "+ Journal"}
+                <BookOpen size={16} className={activeNotebook.is_journal ? "fill-amber-500/20" : ""} />
               </button>
             )}
           </div>
@@ -876,14 +876,14 @@ export function MobileNavigation({
                           onToggleJournalMode(nb.id, !nb.is_journal);
                           toast.success(!nb.is_journal ? `"${nb.title}" switched to Journal mode` : `"${nb.title}" switched to Standard mode`);
                         }}
-                        className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-colors ${
+                        className={`p-1 rounded-md transition-colors flex items-center justify-center ${
                           nb.is_journal 
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30' 
-                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400'
+                            ? 'text-amber-500 bg-amber-500/15' 
+                            : 'text-zinc-400 hover:text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                         }`}
-                        title="Toggle Journal Mode"
+                        title={nb.is_journal ? "Journal Mode enabled (Click to switch to Standard)" : "Enable Journal Mode"}
                       >
-                        {nb.is_journal ? "Journal" : "+ Journal"}
+                        <BookOpen size={12} className={nb.is_journal ? "fill-amber-500/20" : ""} />
                       </button>
                     )}
                   </div>
