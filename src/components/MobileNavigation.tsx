@@ -103,7 +103,7 @@ export function MobileNavigation({
     if (typeof window !== 'undefined') {
       window.scrollTo(0, 0);
     }
-  }, [view, sectionId]);
+  }, [view, sectionId, selectedNotebookId]);
 
   const togglePinNote = (pageId: string) => {
     setPinnedPageIds(prev => {
@@ -136,7 +136,13 @@ export function MobileNavigation({
   const [newFolderTitle, setNewFolderTitle] = useState("");
   const [selectedNotebookIdForFolder, setSelectedNotebookIdForFolder] = useState<string>("");
 
+  // Drilldown to specific notebook
+  const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
+
   // Rename Modals
+  const [renameNotebook, setRenameNotebook] = useState<{ id: string; title: string } | null>(null);
+  const [renameNotebookTitle, setRenameNotebookTitle] = useState("");
+
   const [renameNote, setRenameNote] = useState<{ id: string; title: string } | null>(null);
   const [renameNoteTitle, setRenameNoteTitle] = useState("");
 
@@ -307,6 +313,20 @@ export function MobileNavigation({
     } finally {
       setIsMoving(false);
     }
+  };
+
+  const handleOpenRenameNotebook = (nb: Notebook) => {
+    setRenameNotebook(nb);
+    setRenameNotebookTitle(nb.title || "New Notebook");
+  };
+
+  const handleConfirmRenameNotebook = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!renameNotebook || !onUpdateNotebook) return;
+    const newTitle = renameNotebookTitle.trim() || "New Notebook";
+    await onUpdateNotebook(renameNotebook.id, newTitle);
+    toast.success("Notebook renamed");
+    setRenameNotebook(null);
   };
 
   const handleOpenRenameNote = (page: Page) => {
@@ -546,6 +566,188 @@ export function MobileNavigation({
     );
   }
 
+  // --- SINGLE NOTEBOOK VIEW (When clicking into a notebook) ---
+  const activeNotebook = selectedNotebookId ? notebooks.find(nb => nb.id === selectedNotebookId) : null;
+  if (activeNotebook) {
+    const matchingSections = activeNotebook.sections.filter(sec => {
+      if (!searchQuery.trim()) return true;
+      const matchesSection = sec.title.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPage = sec.pages.some(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()));
+      return matchesSection || matchesPage;
+    });
+
+    return (
+      <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none">
+        {/* Top Header */}
+        <div 
+          className="flex-shrink-0 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 z-20"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
+        >
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <button 
+              onClick={() => setSelectedNotebookId(null)}
+              className="flex items-center gap-1 text-primary-600 dark:text-primary-400 font-semibold text-[15px] active:scale-95 transition-transform"
+            >
+              <ArrowLeft size={19} className="-ml-1" />
+              <span>Notebooks</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => handleOpenRenameNotebook(activeNotebook)}
+                className="p-1.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white rounded-full bg-zinc-100 dark:bg-zinc-800 transition-colors"
+                title="Rename Notebook"
+              >
+                <Edit2 size={15} />
+              </button>
+
+              <button 
+                onClick={() => {
+                  setSelectedNotebookIdForFolder(activeNotebook.id);
+                  setIsNewFolderModalOpen(true);
+                }}
+                className="px-3 py-1 bg-primary-600 hover:bg-primary-500 text-white rounded-full text-xs font-semibold shadow-sm transition-colors flex items-center gap-1 active:scale-95"
+                title="Add Folder"
+              >
+                <Plus size={14} />
+                <span>Folder</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="px-4 pt-1 pb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              {activeNotebook.is_journal ? (
+                <BookOpen size={24} className="text-amber-500 flex-shrink-0" />
+              ) : (
+                <Folder size={24} className="text-primary-600 dark:text-primary-400 flex-shrink-0" />
+              )}
+              <h1 
+                onClick={() => handleOpenRenameNotebook(activeNotebook)}
+                className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight truncate cursor-pointer hover:opacity-80 active:scale-[0.99] transition-all flex items-center gap-2"
+                title="Click to rename notebook"
+              >
+                <span>{activeNotebook.title}</span>
+                <Edit2 size={16} className="text-zinc-400 opacity-60 inline flex-shrink-0" />
+              </h1>
+            </div>
+
+            {onToggleJournalMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleJournalMode(activeNotebook.id, !activeNotebook.is_journal);
+                  toast.success(!activeNotebook.is_journal ? `"${activeNotebook.title}" switched to Journal mode` : `"${activeNotebook.title}" switched to Standard mode`);
+                }}
+                className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full transition-colors ${
+                  activeNotebook.is_journal 
+                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30' 
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400'
+                }`}
+                title="Toggle Journal Mode"
+              >
+                {activeNotebook.is_journal ? "Journal Mode" : "+ Journal"}
+              </button>
+            )}
+          </div>
+
+          {/* Search Bar */}
+          <div className="px-4 pb-3">
+            <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-1.5 text-sm">
+              <Search size={16} className="text-zinc-400" />
+              <input 
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={`Search folders in ${activeNotebook.title}...`}
+                className="bg-transparent border-none outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 w-full text-[14px]"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="text-zinc-400">
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Folders in this Notebook */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
+          {activeNotebook.sections.length === 0 ? (
+            <div className="flex flex-col items-center justify-center mt-16 text-center text-zinc-400">
+              <Folder size={46} className="opacity-30 mb-3 text-primary-500" />
+              <p className="text-base font-semibold text-zinc-700 dark:text-zinc-300">No folders yet</p>
+              <p className="text-xs text-zinc-400 mt-1 max-w-[240px]">Add a folder to organize notes in this notebook.</p>
+              <button 
+                onClick={() => {
+                  setSelectedNotebookIdForFolder(activeNotebook.id);
+                  setIsNewFolderModalOpen(true);
+                }}
+                className="mt-5 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-xs font-semibold shadow-md active:scale-95 transition-transform"
+              >
+                + Create Folder
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-sm border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80">
+              {[...matchingSections]
+                .sort((a, b) => {
+                  const aPinned = pinnedSectionIds.includes(a.id);
+                  const bPinned = pinnedSectionIds.includes(b.id);
+                  if (aPinned && !bPinned) return -1;
+                  if (!aPinned && bPinned) return 1;
+                  return (a.sort_order || 0) - (b.sort_order || 0);
+                })
+                .map((sec) => (
+                  <SwipeableRow
+                    key={sec.id}
+                    id={`folder-${sec.id}`}
+                    openDirection={openSwipe?.id === `folder-${sec.id}` ? openSwipe.direction : null}
+                    onOpen={(id, direction) => setOpenSwipe({ id, direction })}
+                    onClose={() => setOpenSwipe(null)}
+                    onShare={() => handleShareFolder(sec)}
+                    onMove={() => setMoveTargetFolder(sec)}
+                    onDelete={() => handleDeleteFolder(sec)}
+                    onPin={() => togglePinFolder(sec.id)}
+                    isPinned={pinnedSectionIds.includes(sec.id)}
+                    onRename={() => handleOpenRenameFolder(sec)}
+                    shareLabel="Share"
+                    moveLabel="Move"
+                  >
+                    <button
+                      onClick={() => onSelectSection(sec.id)}
+                      className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 pr-2">
+                        <div className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center flex-shrink-0">
+                          <Folder size={18} className="text-primary-600 dark:text-primary-400" />
+                        </div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {pinnedSectionIds.includes(sec.id) && (
+                            <Pin size={13} className="text-amber-500 fill-amber-500 flex-shrink-0" />
+                          )}
+                          <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
+                            {sec.title}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                          {sec.pages.length}
+                        </span>
+                        <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
+                      </div>
+                    </button>
+                  </SwipeableRow>
+                ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // --- MAIN FOLDERS VIEW ---
   return (
     <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none">
@@ -638,33 +840,53 @@ export function MobileNavigation({
             return (
               <div key={nb.id} className="space-y-2">
                 <div className="flex items-center justify-between px-2">
-                  <div className="flex items-center gap-1.5">
-                    {nb.is_journal ? (
-                      <BookOpen size={14} className="text-amber-500 flex-shrink-0" />
-                    ) : (
-                      <Folder size={14} className="text-zinc-400 flex-shrink-0" />
-                    )}
-                    <h2 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                      {nb.title}
-                      {onToggleJournalMode && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleJournalMode(nb.id, !nb.is_journal);
-                            toast.success(!nb.is_journal ? `"${nb.title}" switched to Journal mode` : `"${nb.title}" switched to Standard mode`);
-                          }}
-                          className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-colors ${
-                            nb.is_journal 
-                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30' 
-                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400'
-                          }`}
-                          title="Toggle Journal Mode"
-                        >
-                          {nb.is_journal ? "Journal Mode" : "+ Journal"}
-                        </button>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <button 
+                      onClick={() => setSelectedNotebookId(nb.id)}
+                      className="flex items-center gap-1.5 text-left group hover:opacity-80 active:scale-[0.98] transition-all min-w-0"
+                      title={`View folders in ${nb.title}`}
+                    >
+                      {nb.is_journal ? (
+                        <BookOpen size={14} className="text-amber-500 flex-shrink-0" />
+                      ) : (
+                        <Folder size={14} className="text-zinc-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors flex-shrink-0" />
                       )}
-                    </h2>
+                      <h2 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                        {nb.title}
+                      </h2>
+                      <ChevronRight size={13} className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:translate-x-0.5 transition-transform flex-shrink-0" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenRenameNotebook(nb);
+                      }}
+                      className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 active:scale-90 transition-transform"
+                      title="Rename Notebook"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+
+                    {onToggleJournalMode && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleJournalMode(nb.id, !nb.is_journal);
+                          toast.success(!nb.is_journal ? `"${nb.title}" switched to Journal mode` : `"${nb.title}" switched to Standard mode`);
+                        }}
+                        className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-colors ${
+                          nb.is_journal 
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30' 
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400'
+                        }`}
+                        title="Toggle Journal Mode"
+                      >
+                        {nb.is_journal ? "Journal" : "+ Journal"}
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1047,6 +1269,42 @@ export function MobileNavigation({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal: Rename Notebook */}
+      {renameNotebook && (
+        <div className="fixed inset-0 z-[3000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <form 
+            onSubmit={handleConfirmRenameNotebook}
+            className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4"
+          >
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Rename Notebook</h3>
+            <input 
+              type="text" 
+              autoFocus
+              value={renameNotebookTitle}
+              onChange={(e) => setRenameNotebookTitle(e.target.value)}
+              placeholder="Notebook Title"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button 
+                type="button"
+                onClick={() => setRenameNotebook(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                disabled={!renameNotebookTitle.trim()}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-sm disabled:opacity-50 transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
