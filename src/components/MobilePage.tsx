@@ -1410,7 +1410,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           className="fixed left-1/2 -translate-x-1/2 z-[1500] pointer-events-none transition-all duration-200"
           style={{ bottom: 'max(2px, calc(env(safe-area-inset-bottom, 0px) * 0.12))' }}
         >
-          <div className="pointer-events-auto flex items-center gap-8 px-6 py-2 rounded-full bg-black/[0.02] dark:bg-white/[0.03] backdrop-blur-[2px] border border-black/5 dark:border-white/10 shadow-none transition-all">
+          <div className="pointer-events-auto flex items-center gap-8 px-6 py-0.5 rounded-full bg-black/[0.08] dark:bg-white/[0.08] backdrop-blur-md border border-black/10 dark:border-white/15 shadow-sm transition-all">
             <input 
               type="file" 
               ref={imageInputRef} 
@@ -1421,7 +1421,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             
             <button 
               onClick={() => imageInputRef.current?.click()} 
-              className="p-2 text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/10"
+              className="p-1 text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/10"
               title="Add Photo / Image"
             >
               <ImageIcon size={22} />
@@ -1430,7 +1430,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             <button 
               onClick={onToggleMeeting}
               disabled={isProcessing}
-              className={`p-2 transition-all rounded-full active:scale-90 ${
+              className={`p-1 transition-all rounded-full active:scale-90 ${
                 isRecording 
                   ? 'text-red-500 animate-pulse bg-red-500/20' 
                   : 'text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -1449,7 +1449,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                   startNewSketchBlock();
                 }
               }}
-              className={`p-2 transition-all rounded-full active:scale-90 relative ${
+              className={`p-1 transition-all rounded-full active:scale-90 relative ${
                 activeBlockId 
                   ? 'text-primary-600 dark:text-primary-400 bg-primary-500/20 dark:bg-primary-400/20 ring-1 ring-primary-500/40' 
                   : 'text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -1458,7 +1458,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             >
               <PenTool size={22} />
               {activeBlockId && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+                <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
               )}
             </button>
           </div>
