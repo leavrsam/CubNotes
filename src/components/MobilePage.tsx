@@ -1408,9 +1408,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       {!isKeyboardOpen && (
         <div 
           className="fixed left-1/2 -translate-x-1/2 z-[1500] pointer-events-none transition-all duration-200"
-          style={{ bottom: 'max(6px, env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) * 0.35 + 4px)' }}
         >
-          <div className="pointer-events-auto flex items-center gap-3.5 px-3.5 py-1.5 rounded-full bg-black/10 dark:bg-white/10 backdrop-blur-md border border-black/10 dark:border-white/15 shadow-md ring-1 ring-black/5 dark:ring-white/5 transition-all">
+          <div className="pointer-events-auto flex items-center gap-3 px-3 py-1 rounded-full bg-black/5 dark:bg-white/5 backdrop-blur-sm border border-black/10 dark:border-white/10 shadow-sm transition-all">
             <input 
               type="file" 
               ref={imageInputRef} 
@@ -1421,10 +1421,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             
             <button 
               onClick={() => imageInputRef.current?.click()} 
-              className="p-1.5 text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/10 dark:hover:bg-white/10"
+              className="p-1.5 text-zinc-800 dark:text-zinc-200 hover:text-black dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/10"
               title="Add Photo / Image"
             >
-              <ImageIcon size={19} />
+              <ImageIcon size={18} />
             </button>
 
             <button 
@@ -1433,11 +1433,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               className={`p-1.5 transition-all rounded-full active:scale-90 ${
                 isRecording 
                   ? 'text-red-500 animate-pulse bg-red-500/20' 
-                  : 'text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10'
+                  : 'text-zinc-800 dark:text-zinc-200 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
               }`}
               title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
             >
-              <Mic size={19} />
+              <Mic size={18} />
             </button>
 
             <button 
@@ -1452,13 +1452,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               className={`p-1.5 transition-all rounded-full active:scale-90 relative ${
                 activeBlockId 
                   ? 'text-primary-600 dark:text-primary-400 bg-primary-500/20 dark:bg-primary-400/20 ring-1 ring-primary-500/40' 
-                  : 'text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10'
+                  : 'text-zinc-800 dark:text-zinc-200 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
               }`}
               title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
             >
-              <PenTool size={19} />
+              <PenTool size={18} />
               {activeBlockId && (
-                <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
               )}
             </button>
           </div>
