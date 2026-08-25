@@ -261,8 +261,8 @@ export default function LoginPage() {
         
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center space-y-2">
-          <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-xl mb-1 ring-1 ring-white/15">
-            <img src="/logo.png" alt="CubNotes" className="w-full h-full object-cover" />
+          <div className="w-16 h-16 mb-1 flex items-center justify-center">
+            <img src="/logo.png" alt="CubNotes" className="w-full h-full object-contain drop-shadow-md" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">CubNotes</h1>
           <p className="text-xs text-zinc-400">
