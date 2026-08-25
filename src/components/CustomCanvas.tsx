@@ -434,8 +434,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   }, [setStrokes, setTexts, setImages, setVideos, setFiles, setAudios]);
 
   const handleDragSelectionEnd = useCallback(() => {
+    if (backgroundStyle === 'ruled' || backgroundStyle === 'grid') {
+      setTexts(prev => prev.map(t => ({
+        ...t,
+        y: Math.round(t.y / 32) * 32
+      })));
+    }
     originalSelectionRef.current = null;
-  }, []);
+  }, [backgroundStyle, setTexts]);
 
   const handleLassoComplete = useCallback((minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => {
     const foundIds: string[] = [];
@@ -795,16 +801,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const handleCanvasClick = useCallback((x: number, y: number) => {
     // In 'home' mode, clicking the canvas creates a text block
     if (tool === "home") {
+      const snapY = backgroundStyle === 'ruled' || backgroundStyle === 'grid' ? Math.round(y / 32) * 32 : y;
       const newNode: TextNode = {
         id: uuidv4(),
         x,
-        y,
+        y: snapY,
         width: 600,
         content: "<p></p>"
       };
       setTexts(prev => [...prev, newNode]);
     }
-  }, [tool, setTexts]);
+  }, [tool, setTexts, backgroundStyle]);
 
   useEffect(() => {
     const handleStartRecordingNode = (e: Event) => {

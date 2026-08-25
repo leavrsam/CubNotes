@@ -147,7 +147,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
 
   return (
     <div className="group relative w-full h-full bg-transparent">
-      <div className="p-1 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:text-[17.5px] [&_.ProseMirror]:leading-[1.55] [&_.ProseMirror_p]:text-[17.5px] [&_.ProseMirror_p]:leading-[1.55] [&_.ProseMirror_li]:text-[17.5px] prose-p:my-0.5 prose-p:leading-relaxed prose-p:whitespace-pre-wrap prose-li:marker:text-inherit">
+      <div className="p-0 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:text-[16px] [&_.ProseMirror]:leading-[32px] [&_.ProseMirror_p]:text-[16px] [&_.ProseMirror_p]:leading-[32px] [&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:min-h-[32px] [&_.ProseMirror_li]:text-[16px] [&_.ProseMirror_li]:leading-[32px] [&_.ProseMirror_li]:m-0 [&_.ProseMirror_h1]:text-[24px] [&_.ProseMirror_h1]:leading-[64px] [&_.ProseMirror_h1]:m-0 [&_.ProseMirror_h2]:text-[20px] [&_.ProseMirror_h2]:leading-[64px] [&_.ProseMirror_h2]:m-0 prose-p:my-0 prose-p:leading-[32px] prose-p:whitespace-pre-wrap prose-li:marker:text-inherit">
         <EditorContent editor={editor} />
       </div>
 

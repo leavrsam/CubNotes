@@ -1123,7 +1123,11 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     } ${isRearranging ? 'pointer-events-none' : ''}`}
                     style={{
                       minHeight: strokeExtent.hasStrokes ? Math.max(50, strokeExtent.maxY + 24) : undefined,
-                      marginTop: strokeExtent.hasStrokes && strokeExtent.minY < -4 ? Math.abs(strokeExtent.minY) + 8 : undefined
+                      marginTop: strokeExtent.hasStrokes && strokeExtent.minY < -4 ? Math.abs(strokeExtent.minY) + 8 : undefined,
+                      backgroundImage: backgroundStyle === 'ruled'
+                        ? `linear-gradient(transparent 0px, transparent 31px, var(--line-color, rgba(161, 161, 170, 0.25)) 31px, var(--line-color, rgba(161, 161, 170, 0.25)) 32px)`
+                        : undefined,
+                      backgroundSize: backgroundStyle === 'ruled' ? '100% 32px' : undefined,
                     }}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
