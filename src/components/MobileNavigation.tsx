@@ -73,6 +73,33 @@ export function MobileNavigation({
   // Track swiped open item and direction: e.g. { id: 'note-123', direction: 'left' }
   const [openSwipe, setOpenSwipe] = useState<{ id: string; direction: "left" | "right" } | null>(null);
 
+  // Drilldown to specific notebook
+  const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
+
+  // Modals
+  const [isNewNotebookModalOpen, setIsNewNotebookModalOpen] = useState(false);
+  const [newNotebookTitle, setNewNotebookTitle] = useState("");
+  const [isNewNotebookJournal, setIsNewNotebookJournal] = useState(false);
+  
+  const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
+  const [newFolderTitle, setNewFolderTitle] = useState("");
+  const [selectedNotebookIdForFolder, setSelectedNotebookIdForFolder] = useState<string>("");
+
+  // Rename Modals
+  const [renameNotebook, setRenameNotebook] = useState<{ id: string; title: string } | null>(null);
+  const [renameNotebookTitle, setRenameNotebookTitle] = useState("");
+
+  const [renameNote, setRenameNote] = useState<{ id: string; title: string } | null>(null);
+  const [renameNoteTitle, setRenameNoteTitle] = useState("");
+
+  const [renameFolder, setRenameFolder] = useState<{ id: string; title: string } | null>(null);
+  const [renameFolderTitle, setRenameFolderTitle] = useState("");
+
+  // Move Modals
+  const [moveTargetNote, setMoveTargetNote] = useState<Page | null>(null);
+  const [moveTargetFolder, setMoveTargetFolder] = useState<Section | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
+
   // Pinned Items State (saved in localStorage for persistence)
   const [pinnedPageIds, setPinnedPageIds] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -126,33 +153,6 @@ export function MobileNavigation({
       return next;
     });
   };
-
-  // Modals
-  const [isNewNotebookModalOpen, setIsNewNotebookModalOpen] = useState(false);
-  const [newNotebookTitle, setNewNotebookTitle] = useState("");
-  const [isNewNotebookJournal, setIsNewNotebookJournal] = useState(false);
-  
-  const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
-  const [newFolderTitle, setNewFolderTitle] = useState("");
-  const [selectedNotebookIdForFolder, setSelectedNotebookIdForFolder] = useState<string>("");
-
-  // Drilldown to specific notebook
-  const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
-
-  // Rename Modals
-  const [renameNotebook, setRenameNotebook] = useState<{ id: string; title: string } | null>(null);
-  const [renameNotebookTitle, setRenameNotebookTitle] = useState("");
-
-  const [renameNote, setRenameNote] = useState<{ id: string; title: string } | null>(null);
-  const [renameNoteTitle, setRenameNoteTitle] = useState("");
-
-  const [renameFolder, setRenameFolder] = useState<{ id: string; title: string } | null>(null);
-  const [renameFolderTitle, setRenameFolderTitle] = useState("");
-
-  // Move Modals
-  const [moveTargetNote, setMoveTargetNote] = useState<Page | null>(null);
-  const [moveTargetFolder, setMoveTargetFolder] = useState<Section | null>(null);
-  const [isMoving, setIsMoving] = useState(false);
 
   // Total pages across all folders
   const totalNotesCount = useMemo(() => {
@@ -358,12 +358,12 @@ export function MobileNavigation({
   };
 
   // --- NOTES VIEW (Inside a specific folder) ---
-  if (view === 'notes' && sectionId) {
+  const renderNotesView = () => {
     let activeSection: Section | null = null;
     let parentNotebook: Notebook | null = null;
     
-    for (const nb of notebooks) {
-      const sec = nb.sections.find(s => s.id === sectionId);
+    for (const nb of (notebooks || [])) {
+      const sec = (nb.sections || []).find(s => s.id === sectionId);
       if (sec) {
         activeSection = sec;
         parentNotebook = nb;
@@ -564,15 +564,14 @@ export function MobileNavigation({
         </div>
       </div>
     );
-  }
+  };
 
   // --- SINGLE NOTEBOOK VIEW (When clicking into a notebook) ---
-  const activeNotebook = selectedNotebookId ? notebooks.find(nb => nb.id === selectedNotebookId) : null;
-  if (activeNotebook) {
-    const matchingSections = activeNotebook.sections.filter(sec => {
+  const renderSingleNotebookView = (activeNotebook: Notebook) => {
+    const matchingSections = (activeNotebook.sections || []).filter(sec => {
       if (!searchQuery.trim()) return true;
-      const matchesSection = sec.title.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesPage = sec.pages.some(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesSection = (sec.title || "").toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPage = (sec.pages || []).some(p => (p.title || "").toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesSection || matchesPage;
     });
 
@@ -673,7 +672,7 @@ export function MobileNavigation({
 
         {/* Folders in this Notebook */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-          {activeNotebook.sections.length === 0 ? (
+          {(activeNotebook.sections || []).length === 0 ? (
             <div className="flex flex-col items-center justify-center mt-16 text-center text-zinc-400">
               <Folder size={46} className="opacity-30 mb-3 text-primary-500" />
               <p className="text-base font-semibold text-zinc-700 dark:text-zinc-300">No folders yet</p>
@@ -734,7 +733,7 @@ export function MobileNavigation({
 
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
-                          {sec.pages.length}
+                          {(sec.pages || []).length}
                         </span>
                         <ChevronRight size={17} className="text-zinc-300 dark:text-zinc-600" />
                       </div>
@@ -746,10 +745,10 @@ export function MobileNavigation({
         </div>
       </div>
     );
-  }
+  };
 
   // --- MAIN FOLDERS VIEW ---
-  return (
+  const renderAllNotebooksView = () => (
     <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none">
       {/* Top Header */}
       <div 
@@ -1006,6 +1005,19 @@ export function MobileNavigation({
           <span>New Note</span>
         </button>
       </div>
+    </div>
+  );
+
+  // Main Component Render
+  const activeNotebook = selectedNotebookId ? (notebooks || []).find(nb => nb.id === selectedNotebookId) : null;
+
+  return (
+    <>
+      {view === 'notes' && sectionId
+        ? renderNotesView()
+        : activeNotebook
+        ? renderSingleNotebookView(activeNotebook)
+        : renderAllNotebooksView()}
 
       {/* Modal: New Notebook */}
       {isNewNotebookModalOpen && (
@@ -1377,6 +1389,6 @@ export function MobileNavigation({
           </form>
         </div>
       )}
-    </div>
+    </>
   );
 }
