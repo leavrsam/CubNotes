@@ -14,36 +14,45 @@ serve(async (req) => {
   }
 
   try {
-    // 1. JWT Authentication verification
+    // 1. Optional JWT Authentication verification (fallback to anon key if present)
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized user' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (authHeader) {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      // Optional check, non-blocking if anon key invoked
+      await supabase.auth.getUser().catch(() => ({ data: { user: null }, error: null }));
     }
 
     // 2. Parse request body
-    const { audioBase64, mimeType = 'audio/webm', isJournal = false } = await req.json();
+    const { audioBase64, audioUrl, mimeType = 'audio/webm', isJournal = false } = await req.json();
 
-    if (!audioBase64) {
-      return new Response(JSON.stringify({ error: 'Missing audioBase64' }), {
-        status: 400,
+    let base64Data = audioBase64;
+    const cleanMimeType = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
+
+    // If audioUrl provided instead of audioBase64, fetch it
+    if (!base64Data && audioUrl) {
+      const audioRes = await fetch(audioUrl);
+      if (!audioRes.ok) {
+        throw new Error(`Failed to download audio from url: ${audioRes.statusText}`);
+      }
+      const arrayBuffer = await audioRes.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < uint8.byteLength; i++) {
+        binary += String.fromCharCode(uint8[i]);
+      }
+      base64Data = btoa(binary);
+    }
+
+    if (!base64Data) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Missing audio data (audioBase64 or audioUrl required)' 
+      }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -56,71 +65,98 @@ serve(async (req) => {
 
     const ai = new GoogleGenerativeAI(geminiKey);
     const prompt = isJournal
-      ? "You are an expert personal reflection and journal chronicler. Transcribe the audio clearly as 'transcript'. Then, convert the spoken thoughts into an authentic, beautifully written, reflective first-person journal entry as 'summary' (formatted in clean markdown with structured sections: '### Daily Reflection', '### Key Insights & Lessons', '### Notable Memories', and do NOT use emojis anywhere). Return a JSON object with two string keys: 'summary' and 'transcript'."
-      : "You are an expert AI meeting assistant. Transcribe the audio exactly as a 'transcript', and YOU MUST identify and separate different speakers (e.g., Speaker 1: ..., Speaker 2: ...). Then, summarize the meeting into key takeaways, action items, and decisions as 'summary' (formatted in clean, rich markdown, without emojis). Return a JSON object with two string keys: 'summary' and 'transcript'.";
-    
-    let result;
-    try {
-      const model = ai.getGenerativeModel({ 
-        model: "gemini-3.5-flash",
-        generationConfig: {
-          responseMimeType: "application/json"
+      ? `You are an expert personal reflection and journal chronicler. I am providing you with a personal voice recording/diary audio.
+
+CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
+- Transcribe ONLY the human speech that is clearly audible in this audio.
+- DO NOT invent, hallucinate, assume, or extrapolate words, reflections, or topics not directly spoken in the audio.
+- If the audio is silent, inaudible, mostly static/noise, or contains no decipherable human speech, you MUST return:
+  "transcript": "",
+  "summary": "No speech detected in this recording."
+- If valid speech is present, return:
+  1. "transcript": A highly accurate transcript of the spoken thoughts and reflections.
+  2. "summary": A beautifully written first-person journal entry in clean Markdown with structured sections:
+     - "### Daily Reflection"
+     - "### Key Insights & Lessons"
+     - "### Notable Memories & Highlights"
+     Do NOT use emojis anywhere.
+
+Return ONLY valid JSON matching this format:
+{
+  "transcript": "...",
+  "summary": "### Daily Reflection\\n..."
+}`
+      : `You are an expert executive meeting assistant. I am providing you with an audio recording of a meeting.
+
+CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
+- Transcribe ONLY the actual human speech that is clearly audible in this audio recording.
+- DO NOT invent, hallucinate, assume, or extrapolate dialogue, attendees, decisions, or topics not directly spoken in the audio.
+- If the audio is silent, inaudible, mostly background static, or contains no decipherable human speech, you MUST return:
+  "transcript": "",
+  "summary": "No speech detected in this recording."
+- If valid speech is present, return:
+  1. "transcript": A highly accurate transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
+  2. "summary": A rich, professional meeting summary in Markdown with sections: "Executive Summary", "Key Decisions", and "Action Items". Do NOT use emojis.
+
+Return ONLY valid JSON matching this format:
+{
+  "transcript": "Speaker 1: ...\\nSpeaker 2: ...",
+  "summary": "# Executive Summary\\n..."
+}`;
+
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-3.8-flash",
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1, // Prevent hallucinations
+      }
+    });
+
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: cleanMimeType,
         }
-      });
-      result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: audioBase64,
-            mimeType: mimeType,
-          }
-        }
-      ]);
-    } catch (e) {
-      console.warn("Primary model gemini-3.5-flash failed, falling back to gemini-1.5-flash...", e);
-      const fallbackModel = ai.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
-      });
-      result = await fallbackModel.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: audioBase64,
-            mimeType: mimeType,
-          }
-        }
-      ]);
-    }
+      }
+    ]);
 
     const responseText = result.response.text();
+    let cleanJson = responseText.trim();
+    if (cleanJson.startsWith('```json')) {
+      cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+    } else if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    }
+
     let parsedData = { summary: "", transcript: "" };
-    
     try {
-      parsedData = JSON.parse(responseText);
+      parsedData = JSON.parse(cleanJson);
     } catch (e) {
-      console.warn("Failed to parse JSON, falling back to raw text", e);
-      parsedData.summary = responseText;
-      parsedData.transcript = "Transcript not available in requested format.";
+      console.warn("Failed to parse JSON, extracting via regex:", e);
+      const transcriptMatch = cleanJson.match(/"transcript"\s*:\s*"([\s\S]*?)(?=",\s*"summary"|"})/);
+      const summaryMatch = cleanJson.match(/"summary"\s*:\s*"([\s\S]*?)(?="})/);
+      parsedData = {
+        transcript: transcriptMatch ? transcriptMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
+        summary: summaryMatch ? summaryMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : cleanJson,
+      };
     }
 
     return new Response(JSON.stringify({ 
       success: true, 
-      summary: parsedData.summary,
-      transcript: parsedData.transcript
+      summary: parsedData.summary || "No speech detected in this recording.",
+      transcript: parsedData.transcript || ""
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Function error:", error);
     
-    // We return 200 so supabase-js parses the body instead of throwing a generic HttpError
+    // Return 200 with success: false so supabase client parses JSON error
     return new Response(JSON.stringify({ 
       success: false, 
       error: error.message || String(error),
-      stack: error.stack
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

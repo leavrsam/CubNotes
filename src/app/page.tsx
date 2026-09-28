@@ -24,6 +24,7 @@ import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
 import { uploadMediaFile } from "@/lib/storage";
+import { processAudioTranscription } from "@/lib/transcribe";
 
 export default function Home() {
   const { 
@@ -184,7 +185,22 @@ export default function Home() {
   const handleToggleMeeting = async () => {
     const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     
-    const processAudio = async (audioBase64: string, targetAudioId: string, webMimeType?: string) => {
+    const processAudio = async (
+      audioData: { base64?: string; blob?: Blob; mimeType?: string; fileExt?: string },
+      targetAudioId: string
+    ) => {
+      let audioUrl = "";
+      let isCurrentJournal = false;
+
+      if (selectedPageId) {
+        for (const nb of notebooks) {
+          for (const sec of nb.sections) {
+            const p = sec.pages.find(page => page.id === selectedPageId);
+            if (p && (nb.is_journal || p.is_journal_entry)) isCurrentJournal = true;
+          }
+        }
+      }
+
       try {
         if (!selectedPageId) {
           toast.error("No page selected to save audio.");
@@ -192,85 +208,80 @@ export default function Home() {
         }
 
         const audioId = targetAudioId;
+        const cleanMimeType = (audioData.mimeType || (isDesktop ? 'audio/wav' : 'audio/webm')).split(';')[0].trim();
+        const fileExt = audioData.fileExt || (cleanMimeType.includes('mp4') ? 'mp4' : cleanMimeType.includes('wav') ? 'wav' : 'webm');
 
-        // 1. Upload audio to Cloudflare R2 (or fallback)
-        toast.loading("Uploading audio and generating summary with Gemini...", { id: "audio-process" });
+        toast.loading("Uploading audio and generating summary with Gemini 3.8 Flash...", { id: "audio-process" });
         
-        // Convert base64 to Blob
-        const byteCharacters = atob(audioBase64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        // 1. Prepare Blob
+        let audioBlob = audioData.blob;
+        if (!audioBlob && audioData.base64) {
+          const byteCharacters = atob(audioData.base64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          audioBlob = new Blob([byteArray], { type: cleanMimeType });
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        const rawMimeType = isDesktop ? 'audio/wav' : (webMimeType || 'audio/webm');
-        const cleanMimeType = rawMimeType.split(';')[0];
-        const fileExt = cleanMimeType.split('/')[1] || 'webm';
-        const blob = new Blob([byteArray], { type: cleanMimeType });
-        const audioFile = new File([blob], `meeting_${Date.now()}.${fileExt}`, { type: cleanMimeType });
 
-        let audioUrl = "";
+        if (!audioBlob || audioBlob.size === 0) {
+          throw new Error("No audio data was captured. Please check microphone permissions and try again.");
+        }
+
+        const audioFile = new File([audioBlob], `meeting_${Date.now()}.${fileExt}`, { type: cleanMimeType });
+
+        // 2. Upload audio to Cloudflare R2 or Supabase Storage
         try {
           const uploadResult = await uploadMediaFile(audioFile, selectedPageId);
           audioUrl = uploadResult.url;
-        } catch (uploadErr) {
+        } catch (uploadErr: any) {
           console.warn("Audio upload warning:", uploadErr);
         }
 
-        let isCurrentJournal = false;
-        if (selectedPageId) {
-          for (const nb of notebooks) {
-            for (const sec of nb.sections) {
-              const p = sec.pages.find(page => page.id === selectedPageId);
-              if (p && (nb.is_journal || p.is_journal_entry)) isCurrentJournal = true;
-            }
-          }
-        }
-
-        // 2. Call Edge Function for Transcription/Summary
-        const { data, error } = await supabase.functions.invoke('summarize-meeting', {
-          body: { audioBase64, mimeType: cleanMimeType, isJournal: isCurrentJournal }
+        // 3. Transcribe with Gemini 3.8 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
+        const transcriptionResult = await processAudioTranscription({
+          audioBase64: (audioBlob.size < 4 * 1024 * 1024 && audioData.base64) ? audioData.base64 : undefined,
+          audioUrl: audioUrl || undefined,
+          mimeType: cleanMimeType,
+          isJournal: isCurrentJournal,
         });
-        
-        if (error || (data && data.success === false)) {
-          const actualError = data?.error || error;
-          console.error("============= EDGE FUNCTION ERROR =============");
-          console.error(actualError);
-          console.error("===============================================");
-          const errorMsg = String(actualError).toLowerCase();
-          const isRateLimit = errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit') || errorMsg.includes('exhausted');
-          
-          if (isRateLimit) {
-            toast.error('Our AI is resting! The daily transcription limit has been reached.', { id: "audio-process" });
-          } else {
-            toast.error(`Error: ${String(actualError)}`, { id: "audio-process", duration: 8000 });
-          }
-          return;
-        }
 
         const audioCreatedAt = Date.now();
         const audioExpiresAt = isCurrentJournal ? undefined : audioCreatedAt + 7 * 24 * 60 * 60 * 1000;
         const isAudioSavedPermanently = isCurrentJournal;
 
-        if (data?.summary) {
-          window.dispatchEvent(new CustomEvent('inject-summary', { 
-            detail: { 
-              id: audioId, 
-              summary: data.summary, 
-              transcript: data.transcript || "Transcript not available.",
-              url: audioUrl,
-              audioCreatedAt,
-              audioExpiresAt,
-              isAudioSavedPermanently,
-            } 
-          }));
-          toast.success('Meeting summary added to canvas!', { id: "audio-process" });
-        } else {
-          toast.dismiss("audio-process");
-        }
-      } catch (err) {
+        window.dispatchEvent(new CustomEvent('inject-summary', { 
+          detail: { 
+            id: audioId, 
+            summary: transcriptionResult.summary || "Summary completed.", 
+            transcript: transcriptionResult.transcript || "",
+            url: audioUrl,
+            audioCreatedAt,
+            audioExpiresAt,
+            isAudioSavedPermanently,
+          } 
+        }));
+
+        toast.success(isCurrentJournal ? 'Journal entry recorded & summarized!' : 'Meeting summary added to canvas!', { id: "audio-process" });
+
+      } catch (err: any) {
         console.error("Failed to process audio:", err);
-        toast.error('Failed to process meeting recording.', { id: "audio-process" });
+        const errMsg = err?.message || 'Failed to process meeting recording.';
+        toast.error(errMsg, { id: "audio-process", duration: 7000 });
+
+        // Release the audio card from loading spinner state so user can still see and play the recording
+        window.dispatchEvent(new CustomEvent('inject-summary', { 
+          detail: { 
+            id: targetAudioId, 
+            summary: `### Audio Saved\n\nAI Transcription could not be completed: ${errMsg}\n\nYou can still play back your audio recording above.`,
+            transcript: "",
+            url: audioUrl,
+            audioCreatedAt: Date.now(),
+            audioExpiresAt: isCurrentJournal ? undefined : Date.now() + 7 * 24 * 60 * 60 * 1000,
+            isAudioSavedPermanently: isCurrentJournal,
+          } 
+        }));
       }
     };
 
@@ -281,8 +292,8 @@ export default function Home() {
         window.dispatchEvent(new CustomEvent('inject-transcribing', { detail: { id: targetId } }));
         try {
           const audioBase64 = await invoke<string>("stop_recording");
-          console.log("Captured Desktop Audio (Base64 length):", audioBase64.length);
-          await processAudio(audioBase64, targetId);
+          console.log("Captured Desktop Audio (Base64 length):", audioBase64?.length);
+          await processAudio({ base64: audioBase64, mimeType: 'audio/wav', fileExt: 'wav' }, targetId);
           setIsDesktopRecording(false);
         } catch (e) {
           console.error("Failed to stop desktop recording:", e);
@@ -297,29 +308,47 @@ export default function Home() {
           await invoke("start_recording");
           setIsDesktopRecording(true);
         } catch (e) {
-          console.error("Failed to start desktop recording:", e);
+          console.error("Failed to start desktop recording, attempting web mic fallback:", e);
+          try {
+            await startWeb();
+          } catch (webErr) {
+            toast.error("Could not access microphone.");
+          }
         }
       }
     } else {
-      // Web / Mobile fallback
+      // Web / Mobile
       if (isWebRecording) {
         setIsProcessing(true);
         const targetId = activeRecordingAudioIdRef.current || uuidv4();
         window.dispatchEvent(new CustomEvent('inject-transcribing', { detail: { id: targetId } }));
         try {
-          const { base64, mimeType } = await stopWeb();
-          console.log("Captured Web Audio (Base64 length):", base64.length, "MIME:", mimeType);
-          await processAudio(base64, targetId, mimeType);
-        } catch (e) {
+          const result = await stopWeb();
+          console.log("Captured Web Audio:", result.mimeType, "Size:", result.blob.size, "Duration:", result.durationMs);
+          await processAudio(result, targetId);
+        } catch (e: any) {
           console.error("Failed to stop web recording:", e);
+          toast.error(e?.message || "Failed to stop recording.", { id: "audio-process" });
+          window.dispatchEvent(new CustomEvent('inject-summary', { 
+            detail: { 
+              id: targetId, 
+              summary: `### Recording Error\n\n${e?.message || 'Recording stopped unexpectedly.'}`,
+              transcript: "",
+              audioCreatedAt: Date.now(),
+            } 
+          }));
         } finally {
           setIsProcessing(false);
         }
       } else {
         const newAudioId = uuidv4();
         activeRecordingAudioIdRef.current = newAudioId;
-        window.dispatchEvent(new CustomEvent('start-recording-node', { detail: { id: newAudioId } }));
-        await startWeb();
+        try {
+          await startWeb();
+          window.dispatchEvent(new CustomEvent('start-recording-node', { detail: { id: newAudioId } }));
+        } catch (err: any) {
+          toast.error(err?.message || "Could not access microphone.");
+        }
       }
     }
   };

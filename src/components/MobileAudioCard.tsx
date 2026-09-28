@@ -154,8 +154,7 @@ export function MobileAudioCard({
             </div>
           ) : node.url && !(!node.isAudioSavedPermanently && node.audioExpiresAt && Date.now() > node.audioExpiresAt) ? (
             <div className="flex flex-col gap-2">
-              <audio controls className="w-full outline-none h-9">
-                <source src={node.url} type="audio/webm" />
+              <audio controls src={node.url} preload="metadata" className="w-full outline-none h-9">
                 Your browser does not support the audio element.
               </audio>
               <div className="flex items-center justify-between px-1 pt-0.5">

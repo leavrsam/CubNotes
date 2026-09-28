@@ -1,109 +1,168 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { v4 as uuidv4 } from 'uuid';
 
 export const maxDuration = 60; // Allow Vercel functions to run up to 60 seconds for long transcripts
 
 export async function POST(req: NextRequest) {
-  try {
-    const { audioUrl, isJournal = false } = await req.json();
+  let uploadedGeminiFileName: string | null = null;
+  let ai: GoogleGenAI | null = null;
 
-    if (!audioUrl) {
-      return NextResponse.json({ error: 'audioUrl is required' }, { status: 400 });
+  try {
+    const { audioUrl, audioBase64, mimeType = 'audio/webm', isJournal = false } = await req.json();
+
+    if (!audioUrl && !audioBase64) {
+      return NextResponse.json({ error: 'Either audioUrl or audioBase64 is required.' }, { status: 400 });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
       return NextResponse.json({ error: 'GEMINI_API_KEY is not configured on the server.' }, { status: 500 });
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    ai = new GoogleGenAI({ apiKey });
 
-    // 1. Download the audio file from the public URL to a temp file
-    // We need a physical file to use ai.files.upload()
-    const response = await fetch(audioUrl);
-    if (!response.ok) {
-      throw new Error('Failed to fetch audio file from URL');
+    // Clean MIME type (remove codecs parameter for Gemini)
+    const cleanMimeType = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
+
+    // 1. Prepare Audio Part for Gemini
+    let audioPart: any = null;
+
+    if (audioBase64 && typeof audioBase64 === 'string') {
+      // Direct base64 inline audio (fastest, no disk I/O, no network latency)
+      audioPart = {
+        inlineData: {
+          mimeType: cleanMimeType,
+          data: audioBase64,
+        },
+      };
+    } else if (audioUrl) {
+      // Download audio file from storage URL
+      const response = await fetch(audioUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio file from storage: ${response.statusText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // Inline data limit is 20MB in Gemini
+      if (buffer.length <= 15 * 1024 * 1024) {
+        audioPart = {
+          inlineData: {
+            mimeType: cleanMimeType,
+            data: buffer.toString('base64'),
+          },
+        };
+      } else {
+        // For very large recordings (> 15MB), upload in-memory Blob to Gemini Files API
+        const blob = new Blob([buffer], { type: cleanMimeType });
+        const uploadResult = await ai.files.upload({
+          file: blob,
+          mimeType: cleanMimeType,
+        } as any);
+
+        uploadedGeminiFileName = uploadResult?.name || null;
+        audioPart = uploadResult;
+      }
     }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    const tempDir = os.tmpdir();
-    const tempFilePath = path.join(tempDir, `${uuidv4()}.webm`);
-    fs.writeFileSync(tempFilePath, buffer);
 
-    // 2. Upload to Gemini File API
-    const uploadResult = await ai.files.upload({
-      file: tempFilePath,
-    } as any);
+    // 2. Strict Grounding and Anti-Hallucination Prompt
+    const prompt = isJournal
+      ? `You are an expert personal reflection and journal chronicler. I am providing you with a personal voice recording/diary audio.
 
-    // 3. Generate Content using the uploaded file
-    const prompt = isJournal ? `
-      You are an expert personal reflection and journal chronicler. I am providing you with a personal voice recording/diary audio.
-      Please analyze this audio and provide a JSON response with two keys:
-      1. "transcript": A highly accurate transcript of the spoken thoughts and reflections.
-      2. "summary": A beautifully written, reflective first-person journal entry in clean Markdown. Include structured sections such as:
-         - "### Daily Reflection" (a cohesive narrative of the thoughts and experiences shared)
-         - "### Key Insights & Lessons" (notable breakthroughs, takeaways, or realizations)
-         - "### Notable Memories & Highlights" (any specific events, conversations, or moments mentioned)
-         Do NOT use emojis anywhere.
+CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
+- Transcribe ONLY the human speech that is clearly audible in this audio.
+- DO NOT invent, hallucinate, assume, or extrapolate words, reflections, or topics not directly spoken in the audio.
+- DO NOT pull in phrases, stories, or content from outside sources, podcasts, videos, or templates.
+- If the audio is silent, inaudible, mostly static/noise, or contains no decipherable human speech, you MUST return:
+  "transcript": "",
+  "summary": "No speech detected in this recording."
+- If valid speech is present, provide:
+  1. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections.
+  2. "summary": A beautifully written, reflective first-person journal entry in clean Markdown. Include structured sections:
+     - "### Daily Reflection" (cohesive narrative of thoughts shared)
+     - "### Key Insights & Lessons" (notable takeaways or realizations)
+     - "### Notable Memories & Highlights" (any specific events or details mentioned)
+     Do NOT use emojis anywhere.
 
-      Return ONLY valid JSON in the following format, with no markdown code blocks wrapping it:
-      {
-        "transcript": "...",
-        "summary": "### Daily Reflection\\n..."
-      }
-    ` : `
-      You are an expert executive assistant. I am providing you with an audio recording of a meeting.
-      Please analyze this audio and provide a JSON response with two keys:
-      1. "transcript": A highly accurate, speaker-diarized transcript of the meeting. Label the speakers as "Speaker 1", "Speaker 2", etc.
-      2. "summary": A rich, formatted meeting summary in Markdown. Include sections like "Executive Summary", "Key Decisions", and "Action Items". Make it look professional and concise. Do NOT use emojis.
+Return ONLY valid JSON matching this schema:
+{
+  "transcript": "...",
+  "summary": "### Daily Reflection\\n..."
+}`
+      : `You are an expert executive meeting assistant. I am providing you with an audio recording of a meeting.
 
-      Return ONLY valid JSON in the following format, with no markdown code blocks wrapping it:
-      {
-        "transcript": "Speaker 1: Hello everyone...\\nSpeaker 2: Hi there...",
-        "summary": "# Executive Summary\\n..."
-      }
-    `;
+CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
+- Transcribe ONLY the actual human speech that is clearly audible in this audio recording.
+- DO NOT invent, hallucinate, assume, or extrapolate dialogue, attendees, decisions, or topics not directly spoken in the audio.
+- DO NOT pull in phrases, meetings, or transcripts from external training data, YouTube, or generic templates.
+- If the audio is silent, inaudible, mostly background static, or contains no decipherable human speech, you MUST return:
+  "transcript": "",
+  "summary": "No speech detected in this recording."
+- If valid speech is present, provide:
+  1. "transcript": A highly accurate transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
+  2. "summary": A rich, professional meeting summary in Markdown. Include sections: "Executive Summary", "Key Decisions", and "Action Items". Do NOT use emojis.
 
+Return ONLY valid JSON matching this schema:
+{
+  "transcript": "Speaker 1: ...\\nSpeaker 2: ...",
+  "summary": "# Executive Summary\\n..."
+}`;
+
+    // 3. Generate Content using the newest free Gemini model (gemini-3.8-flash)
     const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: [
-        uploadResult,
-        prompt
+        audioPart,
+        { text: prompt }
       ],
       config: {
         responseMimeType: "application/json",
+        temperature: 0.1, // Low temperature is critical to prevent hallucinations
       }
     });
 
-    const responseText = typeof result.text === 'function' ? result.text() : (result.text || '');
-    let parsed;
-    try {
-      parsed = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse JSON", responseText);
-      parsed = { transcript: "Failed to parse transcript", summary: "Failed to parse summary" };
+    const responseText: string = (result as any).text || '';
+    
+    // Clean potential markdown wrappers
+    let cleanJson = responseText.trim();
+    if (cleanJson.startsWith('```json')) {
+      cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+    } else if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
     }
 
-    // Clean up temp file
-    fs.unlinkSync(tempFilePath);
-    
-    // Clean up Gemini File
-    if (uploadResult?.name) {
-      await ai.files.delete({ name: uploadResult.name });
+    let parsed: { transcript?: string; summary?: string } = {};
+    try {
+      parsed = JSON.parse(cleanJson);
+    } catch (e) {
+      console.warn("Failed to parse Gemini JSON response directly, extracting fields:", responseText);
+      const transcriptMatch = cleanJson.match(/"transcript"\s*:\s*"([\s\S]*?)(?=",\s*"summary"|"})/);
+      const summaryMatch = cleanJson.match(/"summary"\s*:\s*"([\s\S]*?)(?="})/);
+      parsed = {
+        transcript: transcriptMatch ? transcriptMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
+        summary: summaryMatch ? summaryMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : cleanJson,
+      };
     }
 
     return NextResponse.json({
+      success: true,
       transcript: parsed.transcript || "",
-      summary: parsed.summary || ""
+      summary: parsed.summary || (parsed.transcript ? "Summary could not be generated." : "No speech detected in this recording.")
     });
 
   } catch (error: any) {
     console.error('Transcription error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      success: false,
+      error: error.message || 'Failed to process audio recording.' 
+    }, { status: 500 });
+  } finally {
+    // Clean up uploaded Gemini File if created
+    if (ai && uploadedGeminiFileName) {
+      try {
+        await ai.files.delete({ name: uploadedGeminiFileName });
+      } catch {}
+    }
   }
 }

@@ -58,14 +58,8 @@ ${question}
 
 Return your answer directly without any conversational filler or preambles.`;
 
-    try {
-      const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-      result = await model.generateContent(prompt);
-    } catch (e) {
-      console.warn("Primary model gemini-3.5-flash failed, falling back to gemini-1.5-flash...", e);
-      const fallbackModel = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-      result = await fallbackModel.generateContent(prompt);
-    }
+    const model = ai.getGenerativeModel({ model: "gemini-3.8-flash" });
+    result = await model.generateContent(prompt);
 
     const responseText = result.response.text();
 

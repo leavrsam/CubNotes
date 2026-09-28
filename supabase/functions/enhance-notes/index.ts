@@ -30,9 +30,8 @@ serve(async (req) => {
     const ai = new GoogleGenerativeAI(geminiKey);
     
     let result;
-    try {
-      const model = ai.getGenerativeModel({ model: "gemini-3.5-flash" });
-      const prompt = `You are an expert AI meeting assistant. Your task is to enhance the user's manual notes using the provided meeting transcript as context.
+    const model = ai.getGenerativeModel({ model: "gemini-3.8-flash" });
+    const prompt = `You are an expert AI meeting assistant. Your task is to enhance the user's manual notes using the provided meeting transcript as context.
       
 1. Expand on the user's shorthand notes, filling in missing details and context from the transcript.
 2. Correct any factual inaccuracies in the notes based on the transcript.
@@ -52,31 +51,7 @@ ${transcript}
 
 Return the enhanced notes formatted in clean markdown.`;
 
-      result = await model.generateContent(prompt);
-    } catch (e) {
-      console.warn("Primary model gemini-3.5-flash failed, falling back to gemini-1.5-flash...", e);
-      const fallbackModel = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const prompt = `You are an expert AI meeting assistant. Your task is to enhance the user's manual notes using the provided meeting transcript as context.
-      
-1. Expand on the user's shorthand notes, filling in missing details and context from the transcript.
-2. Correct any factual inaccuracies in the notes based on the transcript.
-3. Organize the notes beautifully with clear headings, bullet points, and action items.
-4. DO NOT hallucinate. Only add information that is present in the transcript.
-5. Retain the core intent and structure of the user's original notes.
-
-Original Notes:
-"""
-${notes}
-"""
-
-Meeting Transcript:
-"""
-${transcript}
-"""
-
-Return the enhanced notes formatted in clean markdown.`;
-      result = await fallbackModel.generateContent(prompt);
-    }
+    result = await model.generateContent(prompt);
 
     const responseText = result.response.text();
 

@@ -13,6 +13,8 @@ import { AudioOverlay } from "./AudioOverlay";
 import { MediaOverlay } from "./MediaOverlay";
 import { Minimap } from "./Minimap";
 import { uploadMediaFile } from "@/lib/storage";
+import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
+import { processAudioTranscription } from "@/lib/transcribe";
 
 interface CustomCanvasProps {
   pageId: string;
@@ -491,8 +493,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [isPaused, setIsPaused] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const recorderRef = useRef<WebAudioRecorder | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const { showMinimap, setShowMinimap } = useMinimapSettings();
@@ -553,26 +554,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   // Recording Logic
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1, // Mono voice capture
-          noiseSuppression: true,
-          echoCancellation: true,
-          autoGainControl: true,
-        },
-      });
-
-      const mimeType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType,
-        audioBitsPerSecond: 28000, // 28 kbps Opus = crystal clear speech at ~12 MB/hr
-      });
-
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+      const recorder = new WebAudioRecorder();
+      await recorder.start();
+      recorderRef.current = recorder;
 
       const center = getCanvasCenter();
       const nodeId = uuidv4();
@@ -596,19 +580,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         isAudioSavedPermanently: isJournal ? true : false,
       }]);
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await uploadAndTranscribeRecording(audioBlob, nodeId);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
       setIsRecording(true);
       setIsPaused(false);
       setRecordingDuration(0);
@@ -617,15 +588,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         setRecordingDuration(prev => prev + 1);
       }, 1000);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error accessing microphone:", err);
-      toast.error("Could not access microphone.");
+      toast.error(err?.message || "Could not access microphone.");
+      setIsRecording(false);
+      setIsPaused(false);
     }
   };
 
   const pauseRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.pause();
+    if (recorderRef.current && recorderRef.current.isRecording()) {
+      recorderRef.current.pause();
       setIsPaused(true);
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
@@ -634,8 +607,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const resumeRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
-      mediaRecorderRef.current.resume();
+    if (recorderRef.current && recorderRef.current.isPaused()) {
+      recorderRef.current.resume();
       setIsPaused(false);
       timerIntervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
@@ -643,57 +616,62 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsPaused(false);
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
+  const stopRecording = async () => {
+    if (!recorderRef.current || !isRecording) return;
+    
+    setIsRecording(false);
+    setIsPaused(false);
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+
+    const nodeId = activeRecordingNodeIdRef.current || uuidv4();
+    try {
+      const result = await recorderRef.current.stop();
+      await uploadAndTranscribeRecording(result, nodeId);
+    } catch (err: any) {
+      console.error("Error stopping recording:", err);
+      toast.error(err?.message || "Recording stopped unexpectedly.");
+      setAudios(prev => prev.map(a => a.id === nodeId ? { 
+        ...a, 
+        isLiveRecording: false, 
+        isTranscribing: false,
+        summary: `### Recording Error\n\n${err?.message || 'Recording stopped unexpectedly.'}`
+      } : a));
+    } finally {
+      recorderRef.current = null;
     }
   };
 
-  const uploadAndTranscribeRecording = async (audioBlob: Blob, existingNodeId?: string) => {
-    const toastId = toast.loading("Processing meeting with Gemini...");
+  const uploadAndTranscribeRecording = async (result: RecordingResult, existingNodeId?: string) => {
+    const toastId = toast.loading("Processing recording with Gemini 3.8 Flash...");
     setIsTranscribing(true);
     const nodeId = existingNodeId || activeRecordingNodeIdRef.current || uuidv4();
 
     // Mark node as transcribing
     setAudios(prev => prev.map(a => a.id === nodeId ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
 
+    let audioUrl = "";
     try {
-      // 1. Upload audio to Cloudflare R2 (or fallback)
-      const audioFile = new File([audioBlob], `meeting_${Date.now()}.webm`, { type: 'audio/webm' });
-      const uploadResult = await uploadMediaFile(audioFile, pageId);
-      const audioUrl = uploadResult.url;
-
-      // 2. Call Edge Function for Transcription/Summary
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        reader.onloadend = () => {
-          const base64String = (reader.result as string).split(',')[1];
-          resolve(base64String);
-        };
-        reader.onerror = reject;
-      });
-
-      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('summarize-meeting', {
-        body: { audioBase64: base64Data, mimeType: 'audio/webm', isJournal: Boolean(isJournal) }
-      });
-
-      if (edgeError || (edgeData && edgeData.success === false)) {
-        const actualError = edgeData?.error || edgeError;
-        console.error("============= EDGE FUNCTION ERROR =============");
-        console.error(actualError);
-        console.error("===============================================");
-        throw new Error(String(actualError));
+      // 1. Upload audio to Cloudflare R2 or Supabase Storage
+      const audioFile = new File([result.blob], `meeting_${Date.now()}.${result.fileExt}`, { type: result.mimeType });
+      try {
+        const uploadResult = await uploadMediaFile(audioFile, pageId);
+        audioUrl = uploadResult.url;
+      } catch (uploadErr) {
+        console.warn("Audio upload warning:", uploadErr);
       }
 
-      const transcript = edgeData?.transcript || "Transcript not available.";
-      const summary = edgeData?.summary || "Summary not available.";
+      // 2. Transcribe with Gemini 3.8 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
+      const transcriptionResult = await processAudioTranscription({
+        audioBase64: (result.blob.size < 4 * 1024 * 1024) ? result.base64 : undefined,
+        audioUrl: audioUrl || undefined,
+        mimeType: result.mimeType,
+        isJournal: Boolean(isJournal),
+      });
+
+      const transcript = transcriptionResult.transcript || "";
+      const summary = transcriptionResult.summary || "Summary completed.";
 
       const audioCreatedAt = Date.now();
       const audioExpiresAt = isJournal ? undefined : audioCreatedAt + 7 * 24 * 60 * 60 * 1000;
@@ -729,11 +707,19 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         })
       }).catch(err => console.error("Failed to sync audio embedding", err));
 
-      toast.success("Meeting note generated!", { id: toastId });
+      toast.success(isJournal ? "Journal entry processed!" : "Meeting note generated!", { id: toastId });
 
     } catch (error: any) {
-      setAudios(prev => prev.map(a => a.id === nodeId ? { ...a, isLiveRecording: false, isTranscribing: false } : a));
-      toast.error(`Recording processing failed: ${error.message}`, { id: toastId });
+      console.error("Recording processing failed:", error);
+      const errMsg = error?.message || "Processing failed";
+      toast.error(`Recording processing failed: ${errMsg}`, { id: toastId, duration: 7000 });
+      setAudios(prev => prev.map(a => a.id === nodeId ? { 
+        ...a, 
+        isLiveRecording: false, 
+        isTranscribing: false,
+        url: audioUrl,
+        summary: `### Audio Saved\n\nAI Transcription failed: ${errMsg}\n\nYou can still listen to your recording above.`
+      } : a));
     } finally {
       setIsTranscribing(false);
     }
