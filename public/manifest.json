@@ -1,0 +1,23 @@
+{
+  "name": "CubNotes",
+  "short_name": "CubNotes",
+  "description": "Infinite spatial whiteboard, rich notes, and Gemini AI meeting transcriber.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

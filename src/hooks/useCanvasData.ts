@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
+import { v4 as uuidv4 } from "uuid";
+import { 
+  getCachedPageState, 
+  setCachedPageState, 
+  queueOfflineSync, 
+  getPendingSyncActions, 
+  removeSyncAction 
+} from "@/lib/offlineStore";
 import { Stroke, TextNode, AudioNode, ImageNode, FileNode, VideoNode, DocumentState } from "@/components/CustomCanvas";
 
 export function useCanvasData(pageId: string) {
@@ -20,23 +28,45 @@ export function useCanvasData(pageId: string) {
   const lastSavedStateRef = useRef<DocumentState | null>(null);
   const isUndoingRef = useRef(false);
 
-  // Load state from DB
+  // Load state: Instant local cache first, then sync with DB
   useEffect(() => {
     let isMounted = true;
+
     async function loadData() {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("pages")
-        .select("document_state")
-        .eq("id", pageId)
-        .single();
-        
-      if (error) {
-        console.error("Failed to load canvas state:", error);
-      } 
-      
-      if (isMounted) {
-        if (data?.document_state) {
+      // 1. Instant load from local IndexedDB cache (0ms latency, works offline)
+      try {
+        const cached = await getCachedPageState(pageId);
+        if (cached && isMounted) {
+          setStrokes(cached.strokes || []);
+          setTexts(cached.texts || []);
+          setAudios(cached.audios || []);
+          setImages(cached.images || []);
+          setFiles(cached.files || []);
+          setVideos(cached.videos || []);
+          lastSavedStateRef.current = cached;
+          setLoading(false);
+        }
+      } catch (cacheErr) {
+        console.warn("Could not read local cached page state:", cacheErr);
+      }
+
+      // If offline, stop here
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+
+      // 2. Fetch fresh state from Supabase
+      try {
+        const { data, error } = await supabase
+          .from("pages")
+          .select("document_state")
+          .eq("id", pageId)
+          .single();
+          
+        if (error) {
+          console.warn("Supabase fetch failed (possibly offline):", error);
+        } else if (isMounted && data?.document_state) {
           const state = data.document_state as DocumentState;
           setStrokes(state.strokes || []);
           setTexts(state.texts || []);
@@ -44,24 +74,16 @@ export function useCanvasData(pageId: string) {
           setImages(state.images || []);
           setFiles(state.files || []);
           setVideos(state.videos || []);
-          lastSavedStateRef.current = {
-            strokes: state.strokes || [],
-            texts: state.texts || [],
-            audios: state.audios || [],
-            images: state.images || [],
-            files: state.files || [],
-            videos: state.videos || []
-          };
-        } else {
-          setStrokes([]);
-          setTexts([]);
-          setAudios([]);
-          setImages([]);
-          setFiles([]);
-          setVideos([]);
-          lastSavedStateRef.current = { strokes: [], texts: [], audios: [], images: [], files: [], videos: [] };
+          lastSavedStateRef.current = state;
+          // Update local cache with fresh state
+          setCachedPageState(pageId, state, false);
         }
-        setLoading(false);
+      } catch (networkErr) {
+        console.warn("Network error loading canvas state:", networkErr);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
     
@@ -98,7 +120,7 @@ export function useCanvasData(pageId: string) {
     return () => clearTimeout(timeoutId);
   }, [strokes, texts, audios, images, files, videos, loading]);
 
-  // Save state to DB
+  // Save state: Write locally immediately, debounced sync to Supabase
   const saveToSupabase = useCallback(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     debounce(async (
@@ -109,13 +131,81 @@ export function useCanvasData(pageId: string) {
         strokes: newStrokes, texts: newTexts, audios: newAudios,
         images: newImages, files: newFiles, videos: newVideos
       };
-      await supabase
-        .from('pages')
-        .update({ document_state: state })
-        .eq('id', pageId);
+
+      const isOfflineNow = typeof navigator !== 'undefined' && !navigator.onLine;
+
+      // Always save to local IndexedDB immediately
+      await setCachedPageState(pageId, state, isOfflineNow);
+
+      if (isOfflineNow) {
+        // Queue for background sync when back online
+        await queueOfflineSync({
+          id: `sync_${pageId}`,
+          action: 'save_canvas',
+          pageId,
+          payload: state,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      try {
+        const { error } = await supabase
+          .from('pages')
+          .update({ document_state: state })
+          .eq('id', pageId);
+
+        if (error) {
+          console.warn("Supabase update error, queuing offline sync:", error);
+          await queueOfflineSync({
+            id: `sync_${pageId}`,
+            action: 'save_canvas',
+            pageId,
+            payload: state,
+            timestamp: Date.now(),
+          });
+        }
+      } catch (err) {
+        console.warn("Network error during save, queued locally:", err);
+        await queueOfflineSync({
+          id: `sync_${pageId}`,
+          action: 'save_canvas',
+          pageId,
+          payload: state,
+          timestamp: Date.now(),
+        });
+      }
     }, 1500),
     [pageId, supabase]
   );
+
+  // Background Sync on Reconnection
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleReconnected = async () => {
+      console.log("Device reconnected to internet. Replaying pending sync actions...");
+      try {
+        const pending = await getPendingSyncActions();
+        for (const action of pending) {
+          if (action.action === 'save_canvas') {
+            const { error } = await supabase
+              .from('pages')
+              .update({ document_state: action.payload })
+              .eq('id', action.pageId);
+            if (!error) {
+              await removeSyncAction(action.id);
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Background sync error:", syncErr);
+      }
+    };
+
+    window.addEventListener('online', handleReconnected);
+    return () => window.removeEventListener('online', handleReconnected);
+  }, [supabase]);
 
   // Save version snapshot to DB (less frequently)
   const saveVersionToSupabase = useCallback(

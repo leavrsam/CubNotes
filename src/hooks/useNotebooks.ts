@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 import debounce from 'lodash/debounce';
+import { getCachedNotebooks, setCachedNotebooks } from '@/lib/offlineStore';
 
 export interface Page {
   id: string;
@@ -32,9 +33,31 @@ export interface Notebook {
 export function useNotebooks() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [supabase] = useState(() => createClient());
   const isFetching = useRef(false);
+
+  // Monitor network status
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const updateOnlineStatus = () => {
+      const offline = !navigator.onLine;
+      setIsOffline(offline);
+      if (!offline) {
+        // Reconnected to internet, fetch fresh data
+        fetchNotebooks();
+      }
+    };
+
+    setIsOffline(!navigator.onLine);
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
+    };
+  }, []);
 
   const fetchNotebooks = useCallback(async () => {
     // Prevent concurrent fetches from causing cascading re-renders
@@ -42,8 +65,26 @@ export function useNotebooks() {
     isFetching.current = true;
     
     try {
+      // If offline, read immediately from local IndexedDB cache
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedNotebooks();
+        if (cached && cached.length > 0) {
+          setNotebooks(cached);
+          setLoading(false);
+          isFetching.current = false;
+          return;
+        }
+      }
+
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
+      if (!userData.user) {
+        const cached = await getCachedNotebooks();
+        if (cached && cached.length > 0) {
+          setNotebooks(cached);
+          setLoading(false);
+        }
+        return;
+      }
       setUserId(userData.user.id);
 
       // Fetch all hierarchy data — exclude document_state from pages to avoid huge payloads
@@ -54,7 +95,11 @@ export function useNotebooks() {
       ]);
 
       if (nbRes.error || secRes.error || pRes.error) {
-        console.error('Error fetching data:', nbRes.error || secRes.error || pRes.error);
+        console.error('Error fetching data from Supabase:', nbRes.error || secRes.error || pRes.error);
+        const cached = await getCachedNotebooks();
+        if (cached && cached.length > 0) {
+          setNotebooks(cached);
+        }
         return;
       }
 
@@ -106,14 +151,19 @@ export function useNotebooks() {
       }
 
       if (needsRefresh) {
-        // We re-fetch to get the new structure including the DB-generated IDs
         // eslint-disable-next-line no-use-before-define
         await fetchNotebooks();
       } else {
         setNotebooks(notebooksData);
+        // Persist fresh notebooks to local IndexedDB
+        setCachedNotebooks(notebooksData).catch(err => console.warn("Failed to cache notebooks:", err));
       }
     } catch (e) {
-      console.error(e);
+      console.warn("Network request failed, falling back to local offline cache:", e);
+      const cached = await getCachedNotebooks();
+      if (cached && cached.length > 0) {
+        setNotebooks(cached);
+      }
     } finally {
       isFetching.current = false;
       setLoading(false);
@@ -121,11 +171,18 @@ export function useNotebooks() {
   }, [supabase]);
 
   useEffect(() => {
+    // 1. Instant zero-latency load from local IndexedDB cache
+    getCachedNotebooks().then((cached) => {
+      if (cached && cached.length > 0) {
+        setNotebooks(cached);
+        setLoading(false);
+      }
+    });
+
+    // 2. Fetch fresh data from network
     fetchNotebooks();
 
-    // Setup realtime listeners — do NOT listen to 'pages' because
-    // the canvas auto-save writes to pages every 1.5s, which would
-    // trigger a full refetch and remount the canvas in an infinite loop.
+    // Setup realtime listeners
     const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notebooks' }, fetchNotebooks)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sections' }, fetchNotebooks)
@@ -333,7 +390,7 @@ export function useNotebooks() {
   };
 
   return { 
-    notebooks, loading, userId,
+    notebooks, loading, isOffline, userId,
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
     addPage, updatePage, deletePage, movePage

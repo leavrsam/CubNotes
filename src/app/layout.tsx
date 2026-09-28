@@ -5,6 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CubNotes",
   description: "AI-powered infinite canvas workspace",
+  manifest: "/manifest.json",
   icons: {
     icon: [
       { url: "/icon.png" },
@@ -22,6 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  themeColor: "#09090b",
   viewportFit: "cover",
   width: "device-width",
   initialScale: 1,
@@ -31,6 +33,7 @@ export const viewport: Viewport = {
 
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AccentProvider } from "@/components/AccentProvider";
+import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
 export default function RootLayout({
   children,
@@ -45,6 +48,7 @@ export default function RootLayout({
       >
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           <AccentProvider>
+            <ServiceWorkerRegistration />
             {children}
             <Toaster position="bottom-right" />
           </AccentProvider>

@@ -19,7 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize } from "lucide-react";
+import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -28,7 +28,7 @@ import { processAudioTranscription } from "@/lib/transcribe";
 
 export default function Home() {
   const { 
-    notebooks, loading, 
+    notebooks, loading, isOffline, 
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
     addPage, updatePage, deletePage, movePage
@@ -390,6 +390,15 @@ export default function Home() {
 
   return (
     <main className="flex w-full h-full relative overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+      {isOffline && (
+        <div 
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-1.5 px-3 py-1 bg-amber-500/90 text-white text-xs font-semibold rounded-full shadow-lg backdrop-blur pointer-events-none"
+          title="Internet disconnected. Your notes are stored and saved locally on this device."
+        >
+          <WifiOff size={13} />
+          <span>Offline — Saved locally</span>
+        </div>
+      )}
       
       {/* --- DESKTOP LAYOUT --- */}
       {!isMobile && (
