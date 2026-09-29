@@ -719,7 +719,7 @@ export function SettingsModal({
                     <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Google Gemini AI</h3>
                   </div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    CubNotes is powered by <strong>Gemini 2.5 Flash</strong> for speaker-diarized audio meeting transcriptions, structured executive summaries, and intelligent note organization.
+                    CubNotes is powered by <strong>Gemini 3.8 Flash</strong> for speaker-diarized audio meeting transcriptions, structured executive summaries, and intelligent note organization.
                   </p>
                 </div>
 

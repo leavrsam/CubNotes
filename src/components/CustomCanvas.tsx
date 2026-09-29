@@ -644,7 +644,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const uploadAndTranscribeRecording = async (result: RecordingResult, existingNodeId?: string) => {
-    const toastId = toast.loading("Processing recording with Gemini 2.5 Flash...");
+    const toastId = toast.loading("Processing recording with Gemini 3.8 Flash...");
     setIsTranscribing(true);
     const nodeId = existingNodeId || activeRecordingNodeIdRef.current || uuidv4();
 

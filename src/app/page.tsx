@@ -343,7 +343,7 @@ export default function Home() {
         const cleanMimeType = (audioData.mimeType || (isDesktop ? 'audio/wav' : 'audio/webm')).split(';')[0].trim();
         const fileExt = audioData.fileExt || (cleanMimeType.includes('mp4') ? 'mp4' : cleanMimeType.includes('wav') ? 'wav' : 'webm');
 
-        toast.loading("Uploading audio and generating summary with Gemini 2.5 Flash...", { id: "audio-process" });
+        toast.loading("Uploading audio and generating summary with Gemini 3.8 Flash...", { id: "audio-process" });
         
         // 1. Prepare Blob
         let audioBlob = audioData.blob;
