@@ -132,6 +132,34 @@ export function MobileNavigation({
     }
   }, [view, sectionId, selectedNotebookId]);
 
+  // Swipe-to-go-back gesture handling
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    // Initiate if starting within the first 80px from the left edge
+    if (touch.clientX < 80) {
+      touchStartX.current = touch.clientX;
+      touchStartY.current = touch.clientY;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, onSwipeRight: () => void) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartX.current;
+    const deltaY = Math.abs(touch.clientY - touchStartY.current);
+
+    // If swipe right was at least 65px and mostly horizontal
+    if (deltaX > 65 && deltaX > deltaY * 1.3) {
+      onSwipeRight();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   const togglePinNote = (pageId: string) => {
     setPinnedPageIds(prev => {
       const next = prev.includes(pageId) ? prev.filter(id => id !== pageId) : [...prev, pageId];
@@ -285,6 +313,25 @@ export function MobileNavigation({
     }
   };
 
+  const handleDeleteNotebook = async (notebook: Notebook) => {
+    if (!onDeleteNotebook) return;
+    const folderCount = (notebook.sections || []).length;
+    const noteCount = (notebook.sections || []).reduce((acc, s) => acc + (s.pages || []).length, 0);
+
+    let confirmMsg = `Delete notebook "${notebook.title}"?`;
+    if (folderCount > 0 || noteCount > 0) {
+      confirmMsg = `Delete notebook "${notebook.title}" and its ${folderCount} folder(s) containing ${noteCount} note(s)? This action cannot be undone.`;
+    }
+
+    if (window.confirm(confirmMsg)) {
+      await onDeleteNotebook(notebook.id);
+      if (selectedNotebookId === notebook.id) {
+        setSelectedNotebookId(null);
+      }
+      toast.success("Notebook deleted");
+    }
+  };
+
   const handleConfirmMoveNote = async (targetSectionId: string) => {
     if (!moveTargetNote || !onMovePage) return;
     setIsMoving(true);
@@ -376,7 +423,11 @@ export function MobileNavigation({
     );
 
     return (
-      <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none">
+      <div 
+        className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={(e) => handleTouchEnd(e, onBackToFolders)}
+      >
         {/* Top Header */}
         <div 
           className="flex-shrink-0 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 z-20"
@@ -576,7 +627,11 @@ export function MobileNavigation({
     });
 
     return (
-      <div className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none">
+      <div 
+        className="fixed inset-0 w-full h-[100dvh] flex flex-col bg-zinc-50 dark:bg-black overflow-hidden select-none"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={(e) => handleTouchEnd(e, () => setSelectedNotebookId(null))}
+      >
         {/* Top Header */}
         <div 
           className="flex-shrink-0 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200/80 dark:border-zinc-800 z-20"
@@ -598,6 +653,14 @@ export function MobileNavigation({
                 title="Rename Notebook"
               >
                 <Edit2 size={15} />
+              </button>
+
+              <button 
+                onClick={() => handleDeleteNotebook(activeNotebook)}
+                className="p-1.5 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 rounded-full bg-zinc-100 dark:bg-zinc-800 transition-colors active:scale-90"
+                title="Delete Notebook"
+              >
+                <Trash2 size={15} />
               </button>
 
               <button 
@@ -866,6 +929,18 @@ export function MobileNavigation({
                       title="Rename Notebook"
                     >
                       <Edit2 size={12} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteNotebook(nb);
+                      }}
+                      className="p-1 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 active:scale-90 transition-transform"
+                      title="Delete Notebook"
+                    >
+                      <Trash2 size={12} />
                     </button>
 
                     {onToggleJournalMode && (

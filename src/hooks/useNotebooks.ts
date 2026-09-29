@@ -238,7 +238,17 @@ export function useNotebooks() {
   };
 
   const deleteNotebook = async (id: string) => {
-    await supabase.from('notebooks').delete().eq('id', id);
+    // Optimistic local update for instant UI feedback
+    setNotebooks(prev => {
+      const updated = prev.filter(nb => nb.id !== id);
+      setCachedNotebooks(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('notebooks').delete().eq('id', id);
+    if (error) {
+      console.error("Error deleting notebook from Supabase:", error);
+    }
     await fetchNotebooks();
   };
 
@@ -255,7 +265,19 @@ export function useNotebooks() {
   };
 
   const deleteSection = async (id: string) => {
-    await supabase.from('sections').delete().eq('id', id);
+    setNotebooks(prev => {
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: nb.sections.filter(sec => sec.id !== id)
+      }));
+      setCachedNotebooks(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('sections').delete().eq('id', id);
+    if (error) {
+      console.error("Error deleting section from Supabase:", error);
+    }
     await fetchNotebooks();
   };
 
@@ -309,7 +331,23 @@ export function useNotebooks() {
   };
 
   const deletePage = async (id: string) => {
-    await supabase.from('pages').delete().eq('id', id);
+    // Optimistic UI update
+    setNotebooks(prev => {
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: (nb.sections || []).map(sec => ({
+          ...sec,
+          pages: (sec.pages || []).filter(p => p.id !== id)
+        }))
+      }));
+      setCachedNotebooks(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('pages').delete().eq('id', id);
+    if (error) {
+      console.error("Error deleting page from Supabase:", error);
+    }
     await fetchNotebooks();
   };
 

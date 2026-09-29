@@ -292,6 +292,35 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [drawOverlayBlockType, setDrawOverlayBlockType] = useState<string | null>(null);
   const [drawOverlayInitialY, setDrawOverlayInitialY] = useState<number | undefined>(undefined);
 
+  // Swipe-to-go-back gesture handling
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  const handlePageTouchStart = (e: React.TouchEvent) => {
+    if (isDrawOverlayOpen || isRearranging) return;
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    // Start gesture if touching near the left edge (< 80px)
+    if (touch.clientX < 80) {
+      touchStartX.current = touch.clientX;
+      touchStartY.current = touch.clientY;
+    }
+  };
+
+  const handlePageTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartX.current;
+    const deltaY = Math.abs(touch.clientY - touchStartY.current);
+
+    // If swipe right was at least 65px and mostly horizontal
+    if (deltaX > 65 && deltaX > deltaY * 1.3) {
+      if (onBack) onBack();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   const openDrawOverlay = (blockId: string | null = null, blockType: string | null = null, initialY?: number) => {
     if (blockId) {
       const targetBlock = sortedBlocks.find(b => b.id === blockId);
@@ -840,6 +869,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       style={{
         backgroundColor: pageColor === 'default' ? undefined : pageColor
       }}
+      onTouchStart={handlePageTouchStart}
+      onTouchEnd={handlePageTouchEnd}
     >
       {/* Paper Pattern Overlay */}
       {backgroundStyle !== 'none' && (

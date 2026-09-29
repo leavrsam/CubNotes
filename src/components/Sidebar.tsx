@@ -226,7 +226,7 @@ function ItemActions({
   onEdit: () => void, onDelete: () => void, onAdd?: () => void, addTitle?: string, onToggleJournal?: () => void, isJournal?: boolean 
 }) {
   return (
-    <div className="hidden group-hover:flex items-center absolute right-2 bg-zinc-800 rounded shadow-lg border border-zinc-700">
+    <div className="flex md:hidden md:group-hover:flex items-center absolute right-2 bg-zinc-800 rounded shadow-lg border border-zinc-700">
       {onToggleJournal && (
         <button 
           onClick={(e) => { e.stopPropagation(); onToggleJournal(); }} 

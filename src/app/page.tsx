@@ -54,7 +54,139 @@ export default function Home() {
   const [mobileView, setMobileView] = useState<'folders' | 'notes'>('folders');
   const [mobileSectionId, setMobileSectionId] = useState<string | null>(null);
   
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // State tracking refs for popstate and backButton handlers
+  const selectedPageIdRef = useRef<string | null>(null);
+  selectedPageIdRef.current = selectedPageId;
+
+  const mobileViewRef = useRef<'folders' | 'notes'>('folders');
+  mobileViewRef.current = mobileView;
+
+  const isSettingsOpenRef = useRef(false);
+  isSettingsOpenRef.current = isSettingsOpen;
+
+  // History state navigation to support phone swipe-to-go-back gesture
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Ensure baseline history entry exists
+    if (!window.history.state || !window.history.state.cubType) {
+      window.history.replaceState({ cubType: 'root' }, '');
+    }
+
+    const handlePopState = () => {
+      // 1. Settings modal open? Close it.
+      if (isSettingsOpenRef.current) {
+        setIsSettingsOpen(false);
+        return;
+      }
+
+      // 2. Page / Note open? Close it and return to notes list!
+      if (selectedPageIdRef.current) {
+        setSelectedPageId(null);
+        return;
+      }
+
+      // 3. In notes list inside folder? Return to folders root list!
+      if (mobileViewRef.current === 'notes') {
+        setMobileView('folders');
+        setMobileSectionId(null);
+        return;
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Native Android hardware/gesture back button listener via Capacitor
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let cleanupListener: (() => void) | null = null;
+
+    import('@capacitor/app').then(({ App }) => {
+      const listenerPromise = App.addListener('backButton', () => {
+        if (isSettingsOpenRef.current) {
+          if (window.history.state?.cubType === 'settings') {
+            window.history.back();
+          } else {
+            setIsSettingsOpen(false);
+          }
+        } else if (selectedPageIdRef.current) {
+          if (window.history.state?.cubType === 'page') {
+            window.history.back();
+          } else {
+            setSelectedPageId(null);
+          }
+        } else if (mobileViewRef.current === 'notes') {
+          if (window.history.state?.cubType === 'section') {
+            window.history.back();
+          } else {
+            setMobileView('folders');
+            setMobileSectionId(null);
+          }
+        } else {
+          // At root folders view — exit app
+          App.exitApp();
+        }
+      });
+
+      cleanupListener = () => {
+        listenerPromise.then(h => h.remove());
+      };
+    }).catch(() => {});
+
+    return () => {
+      if (cleanupListener) cleanupListener();
+    };
+  }, []);
+
+  const handleOpenSettings = () => {
+    setIsSettingsOpen(true);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ cubType: 'settings' }, '');
+    }
+  };
+
+  const handleCloseSettings = () => {
+    if (typeof window !== 'undefined' && window.history.state?.cubType === 'settings') {
+      window.history.back();
+    } else {
+      setIsSettingsOpen(false);
+    }
+  };
+
+  const handleSelectSection = (id: string) => {
+    setMobileSectionId(id);
+    setMobileView('notes');
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ cubType: 'section', id }, '');
+    }
+  };
+
+  const handleSelectPage = (id: string) => {
+    setSelectedPageId(id);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ cubType: 'page', id }, '');
+    }
+  };
+
+  const handleBackFromPage = () => {
+    if (typeof window !== 'undefined' && window.history.state?.cubType === 'page') {
+      window.history.back();
+    } else {
+      setSelectedPageId(null);
+    }
+  };
+
+  const handleBackFromNotes = () => {
+    if (typeof window !== 'undefined' && window.history.state?.cubType === 'section') {
+      window.history.back();
+    } else {
+      setMobileView('folders');
+      setMobileSectionId(null);
+    }
+  };
 
   // Fullscreen & Keyboard shortcuts
   useEffect(() => {
@@ -427,7 +559,7 @@ export default function Home() {
             onClose={() => setIsSidebarOpen(false)}
             onOpenSettings={() => {
               setIsSidebarOpen(false);
-              setIsSettingsOpen(true);
+              handleOpenSettings();
             }}
             user={currentUser}
           />
@@ -562,12 +694,9 @@ export default function Home() {
               notebooks={notebooks}
               view={mobileView}
               sectionId={mobileSectionId}
-              onSelectSection={(id) => {
-                setMobileSectionId(id);
-                setMobileView('notes');
-              }}
-              onSelectPage={(id) => setSelectedPageId(id)}
-              onBackToFolders={() => setMobileView('folders')}
+              onSelectSection={handleSelectSection}
+              onSelectPage={handleSelectPage}
+              onBackToFolders={handleBackFromNotes}
               onAddNotebook={async (title, isJournal) => {
                 const res = await addNotebook(title || "New Notebook", isJournal);
                 return res;
@@ -579,7 +708,7 @@ export default function Home() {
               onAddPage={async (secId, title) => {
                 const page = await addPage(secId, title || "Untitled Note");
                 if (page?.id) {
-                  setSelectedPageId(page.id);
+                  handleSelectPage(page.id);
                 }
                 return page;
               }}
@@ -592,7 +721,7 @@ export default function Home() {
               onToggleJournalMode={toggleJournalMode}
               onMovePage={movePage}
               onMoveSection={moveSection}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={handleOpenSettings}
             />
           ) : (
             <div className="w-full h-full flex flex-col relative">
@@ -602,14 +731,11 @@ export default function Home() {
                 pageTitle={activePageTitle}
                 pageCreatedAt={activePageCreatedAt}
                 onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
-                onBack={() => {
-                  setSelectedPageId(null);
-                  setMobileView('folders');
-                }}
+                onBack={handleBackFromPage}
                 isRecording={isAnyRecording}
                 isProcessing={isProcessing}
                 onToggleMeeting={handleToggleMeeting}
-                onOpenSettings={() => setIsSettingsOpen(true)}
+                onOpenSettings={handleOpenSettings}
                 isJournal={isActiveJournal}
               />
             </div>
@@ -619,7 +745,7 @@ export default function Home() {
 
       <SettingsModal 
         isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
+        onClose={handleCloseSettings} 
         userEmail={userEmail}
         user={currentUser}
         onSignOut={handleSignOut}
