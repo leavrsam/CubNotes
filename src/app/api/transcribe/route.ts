@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
+import { DREWS_PITCH_AUDIO_ID, DREWS_PITCH_SUMMARY, DREWS_PITCH_TRANSCRIPT } from '@/lib/drewsPitchData';
+
 export const maxDuration = 60; // Allow Vercel functions to run up to 60 seconds for long transcripts
 
 export async function POST(req: NextRequest) {
@@ -13,6 +15,15 @@ export async function POST(req: NextRequest) {
 
     if (!audioUrl && !audioBase64) {
       return NextResponse.json({ error: 'Either audioUrl or audioBase64 is required.' }, { status: 400 });
+    }
+
+    // Fast path: Immediately return pre-computed transcript & summary for Drew's Pitch
+    if (audioUrl && typeof audioUrl === 'string' && audioUrl.includes(DREWS_PITCH_AUDIO_ID)) {
+      return NextResponse.json({
+        success: true,
+        transcript: DREWS_PITCH_TRANSCRIPT,
+        summary: DREWS_PITCH_SUMMARY,
+      });
     }
 
     const apiKey = clientApiKey || req.headers.get('x-gemini-api-key') || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
