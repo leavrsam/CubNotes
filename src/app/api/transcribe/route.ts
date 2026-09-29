@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { audioUrl, audioBase64, mimeType = 'audio/webm', isJournal = false, apiKey: clientApiKey } = body;
+    const { audioUrl, audioBase64, mimeType = 'audio/webm', isJournal = false, liveTranscript, apiKey: clientApiKey } = body;
 
     if (!audioUrl && !audioBase64) {
       return NextResponse.json({ error: 'Either audioUrl or audioBase64 is required.' }, { status: 400 });
@@ -123,6 +123,10 @@ Return ONLY valid JSON matching this schema:
   "summary": "# Executive Summary\\n..."
 }`;
 
+    const promptWithReference = (liveTranscript && typeof liveTranscript === 'string' && liveTranscript.trim().length > 0)
+      ? `${prompt}\n\nOPTIONAL REFERENCE: Real-time on-device speech transcript captured during recording:\n"""\n${liveTranscript.trim()}\n"""\nUse the audio recording as your primary ground truth, but reference this to ensure accurate names, technical vocabulary, and verbatim coverage.`
+      : prompt;
+
     // 3. Generate Content using the newest Gemini model (gemini-3.8-flash with gemini-2.5-flash fallback)
     let result: any;
     try {
@@ -130,7 +134,7 @@ Return ONLY valid JSON matching this schema:
         model: 'gemini-3.8-flash',
         contents: [
           audioPart,
-          { text: prompt }
+          { text: promptWithReference }
         ],
         config: {
           responseMimeType: "application/json",

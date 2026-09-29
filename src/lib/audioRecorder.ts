@@ -8,6 +8,7 @@ export interface RecordingResult {
   mimeType: string;
   fileExt: string;
   durationMs: number;
+  liveTranscript?: string;
 }
 
 export function getPreferredMimeType(): { mimeType: string; fileExt: string } {

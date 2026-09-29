@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { WebAudioRecorder, RecordingResult } from '@/lib/audioRecorder';
+import { liveSpeechRecognizer } from '@/lib/liveSpeech';
 import {
   isNativeAndroid,
   startNativeRecording,
@@ -44,6 +45,13 @@ export function useWebAudio() {
       recorderRef.current = recorder;
       setIsRecording(true);
       setIsPaused(false);
+
+      // Start on-device live speech recognition
+      try {
+        liveSpeechRecognizer.start();
+      } catch (speechErr) {
+        console.warn("Live speech recognition not started:", speechErr);
+      }
     } catch (err) {
       console.error("Failed to start audio recording:", err);
       setIsRecording(false);
@@ -55,6 +63,7 @@ export function useWebAudio() {
   const pauseRecording = useCallback(() => {
     if (recorderRef.current) {
       recorderRef.current.pause();
+      liveSpeechRecognizer.pause();
       setIsPaused(true);
     }
   }, []);
@@ -62,17 +71,20 @@ export function useWebAudio() {
   const resumeRecording = useCallback(() => {
     if (recorderRef.current) {
       recorderRef.current.resume();
+      liveSpeechRecognizer.resume();
       setIsPaused(false);
     }
   }, []);
 
   const stopRecording = useCallback(async (): Promise<RecordingResult> => {
+    const liveTranscript = liveSpeechRecognizer.stop();
+
     if (isNativeAndroid()) {
       try {
         const result = await stopNativeRecording();
         setIsRecording(false);
         setIsPaused(false);
-        return result;
+        return { ...result, liveTranscript };
       } catch (err) {
         setIsRecording(false);
         setIsPaused(false);
@@ -88,7 +100,7 @@ export function useWebAudio() {
 
     try {
       const result = await recorderRef.current.stop();
-      return result;
+      return { ...result, liveTranscript };
     } finally {
       recorderRef.current = null;
       setIsRecording(false);

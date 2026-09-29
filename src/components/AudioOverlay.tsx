@@ -169,6 +169,13 @@ function AudioNodeCard({
 
   // Sync with global timer for active recording
   const elapsedSeconds = node.isLiveRecording ? activeRecordingDuration : 0;
+  const liveScrollRef = useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (node.isLiveRecording && liveScrollRef.current) {
+      liveScrollRef.current.scrollTop = liveScrollRef.current.scrollHeight;
+    }
+  }, [node.transcript, node.isLiveRecording]);
 
   React.useEffect(() => {
     if (node.isLiveRecording) {
@@ -333,33 +340,60 @@ function AudioNodeCard({
           </div>
           
           {node.isLiveRecording ? (
-            <div className="flex items-center justify-between px-4 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl">
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full bg-red-500 ${!isActiveRecordingPaused ? 'animate-ping' : ''}`} />
-                <span className="text-xs font-bold text-red-600 dark:text-red-400">
-                  {isActiveRecordingPaused ? 'Recording Paused' : 'Recording live meeting...'}
-                </span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between px-4 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full bg-red-500 ${!isActiveRecordingPaused ? 'animate-ping' : ''}`} />
+                  <span className="text-xs font-bold text-red-600 dark:text-red-400">
+                    {isActiveRecordingPaused ? 'Recording Paused' : 'Recording live meeting...'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
+                    {formatTimer(elapsedSeconds)}
+                  </span>
+                  {onStopRecording && (
+                    <div className="flex items-center gap-1 border-l border-red-200 dark:border-red-800/60 pl-3">
+                      {isActiveRecordingPaused ? (
+                        <button onClick={onResumeRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Resume">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        </button>
+                      ) : (
+                        <button onClick={onPauseRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Pause">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                        </button>
+                      )}
+                      <button onClick={onStopRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Stop">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
-                  {formatTimer(elapsedSeconds)}
-                </span>
-                {onStopRecording && (
-                  <div className="flex items-center gap-1 border-l border-red-200 dark:border-red-800/60 pl-3">
-                    {isActiveRecordingPaused ? (
-                      <button onClick={onResumeRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Resume">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                      </button>
-                    ) : (
-                      <button onClick={onPauseRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Pause">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-                      </button>
-                    )}
-                    <button onClick={onStopRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Stop">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-                    </button>
+
+              {/* Live Real-Time Speech Stream Box */}
+              <div className="p-3 rounded-xl bg-zinc-50/90 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 shadow-inner">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[11px] font-bold text-red-600 dark:text-red-400 tracking-wide uppercase">
+                      Live Transcription
+                    </span>
                   </div>
-                )}
+                  <span className="text-[10px] text-zinc-400 font-medium">Free • On-Device</span>
+                </div>
+                <div 
+                  ref={liveScrollRef}
+                  className="text-xs text-zinc-700 dark:text-zinc-300 font-mono max-h-32 min-h-[44px] overflow-y-auto leading-relaxed whitespace-pre-wrap select-text custom-scrollbar"
+                >
+                  {node.transcript ? (
+                    node.transcript
+                  ) : (
+                    <span className="italic text-zinc-400 text-[11px]">
+                      Listening for speech... Start speaking into the microphone to see real-time words appear here.
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ) : node.isTranscribing ? (
@@ -507,13 +541,19 @@ function AudioNodeCard({
           {/* Transcript Tab */}
           {activeTab === 'transcript' && (
             <div className="p-5 overflow-y-auto h-full custom-scrollbar">
+              {node.isLiveRecording && (
+                <div className="flex items-center gap-2 mb-3 px-2.5 py-1 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span>Live Streaming Speech Recognition Active</span>
+                </div>
+              )}
               {node.transcript ? (
                 <div className="text-[13px] font-mono leading-loose text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">
                   {node.transcript}
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
-                  {node.summary?.includes('Transcribing') ? 'Transcribing audio...' : 'No transcript available.'}
+                  {node.isLiveRecording ? 'Listening for speech...' : node.summary?.includes('Transcribing') ? 'Transcribing audio...' : 'No transcript available.'}
                 </div>
               )}
             </div>

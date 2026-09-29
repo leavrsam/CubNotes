@@ -15,6 +15,7 @@ import { Minimap } from "./Minimap";
 import { uploadMediaFile } from "@/lib/storage";
 import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
 import { processAudioTranscription } from "@/lib/transcribe";
+import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 
 interface CustomCanvasProps {
   pageId: string;
@@ -584,6 +585,12 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       setIsPaused(false);
       setRecordingDuration(0);
 
+      try {
+        liveSpeechRecognizer.start();
+      } catch (speechErr) {
+        console.warn("Live speech recognizer not started:", speechErr);
+      }
+
       timerIntervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
@@ -599,6 +606,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const pauseRecording = () => {
     if (recorderRef.current && recorderRef.current.isRecording()) {
       recorderRef.current.pause();
+      liveSpeechRecognizer.pause();
       setIsPaused(true);
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
@@ -609,6 +617,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const resumeRecording = () => {
     if (recorderRef.current && recorderRef.current.isPaused()) {
       recorderRef.current.resume();
+      liveSpeechRecognizer.resume();
       setIsPaused(false);
       timerIntervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
@@ -625,10 +634,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       clearInterval(timerIntervalRef.current);
     }
 
+    const liveTranscript = liveSpeechRecognizer.stop();
     const nodeId = activeRecordingNodeIdRef.current || uuidv4();
     try {
       const result = await recorderRef.current.stop();
-      await uploadAndTranscribeRecording(result, nodeId);
+      await uploadAndTranscribeRecording(result, nodeId, liveTranscript);
     } catch (err: any) {
       console.error("Error stopping recording:", err);
       toast.error(err?.message || "Recording stopped unexpectedly.");
@@ -643,7 +653,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  const uploadAndTranscribeRecording = async (result: RecordingResult, existingNodeId?: string) => {
+  const uploadAndTranscribeRecording = async (result: RecordingResult, existingNodeId?: string, liveTranscript?: string) => {
     const toastId = toast.loading("Processing recording with Gemini 3.8 Flash...");
     setIsTranscribing(true);
     const nodeId = existingNodeId || activeRecordingNodeIdRef.current || uuidv4();
@@ -662,15 +672,16 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         console.warn("Audio upload warning:", uploadErr);
       }
 
-      // 2. Transcribe with Gemini 2.5 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
+      // 2. Transcribe with Gemini 3.8 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
       const transcriptionResult = await processAudioTranscription({
         audioBase64: (result.blob.size < 4 * 1024 * 1024) ? result.base64 : undefined,
         audioUrl: audioUrl || undefined,
         mimeType: result.mimeType,
         isJournal: Boolean(isJournal),
+        liveTranscript: liveTranscript || result.liveTranscript,
       });
 
-      const transcript = transcriptionResult.transcript || "";
+      const transcript = transcriptionResult.transcript || liveTranscript || result.liveTranscript || "";
       const summary = transcriptionResult.summary || "Summary completed.";
 
       const audioCreatedAt = Date.now();
@@ -839,11 +850,18 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       });
     };
 
+    const handleLiveTranscriptBroadcast = (e: Event) => {
+      const customEvent = e as CustomEvent<{ transcript: string; interim: string }>;
+      const { transcript } = customEvent.detail;
+      setAudios(prev => prev.map(a => a.isLiveRecording ? { ...a, transcript } : a));
+    };
+
     window.addEventListener('start-recording-node', handleStartRecordingNode);
     window.addEventListener('inject-transcribing', handleInjectTranscribing);
     window.addEventListener('inject-summary', handleInjectSummary);
     window.addEventListener('inject-audio', handleInjectAudio);
     window.addEventListener('jump-to-coordinates', handleJumpToCoordinates);
+    window.addEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
 
     return () => {
       window.removeEventListener('start-recording-node', handleStartRecordingNode);
@@ -851,6 +869,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       window.removeEventListener('inject-summary', handleInjectSummary);
       window.removeEventListener('inject-audio', handleInjectAudio);
       window.removeEventListener('jump-to-coordinates', handleJumpToCoordinates);
+      window.removeEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
     };
   }, [getCanvasCenter, setAudios, setPan, zoom]);
 

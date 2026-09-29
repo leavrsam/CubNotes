@@ -6,6 +6,7 @@ export interface TranscribeParams {
   audioUrl?: string;
   mimeType?: string;
   isJournal?: boolean;
+  liveTranscript?: string;
 }
 
 export interface TranscribeResult {
@@ -47,6 +48,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
         audioUrl: params.audioUrl,
         mimeType: cleanMimeType,
         isJournal: Boolean(params.isJournal),
+        liveTranscript: params.liveTranscript,
         apiKey: customKey || undefined,
       }),
     });
@@ -55,7 +57,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
       const data = await apiRes.json();
       if (data.success) {
         return {
-          transcript: data.transcript || '',
+          transcript: data.transcript || params.liveTranscript || '',
           summary: data.summary || '',
           source: 'api',
         };

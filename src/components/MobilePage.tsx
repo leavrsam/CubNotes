@@ -502,16 +502,24 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       setAudios(prev => prev.map(a => a.id === id ? { ...a, url } : a));
     };
 
+    const handleLiveTranscriptBroadcast = (e: Event) => {
+      const customEvent = e as CustomEvent<{ transcript: string; interim: string }>;
+      const { transcript } = customEvent.detail;
+      setAudios(prev => prev.map(a => a.isLiveRecording ? { ...a, transcript } : a));
+    };
+
     window.addEventListener('start-recording-node', handleStartRecordingNode);
     window.addEventListener('inject-transcribing', handleInjectTranscribing);
     window.addEventListener('inject-summary', handleInjectSummary);
     window.addEventListener('inject-audio', handleInjectAudio);
+    window.addEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
 
     return () => {
       window.removeEventListener('start-recording-node', handleStartRecordingNode);
       window.removeEventListener('inject-transcribing', handleInjectTranscribing);
       window.removeEventListener('inject-summary', handleInjectSummary);
       window.removeEventListener('inject-audio', handleInjectAudio);
+      window.removeEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
     };
   }, [bottomY, setAudios]);
 

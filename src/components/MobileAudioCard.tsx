@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Trash2, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
@@ -138,6 +138,14 @@ export function MobileAudioCard({
     }
   }, [node.isLiveRecording, node.recordingStartedAt]);
 
+  const liveScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (node.isLiveRecording && liveScrollRef.current) {
+      liveScrollRef.current.scrollTop = liveScrollRef.current.scrollHeight;
+    }
+  }, [node.transcript, node.isLiveRecording]);
+
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -249,14 +257,41 @@ export function MobileAudioCard({
           </div>
 
           {node.isLiveRecording ? (
-            <div className="flex items-center justify-between px-3.5 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl animate-pulse">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                <span className="text-xs font-bold text-red-600 dark:text-red-400">Recording live meeting...</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between px-3.5 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                  <span className="text-xs font-bold text-red-600 dark:text-red-400">Recording live meeting...</span>
+                </div>
+                <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
+                  {formatTimer(elapsedSeconds)}
+                </span>
               </div>
-              <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
-                {formatTimer(elapsedSeconds)}
-              </span>
+
+              {/* Live Real-Time Speech Stream Box */}
+              <div className="p-3 rounded-xl bg-zinc-50/90 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 shadow-inner">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[11px] font-bold text-red-600 dark:text-red-400 tracking-wide uppercase">
+                      Live Transcription
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-medium">Free • On-Device</span>
+                </div>
+                <div 
+                  ref={liveScrollRef}
+                  className="text-xs text-zinc-700 dark:text-zinc-300 font-mono max-h-32 min-h-[44px] overflow-y-auto leading-relaxed whitespace-pre-wrap select-text custom-scrollbar"
+                >
+                  {node.transcript ? (
+                    node.transcript
+                  ) : (
+                    <span className="italic text-zinc-400 text-[11px]">
+                      Listening for speech... Start speaking into the microphone to see real-time words appear here.
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           ) : node.isTranscribing ? (
             <div className="flex items-center justify-center gap-2 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl">
@@ -400,13 +435,19 @@ export function MobileAudioCard({
           {/* Transcript Tab */}
           {activeTab === 'transcript' && (
             <div className="p-4 overflow-y-auto h-full custom-scrollbar">
+              {node.isLiveRecording && (
+                <div className="flex items-center gap-2 mb-3 px-2.5 py-1 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span>Live Streaming Speech Recognition Active</span>
+                </div>
+              )}
               {node.transcript ? (
                 <div className="text-[13px] font-mono leading-loose text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">
                   {node.transcript}
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
-                  {node.summary?.includes('Transcribing') ? 'Transcribing audio...' : 'No transcript available.'}
+                  {node.isLiveRecording ? 'Listening for speech...' : node.summary?.includes('Transcribing') ? 'Transcribing audio...' : 'No transcript available.'}
                 </div>
               )}
             </div>

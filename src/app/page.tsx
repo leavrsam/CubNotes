@@ -318,7 +318,7 @@ export default function Home() {
     const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     
     const processAudio = async (
-      audioData: { base64?: string; blob?: Blob; mimeType?: string; fileExt?: string },
+      audioData: { base64?: string; blob?: Blob; mimeType?: string; fileExt?: string; liveTranscript?: string },
       targetAudioId: string
     ) => {
       let audioUrl = "";
@@ -371,12 +371,13 @@ export default function Home() {
           console.warn("Audio upload warning:", uploadErr);
         }
 
-        // 3. Transcribe with Gemini 2.5 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
+        // 3. Transcribe with Gemini 3.8 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
         const transcriptionResult = await processAudioTranscription({
           audioBase64: (audioBlob.size < 4 * 1024 * 1024 && audioData.base64) ? audioData.base64 : undefined,
           audioUrl: audioUrl || undefined,
           mimeType: cleanMimeType,
           isJournal: isCurrentJournal,
+          liveTranscript: audioData.liveTranscript,
         });
 
         const audioCreatedAt = Date.now();
@@ -387,7 +388,7 @@ export default function Home() {
           detail: { 
             id: audioId, 
             summary: transcriptionResult.summary || "Summary completed.", 
-            transcript: transcriptionResult.transcript || "",
+            transcript: transcriptionResult.transcript || audioData.liveTranscript || "",
             url: audioUrl,
             audioCreatedAt,
             audioExpiresAt,
