@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
-import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check } from "lucide-react";
+import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -105,6 +105,67 @@ function AudioNodeCard({
      node.summary.includes('AI Processing failed') ||
      node.summary.includes('Audio Saved'))
   );
+
+  const handleDownloadAudio = async () => {
+    if (!node.url) return;
+    try {
+      toast.loading("Preparing audio download...", { id: `dl-${node.id}` });
+      const response = await fetch(node.url);
+      if (!response.ok) throw new Error("Could not fetch audio file");
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      const cleanTitle = (node.title || "recording").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const ext = node.url.includes(".wav") ? "wav" : node.url.includes(".mp4") ? "mp4" : "webm";
+      a.download = `${cleanTitle}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(objectUrl);
+      toast.success("Audio downloaded!", { id: `dl-${node.id}` });
+    } catch {
+      window.open(node.url, "_blank");
+      toast.dismiss(`dl-${node.id}`);
+    }
+  };
+
+  const handleExportNotes = () => {
+    const title = node.title || "Meeting Notes";
+    const dateStr = format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "PPpp");
+    const content = [
+      `# ${title}`,
+      `**Recorded:** ${dateStr}`,
+      node.url ? `**Audio File:** ${node.url}` : "",
+      "",
+      "---",
+      "",
+      "## Summary",
+      node.summary || "No summary available.",
+      "",
+      "---",
+      "",
+      "## My Notes",
+      node.notes || "No manual notes taken.",
+      "",
+      "---",
+      "",
+      "## Full Transcript",
+      node.transcript || "No transcript available.",
+    ].filter(Boolean).join("\n\n");
+
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const objectUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    const cleanTitle = title.replace(/[^a-zA-Z0-9_-]/g, "_");
+    a.download = `${cleanTitle}_summary_and_transcript.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(objectUrl);
+    toast.success("Meeting notes exported as Markdown!");
+  };
 
   // Sync with global timer for active recording
   const elapsedSeconds = node.isLiveRecording ? activeRecordingDuration : 0;
@@ -234,13 +295,31 @@ function AudioNodeCard({
               className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 -ml-2 rounded-lg transition-colors w-full tracking-tight`}
               placeholder="Recording Name..."
             />
-            <button 
-              onClick={() => deleteAudioNode(node.id)}
-              className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 ml-2 flex-shrink-0`}
-              title="Delete Recording"
-            >
-              <Trash2 size={16} />
-            </button>
+            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+              {node.url && (
+                <button 
+                  onClick={handleDownloadAudio}
+                  className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  title="Download Audio File"
+                >
+                  <Download size={15} />
+                </button>
+              )}
+              <button 
+                onClick={handleExportNotes}
+                className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                title="Export Notes & Transcript (.md)"
+              >
+                <FileDown size={15} />
+              </button>
+              <button 
+                onClick={() => deleteAudioNode(node.id)}
+                className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1`}
+                title="Delete Recording"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 px-0.5 mb-3 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
@@ -321,6 +400,24 @@ function AudioNodeCard({
                     </button>
                   </div>
                 )}
+              </div>
+              <div className="flex items-center gap-2 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/80 mt-1">
+                {node.url && (
+                  <button
+                    onClick={handleDownloadAudio}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 bg-zinc-100 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-[11px] font-medium transition-colors"
+                  >
+                    <Download size={12} />
+                    <span>Download Audio</span>
+                  </button>
+                )}
+                <button
+                  onClick={handleExportNotes}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 bg-zinc-100 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-[11px] font-medium transition-colors"
+                >
+                  <FileDown size={12} />
+                  <span>Export Notes (.md)</span>
+                </button>
               </div>
               {needsTranscription && (
                 <button 

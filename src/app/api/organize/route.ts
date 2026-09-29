@@ -40,10 +40,19 @@ DO NOT wrap the HTML in markdown code blocks (e.g. \`\`\`html). Just output the 
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: contents,
-    });
+    let response: any;
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: contents,
+      });
+    } catch (primaryErr: any) {
+      console.warn("gemini-3.8-flash organize failed, falling back to gemini-2.5-flash:", primaryErr?.message);
+      response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: contents,
+      });
+    }
 
     let html = response.text || "";
     // Clean up if Gemini accidentally includes markdown wrappers

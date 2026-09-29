@@ -104,23 +104,43 @@ Return ONLY valid JSON matching this format:
   "summary": "# Executive Summary\\n..."
 }`;
 
-    const model = ai.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.1, // Prevent hallucinations
-      }
-    });
-
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType: cleanMimeType,
+    let result: any;
+    try {
+      const model = ai.getGenerativeModel({ 
+        model: "gemini-3.8-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1, // Prevent hallucinations
         }
-      }
-    ]);
+      });
+      result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: cleanMimeType,
+          }
+        }
+      ]);
+    } catch (e: any) {
+      console.warn("gemini-3.8-flash failed in edge function, falling back to gemini-2.5-flash:", e);
+      const fallbackModel = ai.getGenerativeModel({ 
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        }
+      });
+      result = await fallbackModel.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: cleanMimeType,
+          }
+        }
+      ]);
+    }
 
     const responseText = result.response.text();
     let cleanJson = responseText.trim();

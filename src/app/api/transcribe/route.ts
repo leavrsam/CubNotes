@@ -112,18 +112,34 @@ Return ONLY valid JSON matching this schema:
   "summary": "# Executive Summary\\n..."
 }`;
 
-    // 3. Generate Content using the official fast reasoning Gemini model (gemini-2.5-flash)
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        audioPart,
-        { text: prompt }
-      ],
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.1, // Low temperature is critical to prevent hallucinations
-      }
-    });
+    // 3. Generate Content using the newest Gemini model (gemini-3.8-flash with gemini-2.5-flash fallback)
+    let result: any;
+    try {
+      result = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: [
+          audioPart,
+          { text: prompt }
+        ],
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.1, // Low temperature is critical to prevent hallucinations
+        }
+      });
+    } catch (primaryErr: any) {
+      console.warn("gemini-3.8-flash returned an error, falling back to gemini-2.5-flash:", primaryErr?.message);
+      result = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          audioPart,
+          { text: prompt }
+        ],
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        }
+      });
+    }
 
     const responseText: string = (result as any).text || '';
     
