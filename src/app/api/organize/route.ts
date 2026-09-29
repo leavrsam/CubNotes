@@ -3,14 +3,13 @@ import { GoogleGenAI } from '@google/genai';
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const body = await req.json();
+    const { textNodes = [], audioSummaries = [], imageNodes = [], apiKey: clientApiKey } = body;
+    const apiKey = clientApiKey || req.headers.get('x-gemini-api-key') || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "GEMINI_API_KEY is not configured" }, { status: 500 });
+      return NextResponse.json({ error: "Gemini API key is not configured. Please set GEMINI_API_KEY in Vercel or add your key in CubNotes Settings." }, { status: 500 });
     }
     const ai = new GoogleGenAI({ apiKey });
-
-    const body = await req.json();
-    const { textNodes = [], audioSummaries = [], imageNodes = [] } = body;
 
     const combinedInput = [
       ...textNodes.map((t: string) => `Text Note: ${t}`),

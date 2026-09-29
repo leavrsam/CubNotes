@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useAccent, AccentColor } from "./AccentProvider";
-import { X, Moon, Sun, Monitor, LogOut, Check, User as UserIcon, Upload, Loader2, Trash2, BookOpen, Folder, Edit2, FileText } from "lucide-react";
+import { X, Moon, Sun, Monitor, LogOut, Check, User as UserIcon, Upload, Loader2, Trash2, BookOpen, Folder, Edit2, FileText, Sparkles, Key } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 import { useMinimapSettings } from "@/hooks/useMinimapSettings";
@@ -39,11 +39,32 @@ export function SettingsModal({
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccent();
   const { showMinimap, setShowMinimap } = useMinimapSettings();
-  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "page" | "account">(
+  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "page" | "ai" | "account">(
     activePageId ? "page" : "profile"
   );
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setGeminiApiKey(localStorage.getItem('cubnotes_gemini_api_key') || "");
+    }
+  }, [isOpen]);
+
+  const handleSaveGeminiKey = (key: string) => {
+    const trimmed = key.trim();
+    setGeminiApiKey(trimmed);
+    if (typeof window !== 'undefined') {
+      if (trimmed) {
+        localStorage.setItem('cubnotes_gemini_api_key', trimmed);
+        toast.success("Gemini API key saved!");
+      } else {
+        localStorage.removeItem('cubnotes_gemini_api_key');
+        toast.success("Gemini API key removed.");
+      }
+    }
+  };
 
   // Page Style state (synced with active note)
   const [activeBackgroundStyle, setActiveBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
@@ -226,6 +247,17 @@ export function SettingsModal({
             >
               <FileText size={14} />
               <span>Page</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("ai")}
+              className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 flex items-center justify-center sm:justify-start gap-1.5 ${
+                activeTab === "ai"
+                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
+              }`}
+            >
+              <Sparkles size={14} className="text-amber-500" />
+              <span>AI</span>
             </button>
             <button
               onClick={() => setActiveTab("account")}
@@ -675,6 +707,64 @@ export function SettingsModal({
                       <p className="text-xs text-zinc-400 mt-1">Open a note to configure its journal mode and settings.</p>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "ai" && (
+              <div className="space-y-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles size={18} className="text-amber-500" />
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Google Gemini AI</h3>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    CubNotes is powered by <strong>Gemini 2.5 Flash</strong> for speaker-diarized audio meeting transcriptions, structured executive summaries, and intelligent note organization.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/80 rounded-2xl space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5 flex items-center justify-between">
+                      <span>Gemini API Key</span>
+                      {geminiApiKey ? (
+                        <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                          <Check size={12} /> Configured
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                          Not set (uses server default if in Vercel)
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="password"
+                        value={geminiApiKey}
+                        onChange={(e) => setGeminiApiKey(e.target.value)}
+                        placeholder="AIzaSy..."
+                        className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-primary-500/40 text-zinc-900 dark:text-white"
+                      />
+                      <button
+                        onClick={() => handleSaveGeminiKey(geminiApiKey)}
+                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shrink-0"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-normal">
+                    You can generate a 100% free Gemini API key from{" "}
+                    <a 
+                      href="https://aistudio.google.com/apikey" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary-600 dark:text-primary-400 underline hover:opacity-80"
+                    >
+                      Google AI Studio
+                    </a>. Setting it here allows instant transcription directly from your browser.
+                  </p>
                 </div>
               </div>
             )}

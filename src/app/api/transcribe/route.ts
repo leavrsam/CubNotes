@@ -8,15 +8,18 @@ export async function POST(req: NextRequest) {
   let ai: GoogleGenAI | null = null;
 
   try {
-    const { audioUrl, audioBase64, mimeType = 'audio/webm', isJournal = false } = await req.json();
+    const body = await req.json();
+    const { audioUrl, audioBase64, mimeType = 'audio/webm', isJournal = false, apiKey: clientApiKey } = body;
 
     if (!audioUrl && !audioBase64) {
       return NextResponse.json({ error: 'Either audioUrl or audioBase64 is required.' }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = clientApiKey || req.headers.get('x-gemini-api-key') || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY is not configured on the server.' }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'Gemini API key is not configured. Please set GEMINI_API_KEY in Vercel or add your key in CubNotes Settings.' 
+      }, { status: 500 });
     }
 
     ai = new GoogleGenAI({ apiKey });

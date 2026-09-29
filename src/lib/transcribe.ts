@@ -25,14 +25,19 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
 
   // 1. Try Next.js API route (/api/transcribe)
   try {
+    const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
     const apiRes = await fetch('/api/transcribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(customKey ? { 'x-gemini-api-key': customKey } : {})
+      },
       body: JSON.stringify({
         audioBase64: params.audioBase64,
         audioUrl: params.audioUrl,
         mimeType: cleanMimeType,
         isJournal: Boolean(params.isJournal),
+        apiKey: customKey || undefined,
       }),
     });
 
