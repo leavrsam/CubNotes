@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Share2, FolderInput, Trash2, Pin, PinOff, Edit2 } from "lucide-react";
+import { Share2, FolderInput, Trash2, Pin, PinOff, Edit2, BookOpen } from "lucide-react";
 
 export type SwipeDirection = "left" | "right" | null;
 
@@ -16,8 +16,10 @@ interface SwipeableRowProps {
   onPin?: () => void;
   isPinned?: boolean;
   onRename?: () => void;
+  onToggleJournal?: () => void;
+  isJournal?: boolean;
   children: React.ReactNode;
-  rightActionsWidth?: number; // width when swiped left (revealing right actions: Share, Move, Delete)
+  rightActionsWidth?: number; // width when swiped left (revealing right actions: Share, Move, Delete, Journal)
   leftActionsWidth?: number;  // width when swiped right (revealing left actions: Pin, Rename)
   className?: string;
   shareLabel?: string;
@@ -35,6 +37,8 @@ export function SwipeableRow({
   onPin,
   isPinned = false,
   onRename,
+  onToggleJournal,
+  isJournal = false,
   children,
   rightActionsWidth = 210,
   leftActionsWidth = 140,
@@ -193,8 +197,8 @@ export function SwipeableRow({
         </div>
       )}
 
-      {/* Right Action Buttons (Revealed on Swipe Left: Share, Move, Delete) */}
-      {(onShare || onMove || onDelete) && (
+      {/* Right Action Buttons (Revealed on Swipe Left: Share, Move, Journal Toggle, Delete) */}
+      {(onShare || onMove || onToggleJournal || onDelete) && (
         <div 
           className="absolute inset-y-0 right-0 flex z-0 select-none"
           style={{ width: `${rightActionsWidth}px` }}
@@ -230,6 +234,25 @@ export function SwipeableRow({
             >
               <FolderInput size={18} />
               <span className="text-[10px] font-bold mt-1 tracking-tight">{moveLabel}</span>
+            </button>
+          )}
+
+          {/* Journal Mode Toggle Button */}
+          {onToggleJournal && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleJournal();
+                onClose();
+              }}
+              className="flex-1 flex flex-col items-center justify-center bg-amber-500 active:bg-amber-600 text-white transition-colors"
+              title={isJournal ? "Switch to Standard Notebook" : "Switch to Journal Mode"}
+            >
+              <BookOpen size={18} className={isJournal ? "fill-white/30" : ""} />
+              <span className="text-[10px] font-bold mt-1 tracking-tight">
+                {isJournal ? "Standard" : "Journal"}
+              </span>
             </button>
           )}
 

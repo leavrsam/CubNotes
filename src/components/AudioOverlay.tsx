@@ -69,7 +69,9 @@ function AudioNodeCard({
   onResumeRecording?: () => void;
   onStopRecording?: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'notes' : 'summary');
+  const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'transcript' : 'summary');
+  const [liveStatus, setLiveStatus] = useState<string>(node.isLiveRecording ? 'listening' : 'idle');
+  const [liveStatusMsg, setLiveStatusMsg] = useState<string>('');
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
   const [chatInput, setChatInput] = useState("");
@@ -178,10 +180,22 @@ function AudioNodeCard({
   }, [node.transcript, node.isLiveRecording]);
 
   React.useEffect(() => {
-    if (node.isLiveRecording) {
-      setActiveTab('notes');
-    }
-  }, [node.isLiveRecording]);
+    if (!node.isLiveRecording) return;
+    setActiveTab('transcript');
+
+    const handleBroadcast = (e: Event) => {
+      const customEvent = e as CustomEvent<{ transcript: string; interim: string; status: string; statusMessage: string }>;
+      const { transcript, status, statusMessage } = customEvent.detail;
+      if (status) setLiveStatus(status);
+      if (statusMessage) setLiveStatusMsg(statusMessage);
+      if (transcript !== undefined) {
+        updateAudioField(node.id, 'transcript', transcript);
+      }
+    };
+
+    window.addEventListener('live-transcript-broadcast', handleBroadcast);
+    return () => window.removeEventListener('live-transcript-broadcast', handleBroadcast);
+  }, [node.isLiveRecording, node.id, updateAudioField]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -387,10 +401,17 @@ function AudioNodeCard({
                   className="text-xs text-zinc-700 dark:text-zinc-300 font-mono max-h-32 min-h-[44px] overflow-y-auto leading-relaxed whitespace-pre-wrap select-text custom-scrollbar"
                 >
                   {node.transcript ? (
-                    node.transcript
+                    <span className="text-zinc-800 dark:text-zinc-200">
+                      {node.transcript}
+                      <span className="inline-block w-1.5 h-3.5 ml-1 bg-red-500 animate-pulse align-middle" />
+                    </span>
+                  ) : liveStatus === 'mic_busy' || liveStatus === 'unsupported' ? (
+                    <span className="italic text-zinc-400 text-[11px] leading-relaxed">
+                      Microphone is actively recording audio. Gemini 3.8 Flash will transcribe and summarize the full conversation as soon as you tap Stop.
+                    </span>
                   ) : (
-                    <span className="italic text-zinc-400 text-[11px]">
-                      Listening for speech... Start speaking into the microphone to see real-time words appear here.
+                    <span className="italic text-zinc-400 text-[11px] leading-relaxed">
+                      {liveStatusMsg || "Listening for speech... Start speaking into the microphone to see real-time words appear here."}
                     </span>
                   )}
                 </div>
@@ -542,18 +563,43 @@ function AudioNodeCard({
           {activeTab === 'transcript' && (
             <div className="p-5 overflow-y-auto h-full custom-scrollbar">
               {node.isLiveRecording && (
-                <div className="flex items-center gap-2 mb-3 px-2.5 py-1 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span>Live Streaming Speech Recognition Active</span>
+                <div className="flex items-center justify-between mb-3 px-2.5 py-1.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span>Live Transcript</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-normal">Streaming</span>
                 </div>
               )}
               {node.transcript ? (
-                <div className="text-[13px] font-mono leading-loose text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">
+                <div className="text-[13px] font-mono leading-loose text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
                   {node.transcript}
+                  {node.isLiveRecording && (
+                    <span className="inline-block w-1.5 h-4 ml-1 bg-red-500 animate-pulse align-middle" />
+                  )}
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
-                  {node.isLiveRecording ? 'Listening for speech...' : node.summary?.includes('Transcribing') ? 'Transcribing audio...' : 'No transcript available.'}
+                <div className="flex flex-col items-center justify-center h-full text-zinc-400 text-sm py-8 text-center px-4">
+                  {node.isLiveRecording ? (
+                    liveStatus === 'mic_busy' || liveStatus === 'unsupported' ? (
+                      <div className="space-y-1">
+                        <p className="font-semibold text-zinc-600 dark:text-zinc-300">Recording audio in high definition</p>
+                        <p className="text-xs text-zinc-400 max-w-[280px]">
+                          Microphone is actively recording. Gemini 3.8 Flash will transcribe the entire meeting as soon as you tap Stop.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping inline-block mb-1" />
+                        <p className="font-semibold text-zinc-600 dark:text-zinc-300">Listening for speech...</p>
+                        <p className="text-xs text-zinc-400">Start speaking into your microphone to see live words appear.</p>
+                      </div>
+                    )
+                  ) : node.summary?.includes('Transcribing') ? (
+                    'Transcribing audio with Gemini...'
+                  ) : (
+                    'No transcript available.'
+                  )}
                 </div>
               )}
             </div>

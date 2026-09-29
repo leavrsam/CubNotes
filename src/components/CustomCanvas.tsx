@@ -554,6 +554,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   // Recording Logic
   const startRecording = async () => {
+    // 1. Start live speech recognition synchronously to preserve user-gesture activation
+    try {
+      liveSpeechRecognizer.start();
+    } catch (speechErr) {
+      console.warn("Live speech recognizer not started:", speechErr);
+    }
+
     try {
       const recorder = new WebAudioRecorder();
       await recorder.start();
@@ -584,12 +591,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       setIsRecording(true);
       setIsPaused(false);
       setRecordingDuration(0);
-
-      try {
-        liveSpeechRecognizer.start();
-      } catch (speechErr) {
-        console.warn("Live speech recognizer not started:", speechErr);
-      }
 
       timerIntervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);

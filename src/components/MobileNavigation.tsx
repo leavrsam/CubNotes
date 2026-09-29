@@ -901,82 +901,59 @@ export function MobileNavigation({
 
             return (
               <div key={nb.id} className="space-y-2">
-                <div className="flex items-center justify-between px-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
+                <SwipeableRow
+                  id={`notebook-${nb.id}`}
+                  openDirection={openSwipe?.id === `notebook-${nb.id}` ? openSwipe.direction : null}
+                  onOpen={(id, direction) => setOpenSwipe({ id, direction })}
+                  onClose={() => setOpenSwipe(null)}
+                  onRename={() => handleOpenRenameNotebook(nb)}
+                  onDelete={() => handleDeleteNotebook(nb)}
+                  onToggleJournal={onToggleJournalMode ? () => {
+                    onToggleJournalMode(nb.id, !nb.is_journal);
+                    toast.success(!nb.is_journal ? `"${nb.title}" switched to Journal mode` : `"${nb.title}" switched to Standard mode`);
+                  } : undefined}
+                  isJournal={nb.is_journal}
+                  className="rounded-xl overflow-hidden"
+                  leftActionsWidth={80}
+                  rightActionsWidth={onToggleJournalMode ? 160 : 80}
+                >
+                  <div className="flex items-center justify-between px-3 py-2 bg-zinc-100/80 dark:bg-zinc-800/60 rounded-xl hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors">
                     <button 
                       onClick={() => setSelectedNotebookId(nb.id)}
-                      className="flex items-center gap-1.5 text-left group hover:opacity-80 active:scale-[0.98] transition-all min-w-0"
+                      className="flex items-center gap-2 text-left group min-w-0 flex-1 py-0.5"
                       title={`View folders in ${nb.title}`}
                     >
                       {nb.is_journal ? (
-                        <BookOpen size={14} className="text-amber-500 flex-shrink-0" />
+                        <BookOpen size={15} className="text-amber-500 flex-shrink-0" />
                       ) : (
-                        <Folder size={14} className="text-zinc-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors flex-shrink-0" />
+                        <Folder size={15} className="text-zinc-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors flex-shrink-0" />
                       )}
-                      <h2 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                      <h2 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                         {nb.title}
                       </h2>
+                      {nb.is_journal && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex-shrink-0">
+                          Journal
+                        </span>
+                      )}
                       <ChevronRight size={13} className="text-zinc-400 dark:text-zinc-500 opacity-60 group-hover:translate-x-0.5 transition-transform flex-shrink-0" />
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenRenameNotebook(nb);
-                      }}
-                      className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 active:scale-90 transition-transform"
-                      title="Rename Notebook"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteNotebook(nb);
-                      }}
-                      className="p-1 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 active:scale-90 transition-transform"
-                      title="Delete Notebook"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-
-                    {onToggleJournalMode && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleJournalMode(nb.id, !nb.is_journal);
-                          toast.success(!nb.is_journal ? `"${nb.title}" switched to Journal mode` : `"${nb.title}" switched to Standard mode`);
+                    <div className="flex items-center gap-2 pl-2 flex-shrink-0">
+                      <button 
+                        onClick={() => {
+                          setSelectedNotebookIdForFolder(nb.id);
+                          setIsNewFolderModalOpen(true);
                         }}
-                        className={`p-1 rounded-md transition-colors flex items-center justify-center ${
-                          nb.is_journal 
-                            ? 'text-amber-500 bg-amber-500/15' 
-                            : 'text-zinc-400 hover:text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                        }`}
-                        title={nb.is_journal ? "Journal Mode enabled (Click to switch to Standard)" : "Enable Journal Mode"}
+                        className="text-xs font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-0.5 hover:underline px-1.5 py-0.5"
+                        title="Add Folder"
                       >
-                        <BookOpen size={12} className={nb.is_journal ? "fill-amber-500/20" : ""} />
+                        <Plus size={14} />
+                        <span>Folder</span>
                       </button>
-                    )}
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => {
-                        setSelectedNotebookIdForFolder(nb.id);
-                        setIsNewFolderModalOpen(true);
-                      }}
-                      className="text-xs font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-0.5 hover:underline"
-                      title="Add Folder"
-                    >
-                      <Plus size={14} />
-                      <span>Folder</span>
-                    </button>
-                  </div>
-                </div>
+                </SwipeableRow>
                 
                 <div className="bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-sm border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/80">
                   {nb.sections.length === 0 ? (

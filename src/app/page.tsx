@@ -25,6 +25,7 @@ import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
 import { uploadMediaFile } from "@/lib/storage";
 import { processAudioTranscription } from "@/lib/transcribe";
+import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 
 export default function Home() {
   const { 
@@ -477,9 +478,11 @@ export default function Home() {
         const newAudioId = uuidv4();
         activeRecordingAudioIdRef.current = newAudioId;
         try {
+          liveSpeechRecognizer.start();
           await startWeb();
           window.dispatchEvent(new CustomEvent('start-recording-node', { detail: { id: newAudioId } }));
         } catch (err: any) {
+          liveSpeechRecognizer.stop();
           toast.error(err?.message || "Could not access microphone.");
         }
       }
