@@ -30,7 +30,7 @@ serve(async (req) => {
     const ai = new GoogleGenerativeAI(geminiKey);
     
     let result;
-    const model = ai.getGenerativeModel({ model: "gemini-3.8-flash" });
+    const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `You are an expert AI meeting assistant. Your task is to enhance the user's manual notes using the provided meeting transcript as context.
       
 1. Expand on the user's shorthand notes, filling in missing details and context from the transcript.

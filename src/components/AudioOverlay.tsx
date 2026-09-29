@@ -6,6 +6,8 @@ import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, 
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
+import toast from "react-hot-toast";
+import { processAudioTranscription } from "@/lib/transcribe";
 
 const supabase = createClient();
 
@@ -71,6 +73,38 @@ function AudioNodeCard({
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
   const [chatInput, setChatInput] = useState("");
+  const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
+
+  const handleRetryTranscription = async () => {
+    if (!node.url || isRetryingTranscription) return;
+    setIsRetryingTranscription(true);
+    const toastId = toast.loading("Transcribing & generating summary with Gemini...");
+    try {
+      const res = await processAudioTranscription({
+        audioUrl: node.url,
+        mimeType: 'audio/webm',
+        isJournal: false,
+      });
+      updateAudioField(node.id, 'transcript', res.transcript);
+      updateAudioField(node.id, 'summary', res.summary);
+      toast.success("AI Summary & Transcript generated!", { id: toastId });
+      setActiveTab('summary');
+    } catch (err: any) {
+      console.error("Transcription error:", err);
+      toast.error(`Transcription failed: ${err.message || 'Unknown error'}`, { id: toastId });
+    } finally {
+      setIsRetryingTranscription(false);
+    }
+  };
+
+  const needsTranscription = Boolean(
+    node.url &&
+    (!node.transcript ||
+     !node.summary ||
+     node.summary.includes('could not be completed') ||
+     node.summary.includes('AI Processing failed') ||
+     node.summary.includes('Audio Saved'))
+  );
 
   // Sync with global timer for active recording
   const elapsedSeconds = node.isLiveRecording ? activeRecordingDuration : 0;
@@ -288,6 +322,17 @@ function AudioNodeCard({
                   </div>
                 )}
               </div>
+              {needsTranscription && (
+                <button 
+                  onClick={handleRetryTranscription}
+                  disabled={isRetryingTranscription}
+                  className="mt-2.5 w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.99] text-white text-xs font-semibold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                  title="Generate or retry transcription and summary with Gemini"
+                >
+                  <Sparkles size={14} className={isRetryingTranscription ? "animate-spin" : ""} />
+                  <span>{isRetryingTranscription ? "Transcribing with Gemini..." : "✨ Transcribe / Retry AI Summary with Gemini"}</span>
+                </button>
+              )}
             </div>
           ) : (
             null

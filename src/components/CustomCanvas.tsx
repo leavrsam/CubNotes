@@ -644,7 +644,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const uploadAndTranscribeRecording = async (result: RecordingResult, existingNodeId?: string) => {
-    const toastId = toast.loading("Processing recording with Gemini 3.8 Flash...");
+    const toastId = toast.loading("Processing recording with Gemini 2.5 Flash...");
     setIsTranscribing(true);
     const nodeId = existingNodeId || activeRecordingNodeIdRef.current || uuidv4();
 
@@ -662,7 +662,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         console.warn("Audio upload warning:", uploadErr);
       }
 
-      // 2. Transcribe with Gemini 3.8 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
+      // 2. Transcribe with Gemini 2.5 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
       const transcriptionResult = await processAudioTranscription({
         audioBase64: (result.blob.size < 4 * 1024 * 1024) ? result.base64 : undefined,
         audioUrl: audioUrl || undefined,

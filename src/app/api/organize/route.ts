@@ -42,7 +42,7 @@ DO NOT wrap the HTML in markdown code blocks (e.g. \`\`\`html). Just output the 
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: contents,
     });
 

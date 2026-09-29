@@ -58,7 +58,7 @@ ${question}
 
 Return your answer directly without any conversational filler or preambles.`;
 
-    const model = ai.getGenerativeModel({ model: "gemini-3.8-flash" });
+    const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
     result = await model.generateContent(prompt);
 
     const responseText = result.response.text();

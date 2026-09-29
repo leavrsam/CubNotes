@@ -105,7 +105,7 @@ Return ONLY valid JSON matching this format:
 }`;
 
     const model = ai.getGenerativeModel({ 
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1, // Prevent hallucinations

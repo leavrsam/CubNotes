@@ -109,9 +109,9 @@ Return ONLY valid JSON matching this schema:
   "summary": "# Executive Summary\\n..."
 }`;
 
-    // 3. Generate Content using the newest free Gemini model (gemini-3.8-flash)
+    // 3. Generate Content using the official fast reasoning Gemini model (gemini-2.5-flash)
     const result = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: [
         audioPart,
         { text: prompt }

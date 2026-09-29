@@ -15,7 +15,7 @@ export interface TranscribeResult {
 
 /**
  * Transcribes audio with dual failover:
- * 1. Tries Next.js API route (/api/transcribe) powered by gemini-3.8-flash.
+ * 1. Tries Next.js API route (/api/transcribe) powered by gemini-2.5-flash.
  * 2. If /api/transcribe is unavailable or fails, gracefully falls back to Supabase Edge Function 'summarize-meeting'.
  * 3. Returns clean transcript and summary.
  */
