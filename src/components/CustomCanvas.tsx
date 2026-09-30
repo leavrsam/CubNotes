@@ -554,17 +554,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   // Recording Logic
   const startRecording = async () => {
-    // 1. Start live speech recognition synchronously to preserve user-gesture activation
-    try {
-      liveSpeechRecognizer.start();
-    } catch (speechErr) {
-      console.warn("Live speech recognizer not started:", speechErr);
-    }
-
     try {
       const recorder = new WebAudioRecorder();
       await recorder.start();
       recorderRef.current = recorder;
+
+      // Start live speech recognizer AFTER mic stream is successfully established
+      try {
+        liveSpeechRecognizer.start();
+      } catch (speechErr) {
+        console.warn("Live speech recognizer not started:", speechErr);
+      }
 
       const center = getCanvasCenter();
       const nodeId = uuidv4();
@@ -655,7 +655,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const uploadAndTranscribeRecording = async (result: RecordingResult, existingNodeId?: string, liveTranscript?: string) => {
-    const toastId = toast.loading("Processing recording with Gemini 3.8 Flash...");
+    const toastId = toast.loading("Transcribing...");
     setIsTranscribing(true);
     const nodeId = existingNodeId || activeRecordingNodeIdRef.current || uuidv4();
 

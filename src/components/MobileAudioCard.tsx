@@ -32,7 +32,15 @@ export function MobileAudioCard({
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
   const [chatInput, setChatInput] = useState("");
+  const [liveTranscript, setLiveTranscript] = useState(node.transcript || "");
   const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
+
+  // Sync with prop when not live recording
+  useEffect(() => {
+    if (node.transcript && !node.isLiveRecording) {
+      setLiveTranscript(node.transcript);
+    }
+  }, [node.transcript, node.isLiveRecording]);
 
   // When live recording is active, ensure we show the transcript tab and listen for streaming updates
   useEffect(() => {
@@ -45,6 +53,7 @@ export function MobileAudioCard({
       if (status) setLiveStatus(status);
       if (statusMessage) setLiveStatusMsg(statusMessage);
       if (transcript !== undefined) {
+        setLiveTranscript(transcript);
         updateAudioField(node.id, 'transcript', transcript);
       }
     };
@@ -56,7 +65,7 @@ export function MobileAudioCard({
   const handleRetryTranscription = async () => {
     if (!node.url || isRetryingTranscription) return;
     setIsRetryingTranscription(true);
-    const toastId = toast.loading("Transcribing & generating summary with Gemini...");
+    const toastId = toast.loading("Transcribing...");
     try {
       const res = await processAudioTranscription({
         audioUrl: node.url,
@@ -65,7 +74,7 @@ export function MobileAudioCard({
       });
       updateAudioField(node.id, 'transcript', res.transcript);
       updateAudioField(node.id, 'summary', res.summary);
-      toast.success("AI Summary & Transcript generated!", { id: toastId });
+      toast.success("Transcript & summary generated!", { id: toastId });
       setActiveTab('summary');
     } catch (err: any) {
       console.error("Transcription error:", err);
@@ -322,9 +331,12 @@ export function MobileAudioCard({
               </div>
             </div>
           ) : node.isTranscribing ? (
-            <div className="flex items-center justify-center gap-2 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl">
-              <Sparkles size={15} className="text-amber-600 dark:text-amber-400 animate-spin" />
-              <span className="text-xs font-bold text-amber-700 dark:text-amber-300">Transcribing & summarizing with Gemini...</span>
+            <div className="relative overflow-hidden flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500/10 dark:bg-amber-500/20 border border-amber-400/30 rounded-xl">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-400/25 dark:via-amber-300/25 to-transparent animate-glow-sweep pointer-events-none" />
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span className="relative z-10 text-xs font-bold text-amber-700 dark:text-amber-300 tracking-wide">
+                Transcribing
+              </span>
             </div>
           ) : node.url && !(!node.isAudioSavedPermanently && node.audioExpiresAt && Date.now() > node.audioExpiresAt) ? (
             <div className="flex flex-col gap-2">
@@ -382,11 +394,26 @@ export function MobileAudioCard({
                 <button 
                   onClick={handleRetryTranscription}
                   disabled={isRetryingTranscription}
-                  className="mt-2.5 w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.99] text-white text-xs font-semibold rounded-xl shadow-sm transition-all disabled:opacity-50"
-                  title="Generate or retry transcription and summary with Gemini"
+                  className={`relative overflow-hidden mt-2.5 w-full flex items-center justify-center py-2.5 px-4 text-xs font-semibold rounded-xl transition-all shadow-sm ${
+                    isRetryingTranscription 
+                      ? "bg-amber-600 text-white cursor-wait" 
+                      : "bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-white"
+                  }`}
+                  title="Retry Transcription & Summary"
                 >
-                  <Sparkles size={14} className={isRetryingTranscription ? "animate-spin" : ""} />
-                  <span>{isRetryingTranscription ? "Transcribing with Gemini..." : "✨ Transcribe / Retry AI Summary with Gemini"}</span>
+                  {isRetryingTranscription && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-glow-sweep pointer-events-none" />
+                  )}
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    {isRetryingTranscription ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                        <span>Transcribing</span>
+                      </>
+                    ) : (
+                      <span>Retry Transcription & Summary</span>
+                    )}
+                  </span>
                 </button>
               )}
             </div>
@@ -472,9 +499,9 @@ export function MobileAudioCard({
                   <span className="text-[10px] text-zinc-400 font-normal">Streaming</span>
                 </div>
               )}
-              {node.transcript ? (
+              {(node.isLiveRecording ? (liveTranscript || node.transcript) : (node.transcript || liveTranscript)) ? (
                 <div className="text-[13px] font-mono leading-loose text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
-                  {node.transcript}
+                  {node.isLiveRecording ? (liveTranscript || node.transcript) : (node.transcript || liveTranscript)}
                   {node.isLiveRecording && (
                     <span className="inline-block w-1.5 h-4 ml-1 bg-red-500 animate-pulse align-middle" />
                   )}
@@ -484,20 +511,20 @@ export function MobileAudioCard({
                   {node.isLiveRecording ? (
                     liveStatus === 'mic_busy' || liveStatus === 'unsupported' ? (
                       <div className="space-y-1">
-                        <p className="font-semibold text-zinc-600 dark:text-zinc-300">Recording audio in high definition</p>
+                        <p className="font-semibold text-zinc-600 dark:text-zinc-300">Recording audio</p>
                         <p className="text-xs text-zinc-400 max-w-[280px]">
-                          Microphone is actively recording. Gemini 3.8 Flash will transcribe the entire meeting as soon as you tap Stop.
+                          Microphone is recording. Full transcript & summary will be generated as soon as you tap Stop.
                         </p>
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping inline-block mb-1" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse inline-block mb-1" />
                         <p className="font-semibold text-zinc-600 dark:text-zinc-300">Listening for speech...</p>
-                        <p className="text-xs text-zinc-400">Start speaking into your microphone to see live words appear.</p>
+                        <p className="text-xs text-zinc-400">Speak into your microphone to see live words appear here.</p>
                       </div>
                     )
                   ) : node.summary?.includes('Transcribing') ? (
-                    'Transcribing audio with Gemini...'
+                    'Transcribing audio...'
                   ) : (
                     'No transcript available.'
                   )}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useEffect, useState, useRef } from "react";
+import React, { useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
@@ -502,26 +502,30 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       setAudios(prev => prev.map(a => a.id === id ? { ...a, url } : a));
     };
 
-    const handleLiveTranscriptBroadcast = (e: Event) => {
-      const customEvent = e as CustomEvent<{ transcript: string; interim: string }>;
-      const { transcript } = customEvent.detail;
-      setAudios(prev => prev.map(a => a.isLiveRecording ? { ...a, transcript } : a));
-    };
-
     window.addEventListener('start-recording-node', handleStartRecordingNode);
     window.addEventListener('inject-transcribing', handleInjectTranscribing);
     window.addEventListener('inject-summary', handleInjectSummary);
     window.addEventListener('inject-audio', handleInjectAudio);
-    window.addEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
 
     return () => {
       window.removeEventListener('start-recording-node', handleStartRecordingNode);
       window.removeEventListener('inject-transcribing', handleInjectTranscribing);
       window.removeEventListener('inject-summary', handleInjectSummary);
       window.removeEventListener('inject-audio', handleInjectAudio);
-      window.removeEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
     };
   }, [bottomY, setAudios]);
+
+  const updateAudioTitle = useCallback((id: string, title: string) => {
+    setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a));
+  }, [setAudios]);
+
+  const updateAudioField = useCallback((id: string, field: keyof AudioNode, value: any) => {
+    setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+  }, [setAudios]);
+
+  const deleteAudioNode = useCallback((id: string) => {
+    setAudios(prev => prev.filter(a => a.id !== id));
+  }, [setAudios]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -1154,9 +1158,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                   >
                     <MobileAudioCard 
                       node={block} 
-                      updateAudioTitle={(id, title) => setAudios(prev => prev.map(a => a.id === id ? { ...a, title } : a))}
-                      updateAudioField={(id, field, value) => setAudios(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a))}
-                      deleteAudioNode={(id) => setAudios(prev => prev.filter(a => a.id !== id))}
+                      updateAudioTitle={updateAudioTitle}
+                      updateAudioField={updateAudioField}
+                      deleteAudioNode={deleteAudioNode}
                       onAnnotate={(id) => openDrawOverlay(id, 'audio')}
                     />
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />

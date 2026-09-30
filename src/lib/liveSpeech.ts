@@ -52,7 +52,17 @@ export class LiveSpeechRecognizer {
       return false;
     }
 
-    this.stop(); // Clear any previous active recognition
+    // Stop previous instance cleanly without broadcasting idle
+    this.isListening = false;
+    this.isPaused = false;
+    clearTimeout(this.restartTimeout);
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+      } catch (e) {}
+      this.recognition = null;
+    }
+
     this.baseTranscript = initialTranscript;
     this.currentSessionFinal = '';
     this.interimTranscript = '';
@@ -145,7 +155,7 @@ export class LiveSpeechRecognizer {
           this.isListening = false;
         } else if (err === 'audio-capture') {
           this.status = 'mic_busy';
-          this.statusMessage = 'Device microphone in use by audio recorder';
+          this.statusMessage = 'Connecting microphone...';
         } else if (err === 'network') {
           this.status = 'error';
           this.statusMessage = 'Speech recognition network required on this device';
@@ -166,14 +176,18 @@ export class LiveSpeechRecognizer {
         }
 
         // Chrome & Android automatically end recognition sessions on brief silence.
-        // Automatically restart if recording is still active and no permanent error occurred
-        if (this.isListening && !this.isPaused && this.status !== 'permission_denied' && this.status !== 'mic_busy') {
+        // Automatically restart if recording is still active and permission is not explicitly denied
+        if (this.isListening && !this.isPaused && this.status !== 'permission_denied') {
           clearTimeout(this.restartTimeout);
+          const delay = this.status === 'mic_busy' ? 800 : 200;
           this.restartTimeout = setTimeout(() => {
             if (this.isListening && !this.isPaused) {
+              if (this.status === 'mic_busy') {
+                this.status = 'listening';
+              }
               this.initRecognition();
             }
-          }, 200);
+          }, delay);
         }
       };
 

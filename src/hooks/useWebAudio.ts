@@ -32,13 +32,6 @@ export function useWebAudio() {
   }, []);
 
   const startRecording = useCallback(async () => {
-    // 1. Start live speech recognition synchronously to preserve user-gesture activation
-    try {
-      liveSpeechRecognizer.start();
-    } catch (speechErr) {
-      console.warn("Live speech recognition not started:", speechErr);
-    }
-
     try {
       if (isNativeAndroid()) {
         await startNativeRecording();
@@ -52,6 +45,13 @@ export function useWebAudio() {
       recorderRef.current = recorder;
       setIsRecording(true);
       setIsPaused(false);
+
+      // Start live speech recognizer AFTER mic stream is successfully established
+      try {
+        liveSpeechRecognizer.start();
+      } catch (speechErr) {
+        console.warn("Live speech recognition not started:", speechErr);
+      }
     } catch (err) {
       console.error("Failed to start audio recording:", err);
       liveSpeechRecognizer.stop();

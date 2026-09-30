@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
         },
       };
     } else if (audioUrl) {
+      if (typeof audioUrl === 'string' && audioUrl.startsWith('blob:')) {
+        return NextResponse.json({ error: 'Local blob URLs cannot be fetched on the server. Please provide audioBase64.' }, { status: 400 });
+      }
       // Download audio file from storage URL
       const response = await fetch(audioUrl);
       if (!response.ok) {
@@ -127,7 +130,7 @@ Return ONLY valid JSON matching this schema:
       ? `${prompt}\n\nOPTIONAL REFERENCE: Real-time on-device speech transcript captured during recording:\n"""\n${liveTranscript.trim()}\n"""\nUse the audio recording as your primary ground truth, but reference this to ensure accurate names, technical vocabulary, and verbatim coverage.`
       : prompt;
 
-    // 3. Generate Content using the newest Gemini model (gemini-3.8-flash with gemini-2.5-flash fallback)
+    // 3. Generate Content with multi-model failover (gemini-3.8-flash -> gemini-2.5-flash -> gemini-2.0-flash)
     let result: any;
     try {
       result = await ai.models.generateContent({
@@ -138,22 +141,37 @@ Return ONLY valid JSON matching this schema:
         ],
         config: {
           responseMimeType: "application/json",
-          temperature: 0.1, // Low temperature is critical to prevent hallucinations
-        }
-      });
-    } catch (primaryErr: any) {
-      console.warn("gemini-3.8-flash returned an error, falling back to gemini-2.5-flash:", primaryErr?.message);
-      result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          audioPart,
-          { text: prompt }
-        ],
-        config: {
-          responseMimeType: "application/json",
           temperature: 0.1,
         }
       });
+    } catch (primaryErr: any) {
+      console.warn("gemini-3.8-flash error, falling back to gemini-2.5-flash:", primaryErr?.message);
+      try {
+        result = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [
+            audioPart,
+            { text: prompt }
+          ],
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.1,
+          }
+        });
+      } catch (secondaryErr: any) {
+        console.warn("gemini-2.5-flash error, falling back to gemini-2.0-flash:", secondaryErr?.message);
+        result = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: [
+            audioPart,
+            { text: prompt }
+          ],
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.1,
+          }
+        });
+      }
     }
 
     const responseText: string = (result as any).text || '';
