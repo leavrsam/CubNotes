@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 import debounce from 'lodash/debounce';
-import { getCachedNotebooks, setCachedNotebooks } from '@/lib/offlineStore';
+import { getCachedNotebooks, setCachedNotebooks, setCachedPageState } from '@/lib/offlineStore';
+import { v4 as uuidv4 } from 'uuid';
+import toast from 'react-hot-toast';
 
 export interface Page {
   id: string;
@@ -37,6 +39,12 @@ export function useNotebooks() {
   const [userId, setUserId] = useState<string | null>(null);
   const [supabase] = useState(() => createClient());
   const isFetching = useRef(false);
+
+  // In-flight optimistic mutation trackers to prevent background fetches from overwriting local state
+  const inFlightNewNotebooksRef = useRef<Map<string, Notebook>>(new Map());
+  const inFlightNewSectionsRef = useRef<Map<string, Section>>(new Map());
+  const inFlightNewPagesRef = useRef<Map<string, Page>>(new Map());
+  const inFlightDeletedIdsRef = useRef<Set<string>>(new Set());
 
   // Monitor network status
   useEffect(() => {
@@ -77,7 +85,7 @@ export function useNotebooks() {
       }
 
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
+      if (!userData?.user) {
         const cached = await getCachedNotebooks();
         if (cached && cached.length > 0) {
           setNotebooks(cached);
@@ -103,13 +111,34 @@ export function useNotebooks() {
         return;
       }
 
-      const pages = pRes.data as Page[];
-      const sections = secRes.data.map(sec => ({
+      // Merge server rows with in-flight optimistic creations and deletions
+      let pages = (pRes.data as Page[]).filter(p => !inFlightDeletedIdsRef.current.has(p.id));
+      for (const [id, page] of inFlightNewPagesRef.current.entries()) {
+        if (!pages.some(p => p.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
+          pages.unshift(page);
+        }
+      }
+
+      let sectionsRaw = (secRes.data as any[]).filter(s => !inFlightDeletedIdsRef.current.has(s.id));
+      for (const [id, sec] of inFlightNewSectionsRef.current.entries()) {
+        if (!sectionsRaw.some(s => s.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
+          sectionsRaw.push(sec);
+        }
+      }
+
+      let notebooksRaw = (nbRes.data as any[]).filter(nb => !inFlightDeletedIdsRef.current.has(nb.id));
+      for (const [id, nb] of inFlightNewNotebooksRef.current.entries()) {
+        if (!notebooksRaw.some(n => n.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
+          notebooksRaw.push(nb);
+        }
+      }
+
+      const sections = sectionsRaw.map(sec => ({
         ...sec,
         pages: pages.filter(p => p.section_id === sec.id),
       })) as Section[];
 
-      const notebooksData = nbRes.data.map(nb => ({
+      const notebooksData = notebooksRaw.map(nb => ({
         ...nb,
         sections: sections.filter(s => s.notebook_id === nb.id),
       })) as Notebook[];
@@ -194,98 +223,314 @@ export function useNotebooks() {
   }, [fetchNotebooks, supabase]);
 
   const addNotebook = async (title: string, is_journal: boolean = false) => {
-    if (!userId) return null;
-    
-    // Create the notebook
-    const { data: nbData, error: nbError } = await supabase
-      .from('notebooks')
-      .insert({ user_id: userId, title, is_journal })
-      .select()
-      .single();
-      
-    if (nbError) {
-      console.error("Error creating notebook:", nbError);
-      return null;
+    let currentUserId = userId;
+    if (!currentUserId) {
+      const { data: userData } = await supabase.auth.getUser();
+      currentUserId = userData?.user?.id || null;
+      if (currentUserId) setUserId(currentUserId);
     }
-    
-    let createdPageId: string | null = null;
-    if (nbData) {
-      // Auto-create a default section
-      const { data: secData, error: secError } = await supabase
-        .from('sections')
-        .insert({ notebook_id: nbData.id, title: 'Main' })
-        .select()
-        .single();
-        
-      if (!secError && secData) {
-        // Auto-create a default page
-        const { data: pageData } = await supabase
-          .from('pages')
-          .insert({ section_id: secData.id, title: 'Untitled Page', document_state: {} })
-          .select()
-          .single();
-        if (pageData) createdPageId = pageData.id;
-      }
+
+    const newNbId = uuidv4();
+    const newSecId = uuidv4();
+    const newPageId = uuidv4();
+    const nowIso = new Date().toISOString();
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+    const newPage: Page = {
+      id: newPageId,
+      section_id: newSecId,
+      title: is_journal ? format(new Date(), "EEEE, MMMM do") : 'Untitled Page',
+      date: is_journal ? todayStr : null,
+      is_journal_entry: is_journal,
+      created_at: nowIso,
+      document_state: {}
+    };
+
+    const newSec: Section = {
+      id: newSecId,
+      notebook_id: newNbId,
+      title: is_journal ? 'Entries' : 'Main',
+      sort_order: 0,
+      pages: [newPage]
+    };
+
+    const newNb: Notebook = {
+      id: newNbId,
+      user_id: currentUserId || 'local-user',
+      title,
+      is_journal,
+      sections: [newSec]
+    };
+
+    inFlightNewNotebooksRef.current.set(newNbId, newNb);
+    inFlightNewSectionsRef.current.set(newSecId, newSec);
+    inFlightNewPagesRef.current.set(newPageId, newPage);
+
+    // Instant local state update (0ms latency)
+    setNotebooks(prev => {
+      const updated = [...prev, newNb];
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    setCachedPageState(newPageId, { strokes: [], texts: [], audios: [], images: [], files: [], videos: [] }, false).catch(e => console.warn(e));
+
+    // Background sync to database
+    if (currentUserId && (typeof navigator === 'undefined' || navigator.onLine)) {
+      (async () => {
+        try {
+          const { error: nbError } = await supabase
+            .from('notebooks')
+            .insert({ id: newNbId, user_id: currentUserId, title, is_journal });
+          if (nbError) throw nbError;
+
+          const { error: secError } = await supabase
+            .from('sections')
+            .insert({ id: newSecId, notebook_id: newNbId, title: newSec.title, sort_order: 0 });
+          if (secError) throw secError;
+
+          const { error: pageError } = await supabase
+            .from('pages')
+            .insert({
+              id: newPageId,
+              section_id: newSecId,
+              title: newPage.title,
+              date: newPage.date,
+              is_journal_entry: newPage.is_journal_entry,
+              document_state: {}
+            });
+          if (pageError) throw pageError;
+        } catch (err) {
+          console.error("Error creating notebook in Supabase:", err);
+          toast.error("Failed to sync new notebook to cloud");
+        } finally {
+          inFlightNewNotebooksRef.current.delete(newNbId);
+          inFlightNewSectionsRef.current.delete(newSecId);
+          inFlightNewPagesRef.current.delete(newPageId);
+        }
+      })();
+    } else {
+      inFlightNewNotebooksRef.current.delete(newNbId);
+      inFlightNewSectionsRef.current.delete(newSecId);
+      inFlightNewPagesRef.current.delete(newPageId);
     }
-    
-    await fetchNotebooks();
-    return { notebook: nbData, pageId: createdPageId };
+
+    return { notebook: newNb, pageId: newPageId };
   };
 
   const updateNotebook = async (id: string, title: string) => {
-    await supabase.from('notebooks').update({ title }).eq('id', id);
-    await fetchNotebooks();
+    // Instant local state update
+    setNotebooks(prev => {
+      const updated = prev.map(nb => nb.id === id ? { ...nb, title } : nb);
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const { error } = await supabase.from('notebooks').update({ title }).eq('id', id);
+      if (error) {
+        console.error("Error updating notebook in Supabase:", error);
+        fetchNotebooks();
+      }
+    }
   };
 
   const deleteNotebook = async (id: string) => {
-    // Optimistic local update for instant UI feedback
+    inFlightDeletedIdsRef.current.add(id);
+
+    // Instant local state update (0ms latency)
     setNotebooks(prev => {
       const updated = prev.filter(nb => nb.id !== id);
-      setCachedNotebooks(updated);
+      setCachedNotebooks(updated).catch(e => console.warn(e));
       return updated;
     });
 
-    const { error } = await supabase.from('notebooks').delete().eq('id', id);
-    if (error) {
-      console.error("Error deleting notebook from Supabase:", error);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      (async () => {
+        try {
+          const { error } = await supabase.from('notebooks').delete().eq('id', id);
+          if (error) {
+            console.error("Error deleting notebook from Supabase:", error);
+            fetchNotebooks();
+          }
+        } catch (err) {
+          console.error("Error in deleteNotebook:", err);
+          fetchNotebooks();
+        } finally {
+          inFlightDeletedIdsRef.current.delete(id);
+        }
+      })();
+    } else {
+      inFlightDeletedIdsRef.current.delete(id);
     }
-    await fetchNotebooks();
   };
 
   const addSection = async (notebook_id: string, title: string) => {
-    const { data, error } = await supabase.from('sections').insert({ notebook_id, title }).select().single();
-    if (error) console.error("Error creating section:", error);
-    await fetchNotebooks();
-    return data as Section | null;
-  };
+    const newSecId = uuidv4();
+    const newSection: Section = {
+      id: newSecId,
+      notebook_id,
+      title: title || "New Folder",
+      sort_order: 0,
+      pages: []
+    };
 
-  const updateSection = async (id: string, title: string) => {
-    await supabase.from('sections').update({ title }).eq('id', id);
-    await fetchNotebooks();
-  };
+    inFlightNewSectionsRef.current.set(newSecId, newSection);
 
-  const deleteSection = async (id: string) => {
+    // Instant local state update (0ms latency)
     setNotebooks(prev => {
-      const updated = prev.map(nb => ({
-        ...nb,
-        sections: nb.sections.filter(sec => sec.id !== id)
-      }));
-      setCachedNotebooks(updated);
+      const updated = prev.map(nb => {
+        if (nb.id === notebook_id) {
+          return {
+            ...nb,
+            sections: [...(nb.sections || []), newSection]
+          };
+        }
+        return nb;
+      });
+      setCachedNotebooks(updated).catch(e => console.warn(e));
       return updated;
     });
 
-    const { error } = await supabase.from('sections').delete().eq('id', id);
-    if (error) {
-      console.error("Error deleting section from Supabase:", error);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      (async () => {
+        try {
+          const { error } = await supabase.from('sections').insert({
+            id: newSecId,
+            notebook_id,
+            title: newSection.title,
+            sort_order: 0
+          });
+          if (error) {
+            console.error("Error creating section:", error);
+            fetchNotebooks();
+          }
+        } catch (err) {
+          console.error("Error in addSection:", err);
+          fetchNotebooks();
+        } finally {
+          inFlightNewSectionsRef.current.delete(newSecId);
+        }
+      })();
+    } else {
+      inFlightNewSectionsRef.current.delete(newSecId);
     }
-    await fetchNotebooks();
+
+    return newSection;
+  };
+
+  const updateSection = async (id: string, title: string) => {
+    // Instant local update
+    setNotebooks(prev => {
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: (nb.sections || []).map(sec => sec.id === id ? { ...sec, title } : sec)
+      }));
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const { error } = await supabase.from('sections').update({ title }).eq('id', id);
+      if (error) {
+        console.error("Error updating section:", error);
+        fetchNotebooks();
+      }
+    }
+  };
+
+  const deleteSection = async (id: string) => {
+    inFlightDeletedIdsRef.current.add(id);
+
+    // Instant local update (0ms latency)
+    setNotebooks(prev => {
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: (nb.sections || []).filter(sec => sec.id !== id)
+      }));
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      (async () => {
+        try {
+          const { error } = await supabase.from('sections').delete().eq('id', id);
+          if (error) {
+            console.error("Error deleting section from Supabase:", error);
+            fetchNotebooks();
+          }
+        } catch (err) {
+          console.error("Error in deleteSection:", err);
+          fetchNotebooks();
+        } finally {
+          inFlightDeletedIdsRef.current.delete(id);
+        }
+      })();
+    } else {
+      inFlightDeletedIdsRef.current.delete(id);
+    }
   };
 
   const addPage = async (section_id: string, title: string) => {
-    const { data, error } = await supabase.from('pages').insert({ section_id, title, document_state: {} }).select().single();
-    if (error) console.error("Error creating page:", error);
-    await fetchNotebooks();
-    return data as Page | null;
+    const newPageId = uuidv4();
+    const newPage: Page = {
+      id: newPageId,
+      section_id,
+      title: title || "Untitled Note",
+      date: null,
+      is_journal_entry: false,
+      created_at: new Date().toISOString(),
+      document_state: {}
+    };
+
+    inFlightNewPagesRef.current.set(newPageId, newPage);
+
+    // Instant local state update (0ms latency)
+    setNotebooks(prev => {
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: (nb.sections || []).map(sec => {
+          if (sec.id === section_id) {
+            return {
+              ...sec,
+              pages: [newPage, ...(sec.pages || [])]
+            };
+          }
+          return sec;
+        })
+      }));
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    setCachedPageState(newPageId, { strokes: [], texts: [], audios: [], images: [], files: [], videos: [] }, false).catch(e => console.warn(e));
+
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      (async () => {
+        try {
+          const { error } = await supabase.from('pages').insert({
+            id: newPageId,
+            section_id,
+            title: newPage.title,
+            document_state: {}
+          });
+          if (error) {
+            console.error("Error creating page:", error);
+            fetchNotebooks();
+          }
+        } catch (err) {
+          console.error("Error in addPage:", err);
+          fetchNotebooks();
+        } finally {
+          inFlightNewPagesRef.current.delete(newPageId);
+        }
+      })();
+    } else {
+      inFlightNewPagesRef.current.delete(newPageId);
+    }
+
+    return newPage;
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,14 +542,18 @@ export function useNotebooks() {
   );
 
   const updatePage = useCallback((id: string, title: string) => {
-    // Optimistic UI update
-    setNotebooks(prev => prev.map(nb => ({
-      ...nb,
-      sections: nb.sections.map(sec => ({
-        ...sec,
-        pages: sec.pages.map(p => p.id === id ? { ...p, title } : p)
-      }))
-    })));
+    // Optimistic UI update (0ms latency)
+    setNotebooks(prev => {
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: (nb.sections || []).map(sec => ({
+          ...sec,
+          pages: (sec.pages || []).map(p => p.id === id ? { ...p, title } : p)
+        }))
+      }));
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
     
     // Debounced DB update
     debouncedUpdatePage(id, title);
@@ -312,26 +561,46 @@ export function useNotebooks() {
 
   const toggleJournalMode = async (id: string, is_journal: boolean) => {
     // Optimistic update
-    setNotebooks(prev => prev.map(nb => nb.id === id ? { ...nb, is_journal } : nb));
-    await supabase.from('notebooks').update({ is_journal }).eq('id', id);
-    await fetchNotebooks();
+    setNotebooks(prev => {
+      const updated = prev.map(nb => nb.id === id ? { ...nb, is_journal } : nb);
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const { error } = await supabase.from('notebooks').update({ is_journal }).eq('id', id);
+      if (error) {
+        console.error("Error updating journal mode:", error);
+        fetchNotebooks();
+      }
+    }
   };
 
   const togglePageJournalMode = async (pageId: string, is_journal_entry: boolean) => {
     // Optimistic update
-    setNotebooks(prev => prev.map(nb => ({
-      ...nb,
-      sections: (nb.sections || []).map(sec => ({
-        ...sec,
-        pages: (sec.pages || []).map(p => p.id === pageId ? { ...p, is_journal_entry } : p)
-      }))
-    })));
-    await supabase.from('pages').update({ is_journal_entry }).eq('id', pageId);
-    await fetchNotebooks();
+    setNotebooks(prev => {
+      const updated = prev.map(nb => ({
+        ...nb,
+        sections: (nb.sections || []).map(sec => ({
+          ...sec,
+          pages: (sec.pages || []).map(p => p.id === pageId ? { ...p, is_journal_entry } : p)
+        }))
+      }));
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const { error } = await supabase.from('pages').update({ is_journal_entry }).eq('id', pageId);
+      if (error) {
+        console.error("Error updating page journal mode:", error);
+        fetchNotebooks();
+      }
+    }
   };
 
   const deletePage = async (id: string) => {
-    // Optimistic UI update
+    inFlightDeletedIdsRef.current.add(id);
+
+    // Instant local UI update (0ms latency)
     setNotebooks(prev => {
       const updated = prev.map(nb => ({
         ...nb,
@@ -340,15 +609,28 @@ export function useNotebooks() {
           pages: (sec.pages || []).filter(p => p.id !== id)
         }))
       }));
-      setCachedNotebooks(updated);
+      setCachedNotebooks(updated).catch(e => console.warn(e));
       return updated;
     });
 
-    const { error } = await supabase.from('pages').delete().eq('id', id);
-    if (error) {
-      console.error("Error deleting page from Supabase:", error);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      (async () => {
+        try {
+          const { error } = await supabase.from('pages').delete().eq('id', id);
+          if (error) {
+            console.error("Error deleting page from Supabase:", error);
+            fetchNotebooks();
+          }
+        } catch (err) {
+          console.error("Error in deletePage:", err);
+          fetchNotebooks();
+        } finally {
+          inFlightDeletedIdsRef.current.delete(id);
+        }
+      })();
+    } else {
+      inFlightDeletedIdsRef.current.delete(id);
     }
-    await fetchNotebooks();
   };
 
   const movePage = async (pageId: string, targetSectionId: string) => {
@@ -358,8 +640,8 @@ export function useNotebooks() {
       // Remove from current section
       const updated = prev.map(nb => ({
         ...nb,
-        sections: nb.sections.map(sec => {
-          const found = sec.pages.find(p => p.id === pageId);
+        sections: (nb.sections || []).map(sec => {
+          const found = (sec.pages || []).find(p => p.id === pageId);
           if (found) {
             movedPage = { ...found, section_id: targetSectionId };
             return {
@@ -372,25 +654,29 @@ export function useNotebooks() {
       }));
       if (!movedPage) return prev;
       // Add to target section
-      return updated.map(nb => ({
+      const finalUpdated = updated.map(nb => ({
         ...nb,
-        sections: nb.sections.map(sec => {
+        sections: (nb.sections || []).map(sec => {
           if (sec.id === targetSectionId) {
             return {
               ...sec,
-              pages: [movedPage!, ...sec.pages]
+              pages: [movedPage!, ...(sec.pages || [])]
             };
           }
           return sec;
         })
       }));
+      setCachedNotebooks(finalUpdated).catch(e => console.warn(e));
+      return finalUpdated;
     });
 
-    const { error } = await supabase.from('pages').update({ section_id: targetSectionId }).eq('id', pageId);
-    if (error) {
-      console.error("Error moving page:", error);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const { error } = await supabase.from('pages').update({ section_id: targetSectionId }).eq('id', pageId);
+      if (error) {
+        console.error("Error moving page:", error);
+        fetchNotebooks();
+      }
     }
-    await fetchNotebooks();
   };
 
   const moveSection = async (sectionId: string, targetNotebookId: string) => {
@@ -398,7 +684,7 @@ export function useNotebooks() {
     setNotebooks(prev => {
       let movedSection: Section | null = null;
       const updated = prev.map(nb => {
-        const found = nb.sections.find(s => s.id === sectionId);
+        const found = (nb.sections || []).find(s => s.id === sectionId);
         if (found) {
           movedSection = { ...found, notebook_id: targetNotebookId };
           return {
@@ -409,22 +695,26 @@ export function useNotebooks() {
         return nb;
       });
       if (!movedSection) return prev;
-      return updated.map(nb => {
+      const finalUpdated = updated.map(nb => {
         if (nb.id === targetNotebookId) {
           return {
             ...nb,
-            sections: [...nb.sections, movedSection!]
+            sections: [...(nb.sections || []), movedSection!]
           };
         }
         return nb;
       });
+      setCachedNotebooks(finalUpdated).catch(e => console.warn(e));
+      return finalUpdated;
     });
 
-    const { error } = await supabase.from('sections').update({ notebook_id: targetNotebookId }).eq('id', sectionId);
-    if (error) {
-      console.error("Error moving section:", error);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const { error } = await supabase.from('sections').update({ notebook_id: targetNotebookId }).eq('id', sectionId);
+      if (error) {
+        console.error("Error moving section:", error);
+        fetchNotebooks();
+      }
     }
-    await fetchNotebooks();
   };
 
   return { 

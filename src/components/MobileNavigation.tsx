@@ -201,24 +201,64 @@ export function MobileNavigation({
     return null;
   }, [notebooks]);
 
+  // Guard against rapid duplicate button taps
+  const isCreatingRef = React.useRef(false);
+
   const handleCreateNotebook = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isCreatingRef.current) return;
+    isCreatingRef.current = true;
     const title = newNotebookTitle.trim() || "New Notebook";
-    await onAddNotebook(title, isNewNotebookJournal);
+    const isJournal = isNewNotebookJournal;
     setNewNotebookTitle("");
     setIsNewNotebookJournal(false);
     setIsNewNotebookModalOpen(false);
-    toast.success(isNewNotebookJournal ? "Journal Notebook created!" : "Notebook created!");
+    try {
+      await onAddNotebook(title, isJournal);
+      toast.success(isJournal ? "Journal Notebook created!" : "Notebook created!");
+    } finally {
+      setTimeout(() => {
+        isCreatingRef.current = false;
+      }, 400);
+    }
   };
 
   const handleCreateFolder = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isCreatingRef.current) return;
+    isCreatingRef.current = true;
     const targetNbId = selectedNotebookIdForFolder || notebooks[0]?.id;
-    if (!targetNbId) return;
+    if (!targetNbId) {
+      isCreatingRef.current = false;
+      return;
+    }
     const title = newFolderTitle.trim() || "New Folder";
-    await onAddSection(targetNbId, title);
     setNewFolderTitle("");
     setIsNewFolderModalOpen(false);
+    try {
+      await onAddSection(targetNbId, title);
+      toast.success("Folder created!");
+    } finally {
+      setTimeout(() => {
+        isCreatingRef.current = false;
+      }, 400);
+    }
+  };
+
+  const handleCreateNote = async (targetSectionId?: string) => {
+    if (isCreatingRef.current) return;
+    isCreatingRef.current = true;
+    try {
+      if (targetSectionId) {
+        await onAddPage(targetSectionId, "Untitled Note");
+      } else {
+        await handleQuickNewNote();
+      }
+    } finally {
+      setTimeout(() => {
+        isCreatingRef.current = false;
+      }, 400);
+    }
   };
 
   const handleQuickNewNote = async () => {
@@ -300,6 +340,12 @@ export function MobileNavigation({
   const handleDeleteNote = async (page: Page) => {
     if (!onDeletePage) return;
     if (confirm(`Delete "${page.title || 'Untitled Note'}"?`)) {
+      setOpenSwipe(null);
+      setPinnedPageIds(prev => {
+        const next = prev.filter(id => id !== page.id);
+        try { localStorage.setItem('cubnotes_pinned_pages', JSON.stringify(next)); } catch {}
+        return next;
+      });
       await onDeletePage(page.id);
       toast.success("Note deleted");
     }
@@ -308,6 +354,12 @@ export function MobileNavigation({
   const handleDeleteFolder = async (section: Section) => {
     if (!onDeleteSection) return;
     if (confirm(`Delete folder "${section.title}" and its ${section.pages.length} note(s)?`)) {
+      setOpenSwipe(null);
+      setPinnedSectionIds(prev => {
+        const next = prev.filter(id => id !== section.id);
+        try { localStorage.setItem('cubnotes_pinned_sections', JSON.stringify(next)); } catch {}
+        return next;
+      });
       await onDeleteSection(section.id);
       toast.success("Folder deleted");
     }
@@ -324,10 +376,11 @@ export function MobileNavigation({
     }
 
     if (window.confirm(confirmMsg)) {
-      await onDeleteNotebook(notebook.id);
+      setOpenSwipe(null);
       if (selectedNotebookId === notebook.id) {
         setSelectedNotebookId(null);
       }
+      await onDeleteNotebook(notebook.id);
       toast.success("Notebook deleted");
     }
   };
@@ -370,10 +423,11 @@ export function MobileNavigation({
   const handleConfirmRenameNotebook = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!renameNotebook || !onUpdateNotebook) return;
+    const targetId = renameNotebook.id;
     const newTitle = renameNotebookTitle.trim() || "New Notebook";
-    await onUpdateNotebook(renameNotebook.id, newTitle);
-    toast.success("Notebook renamed");
     setRenameNotebook(null);
+    await onUpdateNotebook(targetId, newTitle);
+    toast.success("Notebook renamed");
   };
 
   const handleOpenRenameNote = (page: Page) => {
@@ -384,10 +438,11 @@ export function MobileNavigation({
   const handleConfirmRenameNote = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!renameNote || !onUpdatePage) return;
+    const targetId = renameNote.id;
     const newTitle = renameNoteTitle.trim() || "Untitled Note";
-    await onUpdatePage(renameNote.id, newTitle);
-    toast.success("Note renamed");
     setRenameNote(null);
+    await onUpdatePage(targetId, newTitle);
+    toast.success("Note renamed");
   };
 
   const handleOpenRenameFolder = (section: Section) => {
@@ -398,10 +453,11 @@ export function MobileNavigation({
   const handleConfirmRenameFolder = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!renameFolder || !onUpdateSection) return;
+    const targetId = renameFolder.id;
     const newTitle = renameFolderTitle.trim() || "New Folder";
-    await onUpdateSection(renameFolder.id, newTitle);
-    toast.success("Folder renamed");
     setRenameFolder(null);
+    await onUpdateSection(targetId, newTitle);
+    toast.success("Folder renamed");
   };
 
   // --- NOTES VIEW (Inside a specific folder) ---
@@ -443,7 +499,7 @@ export function MobileNavigation({
             </button>
 
             <button 
-              onClick={() => onAddPage(sectionId, "Untitled Note")}
+              onClick={() => handleCreateNote(sectionId)}
               className="w-8 h-8 rounded-full flex items-center justify-center bg-primary-600 hover:bg-primary-700 text-white shadow-sm active:scale-95 transition-transform"
               title="Add Note"
             >
@@ -489,7 +545,7 @@ export function MobileNavigation({
               <FileText size={42} className="opacity-30 mb-2" />
               <p className="text-sm font-medium">No notes found</p>
               <button 
-                onClick={() => onAddPage(sectionId, "Untitled Note")}
+                onClick={() => handleCreateNote(sectionId)}
                 className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-xs font-semibold shadow-sm active:scale-95 transition-transform"
               >
                 + Create Note
@@ -606,7 +662,7 @@ export function MobileNavigation({
           </span>
 
           <button 
-            onClick={() => onAddPage(sectionId, "Untitled Note")}
+            onClick={() => handleCreateNote(sectionId)}
             className="flex items-center gap-1 text-primary-600 dark:text-primary-400 font-semibold text-sm active:scale-95 transition-transform"
           >
             <Edit3 size={17} />
@@ -1050,7 +1106,7 @@ export function MobileNavigation({
         </span>
 
         <button 
-          onClick={handleQuickNewNote}
+          onClick={() => handleCreateNote()}
           className="flex items-center gap-1.5 text-primary-600 dark:text-primary-400 font-semibold text-sm active:scale-95 transition-transform"
         >
           <Edit3 size={18} />

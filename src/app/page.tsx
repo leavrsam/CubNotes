@@ -550,16 +550,40 @@ export default function Home() {
               setSelectedPageId(id);
               if (window.innerWidth < 768) setIsSidebarOpen(false);
             }} 
-            onAddNotebook={() => addNotebook("New Notebook")}
+            onAddNotebook={async () => {
+              const res = await addNotebook("New Notebook");
+              if (res?.pageId) setSelectedPageId(res.pageId);
+            }}
             onUpdateNotebook={updateNotebook}
-            onDeleteNotebook={deleteNotebook}
+            onDeleteNotebook={(nbId) => {
+              const nb = notebooks.find(n => n.id === nbId);
+              if (nb && nb.sections.some(s => s.pages.some(p => p.id === selectedPageId))) {
+                setSelectedPageId(null);
+              }
+              deleteNotebook(nbId);
+            }}
             onToggleJournalMode={toggleJournalMode}
             onAddSection={(nbId) => addSection(nbId, "New Section")}
             onUpdateSection={updateSection}
-            onDeleteSection={deleteSection}
-            onAddPage={(secId) => addPage(secId, "New Page")}
+            onDeleteSection={(secId) => {
+              for (const nb of notebooks) {
+                const s = nb.sections.find(sec => sec.id === secId);
+                if (s && s.pages.some(p => p.id === selectedPageId)) {
+                  setSelectedPageId(null);
+                  break;
+                }
+              }
+              deleteSection(secId);
+            }}
+            onAddPage={async (secId) => {
+              const page = await addPage(secId, "New Page");
+              if (page?.id) setSelectedPageId(page.id);
+            }}
             onUpdatePage={updatePage}
-            onDeletePage={deletePage}
+            onDeletePage={(id) => {
+              if (selectedPageId === id) setSelectedPageId(null);
+              deletePage(id);
+            }}
             onClose={() => setIsSidebarOpen(false)}
             onOpenSettings={() => {
               setIsSidebarOpen(false);
@@ -766,8 +790,8 @@ export default function Home() {
         activeNotebookTitle={activeNotebookTitle}
         onUpdatePageTitle={(title) => selectedPageId && updatePage(selectedPageId, title)}
         onDeletePage={async (id) => {
-          await deletePage(id);
           setSelectedPageId(null);
+          await deletePage(id);
         }}
       />
     </main>
