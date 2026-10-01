@@ -195,10 +195,15 @@ function CustomSelect({
   return (
     <div className={`relative ${width}`} ref={ref} onPointerDown={(e) => e.stopPropagation()}>
       <button
+        type="button"
         onPointerDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
           if (!disabled) setIsOpen(!isOpen);
+        }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
         }}
         disabled={disabled}
         className={`w-full flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none text-zinc-900 dark:text-zinc-300 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -211,11 +216,16 @@ function CustomSelect({
           {options.map((opt) => (
             <button
               key={opt.value}
+              type="button"
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onChange(opt.value);
                 setIsOpen(false);
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
               }}
               className={`w-full text-left px-2 py-1.5 text-xs hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors ${value === opt.value ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium' : 'text-zinc-700 dark:text-zinc-300'}`}
             >
@@ -1232,15 +1242,15 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               <button
                 key={tab}
                 onClick={() => {
-                  if (activeTab === tab) {
-                    setIsRibbonExpanded(!isRibbonExpanded);
-                  } else {
-                    setActiveTab(tab);
-                    setIsRibbonExpanded(true);
-                  }
+                  setActiveTab(tab);
+                  setIsRibbonExpanded(true);
                   if (tab === "Draw") setTool("pen");
                   else setTool("home");
                 }}
+                onDoubleClick={() => {
+                  setIsRibbonExpanded(prev => !prev);
+                }}
+                title="Click to switch tab, double-click to toggle ribbon"
                 className={`px-4 py-1.5 text-sm rounded-t-md transition-colors ${
                   activeTab === tab 
                     ? 'bg-white dark:bg-[#202020] text-zinc-900 dark:text-zinc-100 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] border-t border-l border-r border-transparent dark:border-zinc-800 relative z-10' 
@@ -1319,6 +1329,40 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                       }
                     }}
                   />
+                  
+                  {/* Quick Increase / Decrease Font Size Buttons */}
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (!activeEditor) return;
+                      const currentSizeStr = activeEditor.getAttributes('textStyle')?.fontSize || '16px';
+                      const currentNum = parseInt(currentSizeStr) || 16;
+                      const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+                      const nextSize = SIZES.find(s => s > currentNum) || (currentNum + 4);
+                      (activeEditor.chain().focus() as any).setFontSize(`${nextSize}px`).run();
+                    }}
+                    disabled={!activeEditor}
+                    className={`px-1.5 py-1 text-xs font-bold rounded transition-colors flex items-center gap-0.5 ${!activeEditor ? 'opacity-50 cursor-not-allowed text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    title="Increase Font Size (A▲)"
+                  >
+                    <span>A</span><span className="text-[8px] leading-none">▲</span>
+                  </button>
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (!activeEditor) return;
+                      const currentSizeStr = activeEditor.getAttributes('textStyle')?.fontSize || '16px';
+                      const currentNum = parseInt(currentSizeStr) || 16;
+                      const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+                      const prevSize = [...SIZES].reverse().find(s => s < currentNum) || Math.max(8, currentNum - 2);
+                      (activeEditor.chain().focus() as any).setFontSize(`${prevSize}px`).run();
+                    }}
+                    disabled={!activeEditor}
+                    className={`px-1.5 py-1 text-xs font-bold rounded transition-colors flex items-center gap-0.5 ${!activeEditor ? 'opacity-50 cursor-not-allowed text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    title="Decrease Font Size (A▼)"
+                  >
+                    <span>A</span><span className="text-[8px] leading-none">▼</span>
+                  </button>
                 </div>
 
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
@@ -1979,7 +2023,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         />
       </div>
 
-      {selectedIds.length > 0 && getSelectionBounds() && (() => {
+      {selectedIds.length > 0 && !(selectedIds.length === 1 && texts.some(t => t.id === selectedIds[0])) && getSelectionBounds() && (() => {
         const bounds = getSelectionBounds()!;
         const screenX = (bounds.x * zoom) + pan.x;
         const screenY = (bounds.y * zoom) + pan.y;

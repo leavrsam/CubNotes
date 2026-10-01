@@ -63,13 +63,19 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={handleClose} />
-      <div className="absolute top-full left-0 mt-1 bg-[#2c2c2c] border border-[#444] rounded shadow-xl z-50 p-3 min-w-[200px] flex flex-col gap-3 font-sans text-sm text-zinc-200" onClick={e => e.stopPropagation()}>
+      <div 
+        className="absolute top-full left-0 mt-1 bg-[#2c2c2c] border border-[#444] rounded shadow-xl z-50 p-3 min-w-[200px] flex flex-col gap-3 font-sans text-sm text-zinc-200" 
+        onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.preventDefault()}
+      >
         
         {isMoreColorsMode ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-xs text-zinc-100">Custom Color</span>
               <button 
+                type="button"
+                onMouseDown={e => e.preventDefault()}
                 onClick={() => setIsMoreColorsMode(false)}
                 className="text-xs text-zinc-400 hover:text-zinc-100 flex items-center gap-1"
               >
@@ -92,6 +98,8 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
               />
             </div>
             <button 
+              type="button"
+              onMouseDown={e => e.preventDefault()}
               className="mt-1 w-full bg-[#3c3c3c] hover:bg-[#4a4a4a] text-white py-1.5 rounded text-xs font-medium"
               onClick={handleClose}
             >
@@ -115,6 +123,8 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
                 {DRAWING_COLORS.map((c, i) => (
                   <button 
                     key={i} 
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
                     className="w-8 h-8 hover:opacity-80 hover:ring-1 hover:ring-white/50" 
                     style={{ backgroundColor: c }}
                     onClick={() => { onChange(c); onClose(); }}
@@ -128,6 +138,8 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
         {type === 'text' && (
           <>
             <button 
+              type="button"
+              onMouseDown={e => e.preventDefault()}
               className="flex items-center gap-2 hover:bg-[#3c3c3c] px-2 py-1 rounded -mx-1"
               onClick={() => { onChange('#000000'); onClose(); }}
             >
@@ -143,6 +155,8 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
                 {TEXT_THEME_COLORS.map((c, i) => (
                   <button 
                     key={i} 
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
                     className="w-4 h-4 hover:opacity-80 hover:ring-1 hover:ring-white z-10 hover:z-20 border border-[#2c2c2c]" 
                     style={{ backgroundColor: c }}
                     onClick={() => { onChange(c); onClose(); }}
@@ -159,6 +173,8 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
                 {TEXT_STANDARD_COLORS.map((c, i) => (
                   <button 
                     key={i} 
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
                     className="w-4 h-4 hover:opacity-80 hover:ring-1 hover:ring-white z-10 hover:z-20" 
                     style={{ backgroundColor: c }}
                     onClick={() => { onChange(c); onClose(); }}

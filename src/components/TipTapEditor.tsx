@@ -17,7 +17,7 @@ import { Extension } from "@tiptap/core";
 import { 
   Trash2, Bold, Italic, Underline as UnderlineIcon, 
   Heading1, Heading2, List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
-  Highlighter
+  Highlighter, ChevronDown
 } from "lucide-react";
 
 // Custom Font Size Extension
@@ -72,6 +72,119 @@ const TabIndent = Extension.create({
   },
 });
 
+const FONT_OPTIONS = [
+  { value: "", label: "Font" },
+  { value: "Arial, sans-serif", label: "Arial" },
+  { value: "Calibri, sans-serif", label: "Calibri" },
+  { value: "Cambria, serif", label: "Cambria" },
+  { value: "Comic Sans MS, cursive", label: "Comic Sans" },
+  { value: "Consolas, monospace", label: "Consolas" },
+  { value: "Courier New, monospace", label: "Courier New" },
+  { value: "Georgia, serif", label: "Georgia" },
+  { value: "Helvetica, sans-serif", label: "Helvetica" },
+  { value: "Impact, sans-serif", label: "Impact" },
+  { value: "Inter, sans-serif", label: "Inter" },
+  { value: "Menlo, monospace", label: "Menlo" },
+  { value: "Palatino, serif", label: "Palatino" },
+  { value: "Roboto, sans-serif", label: "Roboto" },
+  { value: "Times New Roman, serif", label: "Times New Roman" },
+  { value: "Verdana, sans-serif", label: "Verdana" },
+];
+
+const SIZE_OPTIONS = [
+  { value: "", label: "Size" },
+  { value: "8px", label: "8" },
+  { value: "9px", label: "9" },
+  { value: "10px", label: "10" },
+  { value: "11px", label: "11" },
+  { value: "12px", label: "12" },
+  { value: "14px", label: "14" },
+  { value: "16px", label: "16" },
+  { value: "18px", label: "18" },
+  { value: "20px", label: "20" },
+  { value: "22px", label: "22" },
+  { value: "24px", label: "24" },
+  { value: "26px", label: "26" },
+  { value: "28px", label: "28" },
+  { value: "36px", label: "36" },
+  { value: "48px", label: "48" },
+  { value: "72px", label: "72" },
+];
+
+function BubbleDropdown({
+  label,
+  value,
+  options,
+  onSelect,
+  width = "w-28",
+}: {
+  label: string;
+  value: string;
+  options: { label: string; value: string }[];
+  onSelect: (val: string) => void;
+  width?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className="flex items-center justify-between gap-1 px-1.5 py-1 text-xs rounded bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-colors"
+      >
+        <span className="truncate max-w-[4.5rem]">{selected && selected.value ? selected.label : label}</span>
+        <ChevronDown size={10} className="opacity-60 flex-shrink-0" />
+      </button>
+
+      {isOpen && (
+        <div 
+          className={`absolute top-full mt-1 left-0 ${width} max-h-56 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-md shadow-2xl py-1 z-[10000]`}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelect(opt.value);
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-2 py-1 text-xs hover:bg-zinc-800 transition-colors ${
+                value === opt.value ? 'bg-primary-600/30 text-primary-400 font-medium' : 'text-zinc-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface TipTapEditorProps {
   id: string;
   content: string;
@@ -108,11 +221,13 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       onChange(editor.getHTML());
       onEditorUpdate?.();
     },
-    onSelectionUpdate: () => {
+    onSelectionUpdate: ({ editor }) => {
+      setActiveEditor?.(editor);
       onEditorUpdate?.();
     },
     onFocus: ({ editor }) => {
       setActiveEditor?.(editor);
+      onEditorUpdate?.();
     },
     onBlur: ({ editor }) => {
       if (editor.isEmpty) {
@@ -153,73 +268,86 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
 
       {editor && (
         <BubbleMenu 
-          editor={editor} 
-          className="flex bg-zinc-900 text-white rounded-md overflow-hidden shadow-lg border border-zinc-700 z-50"
+          editor={editor}
+          appendTo={typeof document !== 'undefined' ? () => document.body : undefined}
+          options={{
+            strategy: "fixed",
+            placement: "top",
+            offset: 8
+          }}
+          shouldShow={({ editor }) => {
+            if (!editor || editor.isDestroyed) return false;
+            return !editor.state.selection.empty;
+          }}
+          className="flex items-center bg-zinc-900/95 text-white rounded-lg shadow-2xl border border-zinc-700/80 px-1.5 py-1 z-[9999] backdrop-blur-md gap-1"
         >
-          <select
-            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300"
-            style={{ colorScheme: 'dark' }}
-            onChange={(e) => {
-              if (e.target.value === "") {
+          {/* Font Family Dropdown */}
+          <BubbleDropdown
+            label="Font"
+            value={editor.getAttributes('textStyle').fontFamily || ""}
+            options={FONT_OPTIONS}
+            width="w-36"
+            onSelect={(val) => {
+              if (val === "") {
                 editor.chain().focus().unsetFontFamily().run();
               } else {
-                editor.chain().focus().setFontFamily(e.target.value).run();
+                editor.chain().focus().setFontFamily(val).run();
               }
             }}
-            value={editor.getAttributes('textStyle').fontFamily || ""}
-          >
-            <option value="">Font</option>
-            <option value="Arial, sans-serif">Arial</option>
-            <option value="Calibri, sans-serif">Calibri</option>
-            <option value="Cambria, serif">Cambria</option>
-            <option value="Comic Sans MS, cursive">Comic Sans MS</option>
-            <option value="Consolas, monospace">Consolas</option>
-            <option value="Courier New, monospace">Courier New</option>
-            <option value="Garamond, serif">Garamond</option>
-            <option value="Georgia, serif">Georgia</option>
-            <option value="Helvetica, sans-serif">Helvetica</option>
-            <option value="Impact, sans-serif">Impact</option>
-            <option value="Inter, sans-serif">Inter</option>
-            <option value="Menlo, monospace">Menlo</option>
-            <option value="Palatino, serif">Palatino</option>
-            <option value="Roboto, sans-serif">Roboto</option>
-            <option value="Times New Roman, serif">Times New Roman</option>
-            <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
-            <option value="Verdana, sans-serif">Verdana</option>
-          </select>
-          
-          <select
-            className="bg-zinc-800 text-xs px-2 py-1 mx-1 rounded border border-zinc-700 outline-none text-zinc-300"
-            style={{ colorScheme: 'dark' }}
-            onChange={(e) => {
-              if (e.target.value === "") {
+          />
+
+          {/* Font Size Dropdown */}
+          <BubbleDropdown
+            label="Size"
+            value={editor.getAttributes('textStyle').fontSize || ""}
+            options={SIZE_OPTIONS}
+            width="w-20"
+            onSelect={(val) => {
+              if (val === "") {
                 (editor.chain().focus() as any).unsetFontSize().run();
               } else {
-                (editor.chain().focus() as any).setFontSize(e.target.value).run();
+                (editor.chain().focus() as any).setFontSize(val).run();
               }
             }}
-            value={editor.getAttributes('textStyle').fontSize || ""}
-          >
-            <option value="">Size</option>
-            <option value="8px">8</option>
-            <option value="9px">9</option>
-            <option value="10px">10</option>
-            <option value="11px">11</option>
-            <option value="12px">12</option>
-            <option value="14px">14</option>
-            <option value="16px">16</option>
-            <option value="18px">18</option>
-            <option value="20px">20</option>
-            <option value="22px">22</option>
-            <option value="24px">24</option>
-            <option value="26px">26</option>
-            <option value="28px">28</option>
-            <option value="36px">36</option>
-            <option value="48px">48</option>
-            <option value="72px">72</option>
-          </select>
+          />
 
-          <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
+          {/* Quick Increase Font Size (A▲) */}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const currentSizeStr = editor.getAttributes('textStyle').fontSize || '16px';
+              const currentNum = parseInt(currentSizeStr) || 16;
+              const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+              const nextSize = SIZES.find(s => s > currentNum) || (currentNum + 4);
+              (editor.chain().focus() as any).setFontSize(`${nextSize}px`).run();
+            }}
+            className="p-1 hover:bg-zinc-800 rounded transition-colors flex items-center font-bold text-xs text-zinc-200"
+            title="Increase Font Size (A▲)"
+          >
+            <span>A</span><span className="text-[9px] leading-none ml-0.5">▲</span>
+          </button>
+
+          {/* Quick Decrease Font Size (A▼) */}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const currentSizeStr = editor.getAttributes('textStyle').fontSize || '16px';
+              const currentNum = parseInt(currentSizeStr) || 16;
+              const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+              const prevSize = [...SIZES].reverse().find(s => s < currentNum) || Math.max(8, currentNum - 2);
+              (editor.chain().focus() as any).setFontSize(`${prevSize}px`).run();
+            }}
+            className="p-1 hover:bg-zinc-800 rounded transition-colors flex items-center font-bold text-xs text-zinc-200"
+            title="Decrease Font Size (A▼)"
+          >
+            <span>A</span><span className="text-[9px] leading-none ml-0.5">▼</span>
+          </button>
+
+          <div className="w-px h-5 bg-zinc-700/80 self-center mx-0.5" />
 
           <button
             type="button"
@@ -258,23 +386,38 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
             <Highlighter size={14} />
           </button>
           
-          <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
+          <div className="w-px h-5 bg-zinc-700/80 self-center mx-0.5" />
 
-          {/* Color Picker */}
-          <div className="flex px-1 items-center">
+          {/* Quick Color Dots */}
+          <div className="flex items-center gap-1 px-1">
+            {['#000000', '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'].map(color => (
+              <button
+                key={color}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  editor.chain().focus().setColor(color).run();
+                }}
+                className={`w-3.5 h-3.5 rounded-full border transition-transform hover:scale-125 ${
+                  editor.getAttributes('textStyle')?.color === color ? 'border-white scale-110 ring-1 ring-white/50' : 'border-zinc-600'
+                }`}
+                style={{ backgroundColor: color }}
+                title={color}
+              />
+            ))}
             <input
               type="color"
-              className="w-5 h-5 p-0 border-0 rounded cursor-pointer bg-transparent"
+              className="w-4 h-4 p-0 border-0 rounded cursor-pointer bg-transparent"
               value={editor.getAttributes('textStyle')?.color || '#000000'}
               onPointerDown={(e) => e.stopPropagation()}
               onInput={(e) => {
                 editor.chain().focus().setColor((e.target as HTMLInputElement).value).run();
               }}
-              title="Text Color"
+              title="More Colors"
             />
           </div>
 
-          <div className="w-px h-6 bg-zinc-700 self-center mx-1" />
+          <div className="w-px h-5 bg-zinc-700/80 self-center mx-0.5" />
 
           <button
             type="button"
