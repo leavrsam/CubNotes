@@ -231,7 +231,8 @@ export function SpatialCanvas({
     
     if (tool === "home") {
       // If we clicked on empty space, start marquee selection
-      if (e.target === stageRef.current) {
+      const isStage = e.target === stageRef.current || (e.target?.getStage && e.target === e.target.getStage()) || e.target?.nodeType === 'Stage';
+      if (isStage) {
         if (typeof document !== 'undefined' && document.activeElement) {
           (document.activeElement as HTMLElement)?.blur?.();
         }
@@ -348,6 +349,9 @@ export function SpatialCanvas({
           onSelectionBoxComplete?.(minX, maxX, minY, maxY);
         } else {
           setSelectedIds?.([]);
+          if (typeof document !== 'undefined' && document.activeElement) {
+            (document.activeElement as HTMLElement)?.blur?.();
+          }
           onCanvasClick?.(marqueeBox.startX, marqueeBox.startY);
         }
         setMarqueeBox(null);
@@ -458,29 +462,23 @@ export function SpatialCanvas({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={(e) => {
-          if (tool === 'home' && e.target === stageRef.current) {
-            const pos = getPointerPos(e);
-            onCanvasClick?.(pos.x, pos.y);
-          }
-        }}
         onWheel={handleWheel}
-        draggable={tool === 'pan' || tool === 'home'}
+        draggable={tool === 'pan'}
         onDragStart={() => {
-          if (tool === 'pan' || tool === 'home') {
+          if (tool === 'pan') {
             document.body.style.cursor = 'grabbing';
           }
         }}
         onDragMove={(e) => {
-          if (e.target === stageRef.current) {
+          if (tool === 'pan' && e.target === stageRef.current) {
             setPan({ x: e.target.x(), y: e.target.y() });
           }
         }}
         onDragEnd={(e) => {
-          if (tool === 'pan' || tool === 'home') {
-            document.body.style.cursor = tool === 'pan' ? 'grab' : 'text';
+          if (tool === 'pan') {
+            document.body.style.cursor = 'grab';
           }
-          if (e.target === stageRef.current) {
+          if (tool === 'pan' && e.target === stageRef.current) {
             setPan({ x: e.target.x(), y: e.target.y() });
           }
         }}

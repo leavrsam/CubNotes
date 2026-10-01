@@ -858,17 +858,33 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const handleCanvasClick = useCallback((x: number, y: number) => {
     // In 'home' mode, clicking the canvas creates a text block
     if (tool === "home") {
+      if (typeof document !== 'undefined' && document.activeElement) {
+        (document.activeElement as HTMLElement)?.blur?.();
+      }
+
       const snapY = backgroundStyle === 'ruled' || backgroundStyle === 'grid' ? Math.round(y / 32) * 32 : y;
+      const newId = uuidv4();
       const newNode: TextNode = {
-        id: uuidv4(),
+        id: newId,
         x,
         y: snapY,
         width: 600,
         content: "<p></p>"
       };
-      setTexts(prev => [...prev, newNode]);
+      
+      setTexts(prev => {
+        // Discard any previous empty unedited text nodes
+        const cleaned = prev.filter(t => {
+          if (!t.content || t.content === '<p></p>' || t.content === '<p><br></p>' || t.content === '<p> </p>') {
+            return false;
+          }
+          return true;
+        });
+        return [...cleaned, newNode];
+      });
+      setSelectedIds([newId]);
     }
-  }, [tool, setTexts, backgroundStyle]);
+  }, [tool, setTexts, backgroundStyle, setSelectedIds]);
 
   useEffect(() => {
     const handleStartRecordingNode = (e: Event) => {
@@ -1186,6 +1202,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         activeEl.tagName === 'TEXTAREA' || 
         (activeEl as HTMLElement).isContentEditable
       );
+
+      if (e.key === 'Escape') {
+        setSelectedIds([]);
+        if (typeof document !== 'undefined' && document.activeElement) {
+          (document.activeElement as HTMLElement)?.blur?.();
+        }
+      }
 
       if (!isInputFocused && (e.key === 'Delete' || e.key === 'Backspace')) {
         if (selectedIds.length > 0) {
