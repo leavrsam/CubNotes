@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Stage, Layer, Path, Transformer } from "react-konva";
+import { Stage, Layer, Path, Transformer, Rect } from "react-konva";
 import { getStroke } from "perfect-freehand";
 import { v4 as uuidv4 } from "uuid";
 import type { Stroke, ToolType } from "./CustomCanvas";
@@ -41,6 +41,8 @@ interface SpatialCanvasProps {
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
   onLassoComplete?: (minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => void;
+  onSelectionBoxChange?: (minX: number, maxX: number, minY: number, maxY: number) => void;
+  onSelectionBoxComplete?: (minX: number, maxX: number, minY: number, maxY: number) => void;
   annotateBlockId?: string | null;
   blockOffsetMap?: Record<string, {x: number, y: number}>;
   initialBlockY?: number;
@@ -55,6 +57,7 @@ export function SpatialCanvas({
   tool, activeColor, activeSize, activePresetType, eraserType, eraserSize = 10,
   selectedIds = [], setSelectedIds,
   onCanvasClick, onLassoComplete,
+  onSelectionBoxChange, onSelectionBoxComplete,
   onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
   annotateBlockId, blockOffsetMap, initialBlockY,
   width, height
@@ -62,6 +65,7 @@ export function SpatialCanvas({
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   const [lassoPath, setLassoPath] = useState<number[][]>([]);
+  const [marqueeBox, setMarqueeBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
 
   const stageRef = useRef<any>(null);
   const transformerRef = useRef<any>(null);
@@ -226,9 +230,18 @@ export function SpatialCanvas({
     }
     
     if (tool === "home") {
-      // If we clicked on empty space, deselect
+      // If we clicked on empty space, start marquee selection
       if (e.target === stageRef.current) {
-        setSelectedIds?.([]);
+        if (typeof document !== 'undefined' && document.activeElement) {
+          (document.activeElement as HTMLElement)?.blur?.();
+        }
+        const rawPos = getPointerPos(e);
+        setMarqueeBox({
+          startX: rawPos.x,
+          startY: rawPos.y,
+          currentX: rawPos.x,
+          currentY: rawPos.y,
+        });
       }
       return;
     }
@@ -273,6 +286,28 @@ export function SpatialCanvas({
   };
 
   const handlePointerMove = (e: any) => {
+    if (tool === "home") {
+      if (marqueeBox) {
+        const rawPos = getPointerPos(e);
+        const updated = {
+          ...marqueeBox,
+          currentX: rawPos.x,
+          currentY: rawPos.y,
+        };
+        setMarqueeBox(updated);
+
+        const minX = Math.min(updated.startX, updated.currentX);
+        const maxX = Math.max(updated.startX, updated.currentX);
+        const minY = Math.min(updated.startY, updated.currentY);
+        const maxY = Math.max(updated.startY, updated.currentY);
+
+        if (maxX - minX > 3 || maxY - minY > 3) {
+          onSelectionBoxChange?.(minX, maxX, minY, maxY);
+        }
+      }
+      return;
+    }
+
     if (!isDrawing || touchStateRef.current.isPinching || (e.evt.touches && e.evt.touches.length >= 2)) return;
     const rawPos = getPointerPos(e);
     
@@ -302,6 +337,24 @@ export function SpatialCanvas({
   };
 
   const handlePointerUp = () => {
+    if (tool === "home") {
+      if (marqueeBox) {
+        const minX = Math.min(marqueeBox.startX, marqueeBox.currentX);
+        const maxX = Math.max(marqueeBox.startX, marqueeBox.currentX);
+        const minY = Math.min(marqueeBox.startY, marqueeBox.currentY);
+        const maxY = Math.max(marqueeBox.startY, marqueeBox.currentY);
+
+        if (maxX - minX > 5 || maxY - minY > 5) {
+          onSelectionBoxComplete?.(minX, maxX, minY, maxY);
+        } else {
+          setSelectedIds?.([]);
+          onCanvasClick?.(marqueeBox.startX, marqueeBox.startY);
+        }
+        setMarqueeBox(null);
+      }
+      return;
+    }
+
     if (isDrawing) {
       if (tool === 'lasso') {
         if (lassoPath.length > 2) {
@@ -323,6 +376,25 @@ export function SpatialCanvas({
     setIsDrawing(false);
     setCurrentStroke(null);
   };
+
+  useEffect(() => {
+    if (!marqueeBox) return;
+    const handleWindowPointerUp = () => {
+      if (marqueeBox) {
+        const minX = Math.min(marqueeBox.startX, marqueeBox.currentX);
+        const maxX = Math.max(marqueeBox.startX, marqueeBox.currentX);
+        const minY = Math.min(marqueeBox.startY, marqueeBox.currentY);
+        const maxY = Math.max(marqueeBox.startY, marqueeBox.currentY);
+
+        if (maxX - minX > 5 || maxY - minY > 5) {
+          onSelectionBoxComplete?.(minX, maxX, minY, maxY);
+        }
+        setMarqueeBox(null);
+      }
+    };
+    window.addEventListener('pointerup', handleWindowPointerUp);
+    return () => window.removeEventListener('pointerup', handleWindowPointerUp);
+  }, [marqueeBox, onSelectionBoxComplete]);
 
   // Handle Zoom & Pan via Trackpad / Mouse Wheel
   const handleWheel = (e: any) => {
@@ -453,13 +525,14 @@ export function SpatialCanvas({
                 }}
                 onDragStart={(e) => {
                   e.cancelBubble = true;
+                  onDragSelectionStart?.(stroke.id);
                 }}
                 onDragMove={(e) => {
+                  const node = e.target;
+                  const deltaX = node.x() - ((stroke.x || 0) + offsetX);
+                  const deltaY = node.y() - ((stroke.y || 0) + offsetY);
+
                   if (selectedIds.includes(stroke.id) && selectedIds.length > 1) {
-                    const node = e.target;
-                    const deltaX = node.x() - ((stroke.x || 0) + offsetX);
-                    const deltaY = node.y() - ((stroke.y || 0) + offsetY);
-                    
                     selectedIds.forEach(id => {
                       if (id !== stroke.id) {
                         const otherNode = stageRef.current?.findOne('#' + id);
@@ -474,6 +547,7 @@ export function SpatialCanvas({
                         }
                       }
                     });
+                    onDragSelectionMove?.(deltaX, deltaY);
                   }
                 }}
                 onDragEnd={(e) => {
@@ -496,6 +570,7 @@ export function SpatialCanvas({
                       s.id === stroke.id ? { ...s, x: newX, y: newY } : s
                     ));
                   }
+                  onDragSelectionEnd?.();
                 }}
                 onTransformEnd={(e) => {
                   const node = e.target;
@@ -547,6 +622,22 @@ export function SpatialCanvas({
               strokeWidth={2 / zoom}
               dash={[10 / zoom, 5 / zoom]}
               fill="rgba(59, 130, 246, 0.1)"
+            />
+          )}
+
+          {/* Marquee selection box */}
+          {marqueeBox && (Math.abs(marqueeBox.currentX - marqueeBox.startX) > 3 || Math.abs(marqueeBox.currentY - marqueeBox.startY) > 3) && (
+            <Rect
+              x={Math.min(marqueeBox.startX, marqueeBox.currentX)}
+              y={Math.min(marqueeBox.startY, marqueeBox.currentY)}
+              width={Math.abs(marqueeBox.currentX - marqueeBox.startX)}
+              height={Math.abs(marqueeBox.currentY - marqueeBox.startY)}
+              fill="rgba(59, 130, 246, 0.12)"
+              stroke="#3b82f6"
+              strokeWidth={1.5 / zoom}
+              dash={[6 / zoom, 4 / zoom]}
+              cornerRadius={2 / zoom}
+              listening={false}
             />
           )}
 

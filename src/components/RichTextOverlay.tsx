@@ -4,7 +4,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import type { TextNode, ToolType } from "./CustomCanvas";
 import { TipTapEditor } from "./TipTapEditor";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
 import { Editor } from '@tiptap/react';
 
 interface RichTextOverlayProps {
@@ -18,9 +18,9 @@ interface RichTextOverlayProps {
   setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
   setActiveEditor?: (editor: Editor | null) => void;
   onEditorUpdate?: () => void;
-  onDragSelectionStart: (e: React.MouseEvent | React.TouchEvent, type: 'text' | 'image' | 'file' | 'audio' | 'video', id: string) => void;
-  onDragSelectionMove: (e: React.MouseEvent | React.TouchEvent) => void;
-  onDragSelectionEnd: () => void;
+  onDragSelectionStart?: (id: string) => void;
+  onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
+  onDragSelectionEnd?: () => void;
   onBlurText?: (id: string, text: string, x: number, y: number) => void;
   onAnnotate?: (id: string) => void;
 }
@@ -122,18 +122,19 @@ export function RichTextOverlay({
           return (
             <div 
               key={node.id}
+              id={`text-node-${node.id}`}
               onPointerDown={(e) => {
                 if (tool === 'home') {
                   e.stopPropagation();
-                  setSelectedNodeId?.(node.id);
+                  setSelectedIds?.([node.id]);
                 }
               }}
               // Stop canvas click from firing when clicking inside the text box container
               onClick={(e) => e.stopPropagation()}
-              className={`absolute pointer-events-auto group bg-transparent transition-colors border ${
+              className={`absolute pointer-events-auto group bg-transparent transition-all border rounded-b-md ${
                 (tool === 'home' && node.content !== '<p></p>') 
-                  ? ((selectedIds.includes(node.id) || draggingId === node.id || resizingId === node.id)
-                      ? 'border-zinc-300 dark:border-zinc-700'
+                  ? ((isSelected || draggingId === node.id || resizingId === node.id)
+                      ? 'border-primary-500 dark:border-primary-400 ring-2 ring-primary-500/20 shadow-sm'
                       : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus-within:border-zinc-300 dark:focus-within:border-zinc-700')
                   : 'border-transparent'
               }`}
@@ -147,14 +148,23 @@ export function RichTextOverlay({
                 <>
                   {/* Drag Handle (Top Bar) */}
                   <div 
-                    className={`absolute -top-[10px] left-[-1px] right-[-1px] h-[10px] cursor-grab active:cursor-grabbing bg-zinc-200 dark:bg-[#2b2b2b] transition-opacity z-20 flex items-center justify-between pl-1 border border-b-0 ${
-                      (selectedIds.includes(node.id) || draggingId === node.id || resizingId === node.id)
-                        ? 'opacity-100 border-zinc-300 dark:border-zinc-700'
-                        : 'opacity-0 border-transparent group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700'
+                    className={`absolute -top-[18px] left-[-1px] right-[-1px] h-[18px] cursor-grab active:cursor-grabbing transition-all z-20 flex items-center justify-between px-1.5 border border-b-0 rounded-t-md select-none ${
+                      (isSelected || draggingId === node.id || resizingId === node.id)
+                        ? 'opacity-100 bg-primary-500 text-white border-primary-600 shadow-xs'
+                        : 'opacity-0 border-transparent bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700'
                     }`}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      // Blur any active editor so keyboard Delete/Backspace targets the whole textbox
+                      if (typeof document !== 'undefined' && document.activeElement) {
+                        (document.activeElement as HTMLElement)?.blur?.();
+                      }
+                      if (e.shiftKey) {
+                        setSelectedIds?.(prev => prev.includes(node.id) ? prev.filter(id => id !== node.id) : [...prev, node.id]);
+                      } else {
+                        setSelectedIds?.([node.id]);
+                      }
                       onDragSelectionStart?.(node.id);
                       setDraggingId(node.id);
                       dragStartRef.current = {
@@ -164,9 +174,12 @@ export function RichTextOverlay({
                         nodeY: node.y
                       };
                     }}
+                    title="Click or drag to move or delete textbox"
                   >
                     <button
-                      className="flex gap-[1px] text-[10px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full px-1 hover:text-primary-500 transition-colors pointer-events-auto"
+                      className={`flex gap-[1px] text-[10px] items-center justify-center h-full px-1 transition-colors pointer-events-auto ${
+                        isSelected ? 'text-white hover:text-primary-100' : 'text-zinc-500 dark:text-zinc-400 hover:text-primary-500'
+                      }`}
                       onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -174,30 +187,51 @@ export function RichTextOverlay({
                       }}
                       title="Annotate this block"
                     >
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
                     </button>
                     
-                    <div className="flex gap-[2px] text-zinc-500 dark:text-zinc-400">
-                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
-                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
-                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
-                      <div className="w-[1.5px] h-[1.5px] bg-current rounded-full" />
+                    <div className="flex items-center gap-[3px] opacity-75 pointer-events-none">
+                      <div className="w-[3px] h-[3px] bg-current rounded-full" />
+                      <div className="w-[3px] h-[3px] bg-current rounded-full" />
+                      <div className="w-[3px] h-[3px] bg-current rounded-full" />
+                      <div className="w-[3px] h-[3px] bg-current rounded-full" />
                     </div>
 
-                    <div 
-                      className="flex gap-[1px] text-[7px] text-zinc-500 dark:text-zinc-400 items-center justify-center h-full px-1 cursor-col-resize hover:text-zinc-300 transition-colors"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setResizingId(node.id);
-                        resizeStartRef.current = {
-                          x: e.clientX,
-                          nodeWidth: node.width
-                        };
-                      }}
-                    >
-                      <span>◀</span>
-                      <span>▶</span>
+                    <div className="flex items-center gap-1">
+                      <div 
+                        className={`flex gap-[1px] text-[8px] items-center justify-center h-full px-1 cursor-col-resize transition-colors ${
+                          isSelected ? 'text-white/80 hover:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                        }`}
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setResizingId(node.id);
+                          resizeStartRef.current = {
+                            x: e.clientX,
+                            nodeWidth: node.width
+                          };
+                        }}
+                        title="Drag to resize width"
+                      >
+                        <span>◀</span>
+                        <span>▶</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className={`flex items-center justify-center h-full px-1 rounded transition-colors pointer-events-auto ${
+                          isSelected ? 'text-white hover:text-red-200' : 'text-zinc-500 dark:text-zinc-400 hover:text-red-500'
+                        }`}
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          deleteTextNode(node.id);
+                          setSelectedIds?.(prev => prev.filter(id => id !== node.id));
+                        }}
+                        title="Delete textbox (Delete / Backspace)"
+                      >
+                        <Trash2 size={11} />
+                      </button>
                     </div>
                   </div>
 

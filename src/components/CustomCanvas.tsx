@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -384,7 +384,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       setStrokes(prev => prev.map(s => {
         const origStroke = orig.strokes.find(os => os.id === s.id);
         if (origStroke) {
-          return { ...origStroke, points: origStroke.points.map((p: any) => [p[0] + deltaX, p[1] + deltaY, p[2]]) };
+          return { ...origStroke, x: (origStroke.x || 0) + deltaX, y: (origStroke.y || 0) + deltaY };
         }
         return s;
       }));
@@ -407,59 +407,147 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     originalSelectionRef.current = null;
   }, [backgroundStyle, setTexts]);
 
-  const handleLassoComplete = useCallback((minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => {
+  const findIntersectingIds = useCallback((minX: number, maxX: number, minY: number, maxY: number) => {
     const foundIds: string[] = [];
 
     // Find strokes
     strokes.forEach(stroke => {
-      if (stroke.points.some((p: any) => p[0] >= minX && p[0] <= maxX && p[1] >= minY && p[1] <= maxY)) {
+      const ox = (stroke.x || 0) + (stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].x : 0);
+      const oy = (stroke.y || 0) + (stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].y : 0);
+      
+      let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+      let hasPointInside = false;
+      for (const p of stroke.points) {
+        const px = p[0] + ox;
+        const py = p[1] + oy;
+        if (px >= minX && px <= maxX && py >= minY && py <= maxY) {
+          hasPointInside = true;
+        }
+        if (px < sMinX) sMinX = px;
+        if (px > sMaxX) sMaxX = px;
+        if (py < sMinY) sMinY = py;
+        if (py > sMaxY) sMaxY = py;
+      }
+      const boxOverlap = Math.max(sMinX, minX) <= Math.min(sMaxX, maxX) &&
+                         Math.max(sMinY, minY) <= Math.min(sMaxY, maxY);
+      if (hasPointInside || boxOverlap) {
         foundIds.push(stroke.id);
       }
     });
 
     // Find texts
     texts.forEach(t => {
-      // Approximate bounding box center for selection
-      if (t.x >= minX && t.x <= maxX && t.y >= minY && t.y <= maxY) {
+      const tw = t.width || 600;
+      let th = 80;
+      if (typeof document !== 'undefined') {
+        const el = document.getElementById(`text-node-${t.id}`);
+        if (el) th = el.offsetHeight;
+      }
+      if (Math.max(t.x, minX) <= Math.min(t.x + tw, maxX) && Math.max(t.y, minY) <= Math.min(t.y + th, maxY)) {
         foundIds.push(t.id);
       }
     });
 
     // Find images
     images?.forEach(i => {
-      if (i.x >= minX && i.x <= maxX && i.y >= minY && i.y <= maxY) {
+      const iw = i.width || 400;
+      const ih = i.height || 300;
+      if (Math.max(i.x, minX) <= Math.min(i.x + iw, maxX) && Math.max(i.y, minY) <= Math.min(i.y + ih, maxY)) {
         foundIds.push(i.id);
       }
     });
 
     // Find videos
     videos?.forEach(v => {
-      if (v.x >= minX && v.x <= maxX && v.y >= minY && v.y <= maxY) {
+      const vw = v.width || 480;
+      const vh = v.height || 270;
+      if (Math.max(v.x, minX) <= Math.min(v.x + vw, maxX) && Math.max(v.y, minY) <= Math.min(v.y + vh, maxY)) {
         foundIds.push(v.id);
       }
     });
 
     // Find files
     files?.forEach(f => {
-      if (f.x >= minX && f.x <= maxX && f.y >= minY && f.y <= maxY) {
+      const fw = f.width || 256;
+      const fh = f.height || 80;
+      if (Math.max(f.x, minX) <= Math.min(f.x + fw, maxX) && Math.max(f.y, minY) <= Math.min(f.y + fh, maxY)) {
         foundIds.push(f.id);
       }
     });
 
     // Find audios
     audios?.forEach(a => {
-      if (a.x >= minX && a.x <= maxX && a.y >= minY && a.y <= maxY) {
+      const aw = a.width || 500;
+      let ah = 140;
+      if (typeof document !== 'undefined') {
+        const el = document.getElementById(`audio-node-${a.id}`);
+        if (el) ah = el.offsetHeight;
+      }
+      if (Math.max(a.x, minX) <= Math.min(a.x + aw, maxX) && Math.max(a.y, minY) <= Math.min(a.y + ah, maxY)) {
         foundIds.push(a.id);
       }
     });
 
+    return foundIds;
+  }, [strokes, texts, images, videos, files, audios, blockOffsetMap]);
+
+  const handleSelectionBoxChange = useCallback((minX: number, maxX: number, minY: number, maxY: number) => {
+    const ids = findIntersectingIds(minX, maxX, minY, maxY);
+    setSelectedIds(ids);
+  }, [findIntersectingIds]);
+
+  const handleSelectionBoxComplete = useCallback((minX: number, maxX: number, minY: number, maxY: number) => {
+    const ids = findIntersectingIds(minX, maxX, minY, maxY);
+    setSelectedIds(ids);
+  }, [findIntersectingIds]);
+
+  const handleDeleteSelection = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    setStrokes(prev => prev.filter(s => !selectedIds.includes(s.id)));
+    setTexts(prev => prev.filter(t => !selectedIds.includes(t.id)));
+    if (setImages) setImages(prev => prev.filter(i => !selectedIds.includes(i.id)));
+    if (setVideos) setVideos(prev => prev.filter(v => !selectedIds.includes(v.id)));
+    if (setFiles) setFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
+    if (setAudios) setAudios(prev => prev.filter(a => !selectedIds.includes(a.id)));
+    setSelectedIds([]);
+  }, [selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds]);
+
+  const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
+  const toolbarDragRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!isDraggingToolbar) return;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!toolbarDragRef.current) return;
+      const deltaX = (e.clientX - toolbarDragRef.current.x) / zoom;
+      const deltaY = (e.clientY - toolbarDragRef.current.y) / zoom;
+      handleDragSelectionMove(deltaX, deltaY);
+    };
+
+    const handlePointerUp = () => {
+      setIsDraggingToolbar(false);
+      toolbarDragRef.current = null;
+      handleDragSelectionEnd();
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [isDraggingToolbar, zoom, handleDragSelectionMove, handleDragSelectionEnd]);
+
+  const handleLassoComplete = useCallback((minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => {
+    const foundIds = findIntersectingIds(minX, maxX, minY, maxY);
     if (foundIds.length > 0) {
       setSelectedIds(foundIds);
       setTool('home'); // Switch to home tool so selection UI becomes visible and interactable
     } else {
       setSelectedIds([]);
     }
-  }, [strokes, texts, images, videos, files, audios]);
+  }, [findIntersectingIds]);
 
   // Active Tool and Ribbon
   const [tool, setTool] = useState<ToolType>("home");
@@ -1092,13 +1180,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       if (!isInputFocused && (e.key === 'Delete' || e.key === 'Backspace')) {
         if (selectedIds.length > 0) {
           e.preventDefault();
-          setStrokes(prev => prev.filter(s => !selectedIds.includes(s.id)));
-          setTexts(prev => prev.filter(t => !selectedIds.includes(t.id)));
-          if (setImages) setImages(prev => prev.filter(i => !selectedIds.includes(i.id)));
-          if (setVideos) setVideos(prev => prev.filter(v => !selectedIds.includes(v.id)));
-          if (setFiles) setFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
-          if (setAudios) setAudios(prev => prev.filter(a => !selectedIds.includes(a.id)));
-          setSelectedIds([]);
+          handleDeleteSelection();
         }
       }
 
@@ -1827,6 +1909,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
           onLassoComplete={handleLassoComplete}
+          onSelectionBoxChange={handleSelectionBoxChange}
+          onSelectionBoxComplete={handleSelectionBoxComplete}
           annotateBlockId={annotateBlockId}
           blockOffsetMap={blockOffsetMap}
         />
@@ -1895,26 +1979,101 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         />
       </div>
 
-      {selectedIds.length > 1 && getSelectionBounds() && (() => {
+      {selectedIds.length > 0 && getSelectionBounds() && (() => {
         const bounds = getSelectionBounds()!;
         const screenX = (bounds.x * zoom) + pan.x;
         const screenY = (bounds.y * zoom) + pan.y;
+        const screenW = bounds.width * zoom;
+        const screenH = bounds.height * zoom;
         
         return (
-          <div 
-            className="absolute z-50 pointer-events-auto"
-            style={{ 
-              left: screenX, 
-              top: screenY - 50,
-            }}
-          >
-            <button
-              onClick={() => handleOrganize()}
-              className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-full shadow-xl font-medium transition-transform active:scale-95"
+          <>
+            {/* Dashed Selection Bounding Outline */}
+            <div 
+              className="absolute pointer-events-none border-2 border-dashed border-primary-500/80 rounded-lg z-30 transition-all duration-75"
+              style={{ 
+                left: screenX - 6, 
+                top: screenY - 6,
+                width: screenW + 12,
+                height: screenH + 12,
+                boxShadow: '0 0 0 1px rgba(59, 130, 246, 0.15), inset 0 0 0 1px rgba(59, 130, 246, 0.05)'
+              }}
+            />
+
+            {/* Floating Selection Action Toolbar */}
+            <div 
+              className="absolute z-50 pointer-events-auto flex items-center gap-1.5 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md px-2.5 py-1.5 rounded-full shadow-xl border border-zinc-200 dark:border-zinc-700 animate-in fade-in zoom-in-95 duration-100"
+              style={{ 
+                left: Math.max(16, screenX), 
+                top: Math.max(68, screenY - 48),
+              }}
             >
-              <span>Organize Chaos</span>
-            </button>
-          </div>
+              {/* Move Handle */}
+              <div
+                className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400 cursor-grab active:cursor-grabbing px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors select-none"
+                title="Drag to move all selected items"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDragSelectionStart(selectedIds[0]);
+                  setIsDraggingToolbar(true);
+                  toolbarDragRef.current = { x: e.clientX, y: e.clientY };
+                }}
+              >
+                <GripVertical size={13} className="text-zinc-400" />
+                <span className="font-semibold text-[11px] text-zinc-700 dark:text-zinc-200">
+                  {selectedIds.length === 1 ? '1 item' : `${selectedIds.length} items`}
+                </span>
+              </div>
+
+              <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 my-auto" />
+
+              {/* Delete Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteSelection();
+                }}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors"
+                title="Delete selected (Delete or Backspace)"
+              >
+                <Trash2 size={13} />
+                <span>Delete</span>
+              </button>
+
+              {/* Organize Chaos button (if more than 1 item) */}
+              {selectedIds.length > 1 && (
+                <>
+                  <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 my-auto" />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOrganize();
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-full shadow-sm transition-all active:scale-95"
+                    title="Synthesize selected items with AI"
+                  >
+                    <Sparkles size={13} />
+                    <span>Organize</span>
+                  </button>
+                </>
+              )}
+
+              <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 my-auto" />
+
+              {/* Deselect / Close Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedIds([]);
+                }}
+                className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                title="Deselect"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </>
         );
       })()}
 
