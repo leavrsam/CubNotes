@@ -8,6 +8,19 @@ export function ServiceWorkerRegistration() {
       const register = () => {
         navigator.serviceWorker
           .register("/sw.js")
+          .then((registration) => {
+            registration.update();
+            registration.addEventListener("updatefound", () => {
+              const installingWorker = registration.installing;
+              if (installingWorker) {
+                installingWorker.onstatechange = () => {
+                  if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+                    window.location.reload();
+                  }
+                };
+              }
+            });
+          })
           .catch((err) => {
             console.warn("Service Worker registration warning:", err);
           });
