@@ -54,6 +54,8 @@ export default function Home() {
   // Mobile navigation state
   const [mobileView, setMobileView] = useState<'folders' | 'notes'>('folders');
   const [mobileSectionId, setMobileSectionId] = useState<string | null>(null);
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // State tracking refs for popstate and backButton handlers
   const selectedPageIdRef = useRef<string | null>(null);
