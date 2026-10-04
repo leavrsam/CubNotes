@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -346,10 +346,33 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [eraserSize, setEraserSize] = useState<number>(10);
   const [isEraserMenuOpen, setIsEraserMenuOpen] = useState(false);
 
+  // Active Tool and Ribbon
+  const [tool, setTool] = useState<ToolType>("home");
+  const [activeTab, setActiveTab] = useState<RibbonTab>("Home");
+  const [isRibbonExpanded, setIsRibbonExpanded] = useState(true);
+  const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+  const [editorUpdateTick, setEditorUpdateTick] = useState(0);
+
+  // Viewport state
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isVersionsMenuOpen, setIsVersionsMenuOpen] = useState(false);
   const [annotateBlockId, setAnnotateBlockId] = useState<string | null>(null);
+
+  const handleAnnotateBlock = useCallback((id: string) => {
+    setAnnotateBlockId(id);
+    setTool('pen');
+    setActiveTab('Draw');
+  }, []);
+
+  useEffect(() => {
+    if (tool !== 'pen' && tool !== 'highlighter' && tool !== 'eraser') {
+      setAnnotateBlockId(null);
+    }
+  }, [tool]);
 
   const blockOffsetMap = useMemo(() => {
     const map: Record<string, {x: number, y: number}> = {};
@@ -559,28 +582,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   }, [findIntersectingIds]);
 
-  // Active Tool and Ribbon
-  const [tool, setTool] = useState<ToolType>("home");
-  const [activeTab, setActiveTab] = useState<RibbonTab>("Home");
-  const [isRibbonExpanded, setIsRibbonExpanded] = useState(true);
-  const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
-
-  const handleAnnotateBlock = useCallback((id: string) => {
-    setAnnotateBlockId(id);
-    setTool('pen');
-    setActiveTab('Draw');
-  }, []);
-
-  useEffect(() => {
-    if (tool !== 'pen' && tool !== 'highlighter' && tool !== 'eraser') {
-      setAnnotateBlockId(null);
-    }
-  }, [tool]);
-  const [editorUpdateTick, setEditorUpdateTick] = useState(0);
-
-  // Viewport state
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
 
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -724,34 +725,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  const stopRecording = async () => {
-    if (!recorderRef.current || !isRecording) return;
-    
-    setIsRecording(false);
-    setIsPaused(false);
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-    }
-
-    const liveTranscript = liveSpeechRecognizer.stop();
-    const nodeId = activeRecordingNodeIdRef.current || uuidv4();
-    try {
-      const result = await recorderRef.current.stop();
-      await uploadAndTranscribeRecording(result, nodeId, liveTranscript);
-    } catch (err: any) {
-      console.error("Error stopping recording:", err);
-      toast.error(err?.message || "Recording stopped unexpectedly.");
-      setAudios(prev => prev.map(a => a.id === nodeId ? { 
-        ...a, 
-        isLiveRecording: false, 
-        isTranscribing: false,
-        summary: `### Recording Error\n\n${err?.message || 'Recording stopped unexpectedly.'}`
-      } : a));
-    } finally {
-      recorderRef.current = null;
-    }
-  };
-
   const uploadAndTranscribeRecording = async (result: RecordingResult, existingNodeId?: string, liveTranscript?: string) => {
     const toastId = toast.loading("Transcribing...");
     setIsTranscribing(true);
@@ -826,12 +799,40 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       setAudios(prev => prev.map(a => a.id === nodeId ? { 
         ...a, 
         isLiveRecording: false, 
-        isTranscribing: false,
+        isTranscribing: false, 
         url: audioUrl,
         summary: `### Audio Saved\n\nAI Transcription failed: ${errMsg}\n\nYou can still listen to your recording above.`
       } : a));
     } finally {
       setIsTranscribing(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recorderRef.current || !isRecording) return;
+    
+    setIsRecording(false);
+    setIsPaused(false);
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+
+    const liveTranscript = liveSpeechRecognizer.stop();
+    const nodeId = activeRecordingNodeIdRef.current || uuidv4();
+    try {
+      const result = await recorderRef.current.stop();
+      await uploadAndTranscribeRecording(result, nodeId, liveTranscript);
+    } catch (err: any) {
+      console.error("Error stopping recording:", err);
+      toast.error(err?.message || "Recording stopped unexpectedly.");
+      setAudios(prev => prev.map(a => a.id === nodeId ? { 
+        ...a, 
+        isLiveRecording: false, 
+        isTranscribing: false,
+        summary: `### Recording Error\n\n${err?.message || 'Recording stopped unexpectedly.'}`
+      } : a));
+    } finally {
+      recorderRef.current = null;
     }
   };
 
@@ -1145,53 +1146,262 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const [isMiddleClickPanning, setIsMiddleClickPanning] = useState(false);
+  const [isSpacePanning, setIsSpacePanning] = useState(false);
+  const [isSpaceDragging, setIsSpaceDragging] = useState(false);
+  const [isDraggingFilesOver, setIsDraggingFilesOver] = useState(false);
+  const mousePosRef = useRef<{ x: number, y: number } | null>(null);
+  const spaceDragStartRef = useRef<{ x: number, y: number, panX: number, panY: number } | null>(null);
 
+  // Smooth Cursor-Anchored Zoom & Pan
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (tool !== "home") return; // SpatialCanvas handles it for other tools
-    
-    // Don't pan if we're scrolling inside a text editor or a scrollable element
+    // Don't pan or zoom if scrolling inside a scrollable text editor
     const target = e.target as HTMLElement;
     if (target.closest('.ProseMirror') && target.scrollHeight > target.clientHeight) {
       return;
     }
 
     if (e.ctrlKey || e.metaKey) {
-      // Zoom (basic center zoom fallback)
-      const scaleBy = 1.05;
-      const newZoom = e.deltaY < 0 ? zoom * scaleBy : zoom / scaleBy;
-      setZoom(Math.max(0.1, Math.min(newZoom, 5)));
+      e.preventDefault();
+      const oldScale = zoom;
+      const pointer = {
+        x: e.clientX,
+        y: e.clientY,
+      };
+
+      const mousePointTo = {
+        x: (pointer.x - pan.x) / oldScale,
+        y: (pointer.y - pan.y) / oldScale,
+      };
+
+      const factor = Math.exp(-e.deltaY * 0.01);
+      const newScale = Math.max(0.1, Math.min(oldScale * factor, 5));
+
+      setZoom(newScale);
+      setPan({
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale,
+      });
     } else {
       // Pan
+      const dx = e.shiftKey ? e.deltaY : e.deltaX;
+      const dy = e.shiftKey ? 0 : e.deltaY;
       setPan(prev => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY
+        x: prev.x - dx,
+        y: prev.y - dy,
       }));
     }
-  }, [tool, zoom]);
+  }, [pan.x, pan.y, zoom]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.button === 1) { // Middle click
+    if (e.button === 1 || isSpacePanning) { // Middle click or Spacebar pan
       e.preventDefault();
       setIsMiddleClickPanning(true);
+      if (isSpacePanning) {
+        setIsSpaceDragging(true);
+        spaceDragStartRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+      }
       document.body.style.cursor = 'grabbing';
     }
-  }, []);
+  }, [isSpacePanning, pan.x, pan.y]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    mousePosRef.current = { x: e.clientX, y: e.clientY };
+
+    if (isSpaceDragging && spaceDragStartRef.current) {
+      const dx = e.clientX - spaceDragStartRef.current.x;
+      const dy = e.clientY - spaceDragStartRef.current.y;
+      setPan({
+        x: spaceDragStartRef.current.panX + dx,
+        y: spaceDragStartRef.current.panY + dy,
+      });
+      return;
+    }
+
     if (isMiddleClickPanning) {
       setPan(prev => ({
         x: prev.x + e.movementX,
         y: prev.y + e.movementY
       }));
     }
-  }, [isMiddleClickPanning]);
+  }, [isMiddleClickPanning, isSpaceDragging]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (isSpaceDragging) {
+      setIsSpaceDragging(false);
+      spaceDragStartRef.current = null;
+      document.body.style.cursor = isSpacePanning ? 'grab' : '';
+      return;
+    }
+
     if (e.button === 1 || isMiddleClickPanning) {
       setIsMiddleClickPanning(false);
-      document.body.style.cursor = '';
+      document.body.style.cursor = isSpacePanning ? 'grab' : '';
     }
-  }, [isMiddleClickPanning]);
+  }, [isMiddleClickPanning, isSpaceDragging, isSpacePanning]);
+
+  // Spacebar pan key listeners
+  useEffect(() => {
+    const handleSpaceKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        const activeEl = document.activeElement;
+        const isInputFocused = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          (activeEl as HTMLElement).isContentEditable
+        );
+        if (!isInputFocused && !e.repeat) {
+          setIsSpacePanning(true);
+          document.body.style.cursor = 'grab';
+        }
+      }
+    };
+
+    const handleSpaceKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePanning(false);
+        setIsSpaceDragging(false);
+        spaceDragStartRef.current = null;
+        document.body.style.cursor = '';
+      }
+    };
+
+    window.addEventListener('keydown', handleSpaceKeyDown);
+    window.addEventListener('keyup', handleSpaceKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleSpaceKeyDown);
+      window.removeEventListener('keyup', handleSpaceKeyUp);
+    };
+  }, []);
+
+  // Global Clipboard Paste (Cmd+V / Ctrl+V) for images and text directly onto canvas
+  useEffect(() => {
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        (activeEl as HTMLElement).isContentEditable
+      );
+      if (isInputFocused) return; // Allow normal paste inside inputs and TipTap editors
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      // Calculate paste position on canvas
+      const screenPos = mousePosRef.current || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      const worldX = (screenPos.x - pan.x) / zoom;
+      const worldY = (screenPos.y - pan.y) / zoom;
+
+      // Check for image in clipboard
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            const toastId = toast.loading("Pasting image...");
+            try {
+              const result = await uploadMediaFile(file, pageId);
+              setImages(prev => [...(prev || []), {
+                id: uuidv4(),
+                x: worldX - 150,
+                y: worldY - 150,
+                url: result.url,
+              }]);
+              toast.success("Image pasted!", { id: toastId });
+            } catch (err: any) {
+              toast.error("Failed to paste image: " + err.message, { id: toastId });
+            }
+            return;
+          }
+        }
+      }
+
+      // Check for plain text
+      const pastedText = e.clipboardData?.getData('text/plain');
+      if (pastedText && pastedText.trim().length > 0) {
+        e.preventDefault();
+        const snapY = backgroundStyle === 'ruled' || backgroundStyle === 'grid' ? Math.round(worldY / 32) * 32 : worldY;
+        const newId = uuidv4();
+        const htmlContent = pastedText.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('');
+        setTexts(prev => [...prev, {
+          id: newId,
+          x: worldX,
+          y: snapY,
+          width: 600,
+          content: htmlContent,
+        }]);
+        setSelectedIds([newId]);
+        toast.success("Text pasted!");
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [pan.x, pan.y, zoom, pageId, backgroundStyle, setImages, setTexts, setSelectedIds]);
+
+  // Drag-and-drop file upload directly onto canvas
+  const handleCanvasDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingFilesOver(false);
+
+    const filesList = Array.from(e.dataTransfer.files);
+    if (filesList.length === 0) return;
+
+    const dropX = (e.clientX - pan.x) / zoom;
+    const dropY = (e.clientY - pan.y) / zoom;
+
+    for (let i = 0; i < filesList.length; i++) {
+      const file = filesList[i];
+      const offsetX = i * 30;
+      const offsetY = i * 30;
+
+      if (file.type.startsWith('image/')) {
+        const toastId = toast.loading(`Uploading image ${file.name}...`);
+        try {
+          const res = await uploadMediaFile(file, pageId);
+          setImages(prev => [...(prev || []), {
+            id: uuidv4(),
+            x: dropX - 150 + offsetX,
+            y: dropY - 150 + offsetY,
+            url: res.url,
+          }]);
+          toast.success(`Image ${file.name} added!`, { id: toastId });
+        } catch (err: any) {
+          toast.error(`Upload failed: ${err.message}`, { id: toastId });
+        }
+      } else if (file.type.startsWith('audio/')) {
+        const toastId = toast.loading(`Uploading audio ${file.name}...`);
+        try {
+          const res = await uploadMediaFile(file, pageId);
+          setAudios(prev => [...(prev || []), {
+            id: uuidv4(),
+            x: dropX - 160 + offsetX,
+            y: dropY - 40 + offsetY,
+            url: res.url,
+            title: file.name,
+          }]);
+          toast.success(`Audio ${file.name} added!`, { id: toastId });
+        } catch (err: any) {
+          toast.error(`Upload failed: ${err.message}`, { id: toastId });
+        }
+      } else {
+        const toastId = toast.loading(`Uploading file ${file.name}...`);
+        try {
+          const res = await uploadMediaFile(file, pageId);
+          setFiles(prev => [...(prev || []), {
+            id: uuidv4(),
+            x: dropX - 128 + offsetX,
+            y: dropY - 32 + offsetY,
+            url: res.url,
+            filename: file.name,
+          }]);
+          toast.success(`File ${file.name} added!`, { id: toastId });
+        } catch (err: any) {
+          toast.error(`Upload failed: ${err.message}`, { id: toastId });
+        }
+      }
+    }
+  }, [pan.x, pan.y, zoom, pageId, setImages, setAudios, setFiles]);
 
   // Keyboard Shortcuts for Undo/Redo and Deletion
   useEffect(() => {
@@ -1243,6 +1453,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setIsDraggingFilesOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setIsDraggingFilesOver(false);
+        }
+      }}
+      onDrop={handleCanvasDrop}
     >
       
       {/* Top Ribbon Container */}
@@ -1473,6 +1694,15 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     title="Numbered List"
                   >
                     <ListOrdered size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => (activeEditor?.chain().focus() as any)?.toggleTaskList().run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${(activeEditor as any)?.isActive('taskList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    title="To-Do List (Checkboxes)"
+                  >
+                    <CheckSquare size={14} />
                   </button>
                 </div>
               </div>
@@ -2143,6 +2373,19 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           </>
         );
       })()}
+
+      {/* Drag & Drop Overlay */}
+      {isDraggingFilesOver && (
+        <div className="absolute inset-0 z-50 bg-primary-500/10 dark:bg-primary-500/20 backdrop-blur-xs border-4 border-dashed border-primary-500 rounded-lg flex flex-col items-center justify-center pointer-events-none transition-all">
+          <div className="bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl p-6 flex flex-col items-center gap-3 border border-primary-200 dark:border-primary-800">
+            <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400">
+              <Upload size={24} />
+            </div>
+            <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Drop files anywhere to add to canvas</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Supports images, audio recordings, documents, and PDFs</p>
+          </div>
+        </div>
+      )}
 
       {showMinimap && (
         <Minimap

@@ -130,11 +130,11 @@ Return ONLY valid JSON matching this schema:
       ? `${prompt}\n\nOPTIONAL REFERENCE: Real-time on-device speech transcript captured during recording:\n"""\n${liveTranscript.trim()}\n"""\nUse the audio recording as your primary ground truth, but reference this to ensure accurate names, technical vocabulary, and verbatim coverage.`
       : prompt;
 
-    // 3. Generate Content with multi-model failover (gemini-3.8-flash -> gemini-2.5-flash -> gemini-2.0-flash)
+    // 3. Generate Content with multi-model failover (gemini-2.5-flash -> gemini-2.0-flash)
     let result: any;
     try {
       result = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [
           audioPart,
           { text: promptWithReference }
@@ -145,33 +145,18 @@ Return ONLY valid JSON matching this schema:
         }
       });
     } catch (primaryErr: any) {
-      console.warn("gemini-3.8-flash error, falling back to gemini-2.5-flash:", primaryErr?.message);
-      try {
-        result = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: [
-            audioPart,
-            { text: prompt }
-          ],
-          config: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          }
-        });
-      } catch (secondaryErr: any) {
-        console.warn("gemini-2.5-flash error, falling back to gemini-2.0-flash:", secondaryErr?.message);
-        result = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: [
-            audioPart,
-            { text: prompt }
-          ],
-          config: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          }
-        });
-      }
+      console.warn("gemini-2.5-flash error, falling back to gemini-2.0-flash:", primaryErr?.message);
+      result = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: [
+          audioPart,
+          { text: promptWithReference }
+        ],
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        }
+      });
     }
 
     const responseText: string = (result as any).text || '';

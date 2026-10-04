@@ -43,13 +43,13 @@ DO NOT wrap the HTML in markdown code blocks (e.g. \`\`\`html). Just output the 
     let response: any;
     try {
       response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contents,
       });
     } catch (primaryErr: any) {
-      console.warn("gemini-3.8-flash organize failed, falling back to gemini-2.5-flash:", primaryErr?.message);
+      console.warn("gemini-2.5-flash organize failed, falling back to gemini-2.0-flash:", primaryErr?.message);
       response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         contents: contents,
       });
     }

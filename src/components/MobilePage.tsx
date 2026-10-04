@@ -245,6 +245,131 @@ interface MobilePageProps {
 export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting, onOpenSettings, isJournal }: MobilePageProps) {
   const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
+
+  // Group blocks and strokes
+  const sortedBlocks = useMemo(() => {
+    const baseBlocks = [
+      ...texts.map(t => ({ ...t, type: 'text' as const, attachedStrokes: [] as Stroke[] })),
+      ...(audios || []).map(a => ({ ...a, type: 'audio' as const, attachedStrokes: [] as Stroke[] })),
+      ...(images || []).map(i => ({ ...i, type: 'image' as const, attachedStrokes: [] as Stroke[] })),
+      ...(files || []).map(f => ({ ...f, type: 'file' as const, attachedStrokes: [] as Stroke[] })),
+      ...(videos || []).map(v => ({ ...v, type: 'video' as const, attachedStrokes: [] as Stroke[] }))
+    ];
+
+    // 1. Separate strokes attached to content blocks vs standalone sketch strokes
+    const standaloneStrokes: Stroke[] = [];
+
+    strokes.forEach((stroke: Stroke) => {
+      if (!stroke.points || stroke.points.length === 0) return;
+      
+      if (stroke.blockId) {
+        const baseBlock = baseBlocks.find(b => b.id === stroke.blockId);
+        if (baseBlock) {
+          baseBlock.attachedStrokes.push(stroke);
+          return;
+        }
+      }
+      
+      standaloneStrokes.push(stroke);
+    });
+
+    // 2. Group standalone strokes into a single unified map
+    const sketchBlocksMap = new Map<string, any>();
+    const unclusteredStrokes: Stroke[] = [];
+
+    standaloneStrokes.forEach((stroke: Stroke) => {
+      if (stroke.blockId) {
+        const box = getStrokeBoundingBox(stroke);
+        if (!sketchBlocksMap.has(stroke.blockId)) {
+          sketchBlocksMap.set(stroke.blockId, {
+            type: 'drawing',
+            id: stroke.blockId,
+            x: stroke.x || 50,
+            y: stroke.blockY ?? stroke.y ?? box.minY ?? 0,
+            minX: box.minX,
+            minY: box.minY,
+            maxX: box.maxX,
+            maxY: box.maxY,
+            width: Math.max(box.maxX - box.minX, 300),
+            height: Math.max(box.maxY - box.minY, 150),
+            attachedStrokes: [stroke]
+          });
+        } else {
+          const sBlock = sketchBlocksMap.get(stroke.blockId)!;
+          sBlock.attachedStrokes.push(stroke);
+          if (stroke.blockY !== undefined && sBlock.y === sBlock.minY) {
+            sBlock.y = stroke.blockY;
+          }
+          const box = getStrokeBoundingBox(stroke);
+          sBlock.minX = Math.min(sBlock.minX, box.minX);
+          sBlock.minY = Math.min(sBlock.minY, box.minY);
+          sBlock.maxX = Math.max(sBlock.maxX, box.maxX);
+          sBlock.maxY = Math.max(sBlock.maxY, box.maxY);
+          sBlock.width = Math.max(sBlock.maxX - sBlock.minX, 300);
+          sBlock.height = Math.max(sBlock.maxY - sBlock.minY, 150);
+        }
+      } else {
+        unclusteredStrokes.push(stroke);
+      }
+    });
+
+    // 3. Cluster legacy unattached strokes without blockId into sketchBlocksMap
+    unclusteredStrokes.forEach((stroke: Stroke) => {
+      const box = getStrokeBoundingBox(stroke);
+      const padding = 60;
+      const expandedBox = {
+        minX: box.minX - padding,
+        minY: box.minY - padding,
+        maxX: box.maxX + padding,
+        maxY: box.maxY + padding
+      };
+      
+      const overlappingCluster = Array.from(sketchBlocksMap.values()).find(c => getIntersectionArea(expandedBox, c) > 0);
+      
+      if (overlappingCluster) {
+        overlappingCluster.attachedStrokes.push(stroke);
+        overlappingCluster.minX = Math.min(overlappingCluster.minX, box.minX);
+        overlappingCluster.minY = Math.min(overlappingCluster.minY, box.minY);
+        overlappingCluster.maxX = Math.max(overlappingCluster.maxX, box.maxX);
+        overlappingCluster.maxY = Math.max(overlappingCluster.maxY, box.maxY);
+        overlappingCluster.x = overlappingCluster.minX;
+        overlappingCluster.y = overlappingCluster.minY;
+        overlappingCluster.width = Math.max(overlappingCluster.maxX - overlappingCluster.minX, 300);
+        overlappingCluster.height = Math.max(overlappingCluster.maxY - overlappingCluster.minY, 150);
+      } else {
+        const newBlockId = `sketch-${stroke.id}`;
+        sketchBlocksMap.set(newBlockId, {
+          type: 'drawing',
+          id: newBlockId,
+          x: box.minX,
+          y: box.minY,
+          minX: box.minX,
+          minY: box.minY,
+          maxX: box.maxX,
+          maxY: box.maxY,
+          width: Math.max(box.maxX - box.minX, 300),
+          height: Math.max(box.maxY - box.minY, 150),
+          attachedStrokes: [stroke]
+        });
+      }
+    });
+
+    // 4. Combine all blocks - guarantees 100% unique IDs across all blocks
+    const finalBlocks = [...baseBlocks, ...Array.from(sketchBlocksMap.values())];
+    return finalBlocks.sort((a, b) => {
+      if (Math.abs(a.y - b.y) > 10) return a.y - b.y; // 10px tolerance for vertical alignment
+      return a.x - b.x;
+    });
+  }, [texts, audios, images, files, videos, strokes]);
+
+  useEffect(() => {
+    if (sortedBlocks.length > 0) {
+      setBottomY(sortedBlocks[sortedBlocks.length - 1].y + 200);
+    } else {
+      setBottomY(100);
+    }
+  }, [sortedBlocks]);
+
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   
   const [isInternalSettingsOpen, setIsInternalSettingsOpen] = useState(false);
@@ -660,129 +785,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     }
   };
 
-  // Group blocks and strokes
-  const sortedBlocks = useMemo(() => {
-    const baseBlocks = [
-      ...texts.map(t => ({ ...t, type: 'text' as const, attachedStrokes: [] as Stroke[] })),
-      ...(audios || []).map(a => ({ ...a, type: 'audio' as const, attachedStrokes: [] as Stroke[] })),
-      ...(images || []).map(i => ({ ...i, type: 'image' as const, attachedStrokes: [] as Stroke[] })),
-      ...(files || []).map(f => ({ ...f, type: 'file' as const, attachedStrokes: [] as Stroke[] })),
-      ...(videos || []).map(v => ({ ...v, type: 'video' as const, attachedStrokes: [] as Stroke[] }))
-    ];
-
-    // 1. Separate strokes attached to content blocks vs standalone sketch strokes
-    const standaloneStrokes: Stroke[] = [];
-
-    strokes.forEach((stroke: Stroke) => {
-      if (!stroke.points || stroke.points.length === 0) return;
-      
-      if (stroke.blockId) {
-        const baseBlock = baseBlocks.find(b => b.id === stroke.blockId);
-        if (baseBlock) {
-          baseBlock.attachedStrokes.push(stroke);
-          return;
-        }
-      }
-      
-      standaloneStrokes.push(stroke);
-    });
-
-    // 2. Group standalone strokes into a single unified map
-    const sketchBlocksMap = new Map<string, any>();
-    const unclusteredStrokes: Stroke[] = [];
-
-    standaloneStrokes.forEach((stroke: Stroke) => {
-      if (stroke.blockId) {
-        const box = getStrokeBoundingBox(stroke);
-        if (!sketchBlocksMap.has(stroke.blockId)) {
-          sketchBlocksMap.set(stroke.blockId, {
-            type: 'drawing',
-            id: stroke.blockId,
-            x: stroke.x || 50,
-            y: stroke.blockY ?? stroke.y ?? box.minY ?? 0,
-            minX: box.minX,
-            minY: box.minY,
-            maxX: box.maxX,
-            maxY: box.maxY,
-            width: Math.max(box.maxX - box.minX, 300),
-            height: Math.max(box.maxY - box.minY, 150),
-            attachedStrokes: [stroke]
-          });
-        } else {
-          const sBlock = sketchBlocksMap.get(stroke.blockId)!;
-          sBlock.attachedStrokes.push(stroke);
-          if (stroke.blockY !== undefined && sBlock.y === sBlock.minY) {
-            sBlock.y = stroke.blockY;
-          }
-          const box = getStrokeBoundingBox(stroke);
-          sBlock.minX = Math.min(sBlock.minX, box.minX);
-          sBlock.minY = Math.min(sBlock.minY, box.minY);
-          sBlock.maxX = Math.max(sBlock.maxX, box.maxX);
-          sBlock.maxY = Math.max(sBlock.maxY, box.maxY);
-          sBlock.width = Math.max(sBlock.maxX - sBlock.minX, 300);
-          sBlock.height = Math.max(sBlock.maxY - sBlock.minY, 150);
-        }
-      } else {
-        unclusteredStrokes.push(stroke);
-      }
-    });
-
-    // 3. Cluster legacy unattached strokes without blockId into sketchBlocksMap
-    unclusteredStrokes.forEach((stroke: Stroke) => {
-      const box = getStrokeBoundingBox(stroke);
-      const padding = 60;
-      const expandedBox = {
-        minX: box.minX - padding,
-        minY: box.minY - padding,
-        maxX: box.maxX + padding,
-        maxY: box.maxY + padding
-      };
-      
-      const overlappingCluster = Array.from(sketchBlocksMap.values()).find(c => getIntersectionArea(expandedBox, c) > 0);
-      
-      if (overlappingCluster) {
-        overlappingCluster.attachedStrokes.push(stroke);
-        overlappingCluster.minX = Math.min(overlappingCluster.minX, box.minX);
-        overlappingCluster.minY = Math.min(overlappingCluster.minY, box.minY);
-        overlappingCluster.maxX = Math.max(overlappingCluster.maxX, box.maxX);
-        overlappingCluster.maxY = Math.max(overlappingCluster.maxY, box.maxY);
-        overlappingCluster.x = overlappingCluster.minX;
-        overlappingCluster.y = overlappingCluster.minY;
-        overlappingCluster.width = Math.max(overlappingCluster.maxX - overlappingCluster.minX, 300);
-        overlappingCluster.height = Math.max(overlappingCluster.maxY - overlappingCluster.minY, 150);
-      } else {
-        const newBlockId = `sketch-${stroke.id}`;
-        sketchBlocksMap.set(newBlockId, {
-          type: 'drawing',
-          id: newBlockId,
-          x: box.minX,
-          y: box.minY,
-          minX: box.minX,
-          minY: box.minY,
-          maxX: box.maxX,
-          maxY: box.maxY,
-          width: Math.max(box.maxX - box.minX, 300),
-          height: Math.max(box.maxY - box.minY, 150),
-          attachedStrokes: [stroke]
-        });
-      }
-    });
-
-    // 4. Combine all blocks - guarantees 100% unique IDs across all blocks
-    const finalBlocks = [...baseBlocks, ...Array.from(sketchBlocksMap.values())];
-    return finalBlocks.sort((a, b) => {
-      if (Math.abs(a.y - b.y) > 10) return a.y - b.y; // 10px tolerance for vertical alignment
-      return a.x - b.x;
-    });
-  }, [texts, audios, images, files, videos, strokes]);
-
-  useEffect(() => {
-    if (sortedBlocks.length > 0) {
-      setBottomY(sortedBlocks[sortedBlocks.length - 1].y + 200);
-    } else {
-      setBottomY(100);
-    }
-  }, [sortedBlocks]);
 
   const addTextBlock = () => {
     const targetY = isJournal 

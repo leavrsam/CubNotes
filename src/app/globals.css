@@ -81,3 +81,42 @@ li:has(span[style*="#000000"]), li:has(span[style*="rgb(0, 0, 0)"]) {
 .animate-glow-sweep {
   animation: glow-sweep 2.4s ease-in-out infinite;
 }
+
+/* TipTap TaskList / Checkbox Styles */
+ul[data-type="taskList"] {
+  list-style: none !important;
+  padding-left: 0 !important;
+  margin: 0 !important;
+}
+
+ul[data-type="taskList"] li {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 0.5rem !important;
+  margin: 0.125rem 0 !important;
+  line-height: 1.5 !important;
+}
+
+ul[data-type="taskList"] li > label {
+  flex: 0 0 auto !important;
+  margin-top: 0.25rem !important;
+  user-select: none !important;
+  cursor: pointer !important;
+}
+
+ul[data-type="taskList"] li > label input[type="checkbox"] {
+  cursor: pointer !important;
+  accent-color: var(--primary-600, #4f46e5) !important;
+  width: 1rem !important;
+  height: 1rem !important;
+  border-radius: 0.25rem !important;
+}
+
+ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through !important;
+  opacity: 0.6 !important;
+}
+
+ul[data-type="taskList"] li > div {
+  flex: 1 1 auto !important;
+}

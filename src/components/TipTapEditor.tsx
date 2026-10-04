@@ -13,10 +13,13 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
+import Underline from '@tiptap/extension-underline';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
 import { Extension } from "@tiptap/core";
 import { 
   Trash2, Bold, Italic, Underline as UnderlineIcon, 
-  Heading1, Heading2, List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
+  Heading1, Heading2, List, ListOrdered, CheckSquare, AlignLeft, AlignCenter, AlignRight,
   Highlighter, ChevronDown
 } from "lucide-react";
 
@@ -208,6 +211,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       Color,
       FontFamily,
       Highlight.configure({ multicolor: true }),
+      Underline,
       FontSize,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TabIndent,
@@ -215,6 +219,10 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       TableRow,
       TableHeader,
       TableCell,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
     ],
     content: content,
     onUpdate: ({ editor }) => {
@@ -454,6 +462,15 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
             title="Numbered List"
           >
             <ListOrdered size={14} />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => (editor.chain().focus() as any).toggleTaskList().run()}
+            className={`p-2 hover:bg-zinc-700 ${(editor as any).isActive('taskList') ? 'bg-zinc-800 text-primary-400' : ''}`}
+            title="To-Do List (Checkboxes)"
+          >
+            <CheckSquare size={14} />
           </button>
           
           <div className="w-px h-6 bg-zinc-700 self-center mx-1" />

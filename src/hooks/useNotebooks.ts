@@ -46,26 +46,7 @@ export function useNotebooks() {
   const inFlightNewPagesRef = useRef<Map<string, Page>>(new Map());
   const inFlightDeletedIdsRef = useRef<Set<string>>(new Set());
 
-  // Monitor network status
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const updateOnlineStatus = () => {
-      const offline = !navigator.onLine;
-      setIsOffline(offline);
-      if (!offline) {
-        // Reconnected to internet, fetch fresh data
-        fetchNotebooks();
-      }
-    };
 
-    setIsOffline(!navigator.onLine);
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    return () => {
-      window.removeEventListener('online', updateOnlineStatus);
-      window.removeEventListener('offline', updateOnlineStatus);
-    };
-  }, []);
 
   const fetchNotebooks = useCallback(async () => {
     // Prevent concurrent fetches from causing cascading re-renders
@@ -198,6 +179,27 @@ export function useNotebooks() {
       setLoading(false);
     }
   }, [supabase]);
+
+  // Monitor network status
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const updateOnlineStatus = () => {
+      const offline = !navigator.onLine;
+      setIsOffline(offline);
+      if (!offline) {
+        // Reconnected to internet, fetch fresh data
+        fetchNotebooks();
+      }
+    };
+
+    setIsOffline(!navigator.onLine);
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
+    };
+  }, [fetchNotebooks]);
 
   useEffect(() => {
     // 1. Instant zero-latency load from local IndexedDB cache
