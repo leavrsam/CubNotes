@@ -23,6 +23,7 @@ import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, Wi
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
+import { CommandPalette } from "@/components/CommandPalette";
 import { uploadMediaFile } from "@/lib/storage";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
@@ -56,6 +57,7 @@ export default function Home() {
   const [mobileSectionId, setMobileSectionId] = useState<string | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   
   // State tracking refs for popstate and backButton handlers
   const selectedPageIdRef = useRef<string | null>(null);
@@ -158,6 +160,65 @@ export default function Home() {
       setIsSettingsOpen(false);
     }
   };
+
+  const handleToggleFullscreen = () => {
+    const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    try {
+      if (isDesktop) {
+        const appWindow = getCurrentWindow();
+        appWindow.isFullscreen().then(isFs => {
+          appWindow.setFullscreen(!isFs).then(() => {
+            setIsFullscreen(!isFs);
+          });
+        });
+      } else {
+        const docEl = document.documentElement as any;
+        const doc = document as any;
+        
+        if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().then(() => setIsFullscreen(true)).catch((err: any) => {
+              toast.error("Fullscreen error: " + err.message);
+            });
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+            setIsFullscreen(true);
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+            setIsFullscreen(true);
+          }
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().then(() => setIsFullscreen(false));
+          } else if (doc.webkitExitFullscreen) {
+            doc.webkitExitFullscreen();
+            setIsFullscreen(false);
+          } else if (doc.msExitFullscreen) {
+            doc.msExitFullscreen();
+            setIsFullscreen(false);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Fullscreen error:', err);
+    }
+  };
+
+  // Universal Keyboard Shortcuts (Cmd+K for Command Palette, Cmd+B for Sidebar)
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, []);
 
   const handleSelectSection = (id: string) => {
     setMobileSectionId(id);
@@ -590,6 +651,7 @@ export default function Home() {
               setIsSidebarOpen(false);
               handleOpenSettings();
             }}
+            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             user={currentUser}
           />
         </div>
@@ -650,46 +712,7 @@ export default function Home() {
                   <button
                     onClick={(e) => {
                       e.preventDefault();
-                      const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-                      try {
-                        if (isDesktop) {
-                          // Tauri uses async API, but we don't await the parent onClick
-                          const appWindow = getCurrentWindow();
-                          appWindow.isFullscreen().then(isFs => {
-                            appWindow.setFullscreen(!isFs).then(() => {
-                              setIsFullscreen(!isFs);
-                            });
-                          });
-                        } else {
-                          const docEl = document.documentElement as any;
-                          const doc = document as any;
-                          
-                          if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
-                            if (docEl.requestFullscreen) {
-                              docEl.requestFullscreen().catch((err: any) => {
-                                toast.error("Fullscreen error: " + err.message);
-                              });
-                            } else if (docEl.webkitRequestFullscreen) {
-                              docEl.webkitRequestFullscreen();
-                            } else if (docEl.msRequestFullscreen) {
-                              docEl.msRequestFullscreen();
-                            } else {
-                              toast.error("No fullscreen API found");
-                            }
-                          } else {
-                            if (document.exitFullscreen) {
-                              document.exitFullscreen();
-                            } else if (doc.webkitExitFullscreen) {
-                              doc.webkitExitFullscreen();
-                            } else if (doc.msExitFullscreen) {
-                              doc.msExitFullscreen();
-                            }
-                          }
-                        }
-                      } catch (err: any) {
-                        console.error('Fullscreen error:', err);
-                        toast.error("Catch: " + (err.message || 'Fullscreen not supported'));
-                      }
+                      handleToggleFullscreen();
                     }}
                     className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
                     title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen"}
@@ -794,6 +817,63 @@ export default function Home() {
           setSelectedPageId(null);
           await deletePage(id);
         }}
+      />
+
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        notebooks={notebooks}
+        selectedPageId={selectedPageId}
+        onSelectPage={(pageId) => {
+          setSelectedPageId(pageId);
+          if (window.innerWidth < 768) setIsSidebarOpen(false);
+        }}
+        onAddPage={async () => {
+          let targetSectionId = null;
+          if (selectedPageId) {
+            for (const nb of notebooks) {
+              for (const sec of nb.sections || []) {
+                if ((sec.pages || []).some(p => p.id === selectedPageId)) {
+                  targetSectionId = sec.id;
+                  break;
+                }
+              }
+              if (targetSectionId) break;
+            }
+          }
+          if (!targetSectionId && notebooks[0]?.sections?.[0]?.id) {
+            targetSectionId = notebooks[0].sections[0].id;
+          }
+          if (targetSectionId) {
+            const page = await addPage(targetSectionId, "New Page");
+            if (page?.id) setSelectedPageId(page.id);
+          } else if (notebooks[0]) {
+            const sec = await addSection(notebooks[0].id, "Quick Notes");
+            if (sec?.id) {
+              const page = await addPage(sec.id, "New Page");
+              if (page?.id) setSelectedPageId(page.id);
+            }
+          }
+        }}
+        onAddSection={async () => {
+          const targetNbId = activeNotebookId || notebooks[0]?.id;
+          if (targetNbId) {
+            const sec = await addSection(targetNbId, "New Section");
+            if (sec?.id) {
+              const page = await addPage(sec.id, "New Page");
+              if (page?.id) setSelectedPageId(page.id);
+            }
+          }
+        }}
+        onAddNotebook={async () => {
+          const res = await addNotebook("New Notebook");
+          if (res?.pageId) setSelectedPageId(res.pageId);
+        }}
+        onToggleMeeting={handleToggleMeeting}
+        isRecording={isAnyRecording}
+        onToggleFullscreen={handleToggleFullscreen}
+        onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+        onOpenSettings={handleOpenSettings}
       />
     </main>
   );

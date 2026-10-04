@@ -120,3 +120,21 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 ul[data-type="taskList"] li > div {
   flex: 1 1 auto !important;
 }
+
+/* Hyperlink styling */
+.ProseMirror a {
+  color: #3b82f6;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.dark .ProseMirror a {
+  color: #60a5fa;
+}
+
+.ProseMirror a:hover {
+  opacity: 0.8;
+}
+

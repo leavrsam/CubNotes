@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose } from "lucide-react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 
 interface SidebarProps {
@@ -20,6 +20,7 @@ interface SidebarProps {
   onDeletePage: (id: string) => void;
   onClose?: () => void;
   onOpenSettings?: () => void;
+  onOpenCommandPalette?: () => void;
   onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
   user?: any;
 }
@@ -104,6 +105,22 @@ export function Sidebar(props: SidebarProps) {
             )}
           </div>
         </div>
+
+        {props.onOpenCommandPalette && (
+          <button
+            onClick={props.onOpenCommandPalette}
+            className="flex items-center justify-between w-full mt-2 px-2.5 py-1.5 rounded-md bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+            title="Command Palette (Cmd+K)"
+          >
+            <span className="flex items-center gap-1.5">
+              <Command size={12} className="text-zinc-500" />
+              <span>Command Palette</span>
+            </span>
+            <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 font-mono">
+              ⌘K
+            </kbd>
+          </button>
+        )}
       </div>
 
       {searchResults.length > 0 && (
@@ -221,9 +238,9 @@ function EditableItem({
 }
 
 function ItemActions({ 
-  onEdit, onDelete, onAdd, addTitle, onToggleJournal, isJournal 
+  onEdit, onDelete, onAdd, addTitle, onToggleJournal, isJournal, onOpenColorPicker 
 }: { 
-  onEdit: () => void, onDelete: () => void, onAdd?: () => void, addTitle?: string, onToggleJournal?: () => void, isJournal?: boolean 
+  onEdit: () => void, onDelete: () => void, onAdd?: () => void, addTitle?: string, onToggleJournal?: () => void, isJournal?: boolean, onOpenColorPicker?: () => void 
 }) {
   return (
     <div className="flex md:hidden md:group-hover:flex items-center absolute right-2 bg-zinc-800 rounded shadow-lg border border-zinc-700">
@@ -236,8 +253,17 @@ function ItemActions({
           <BookOpen size={14} />
         </button>
       )}
+      {onOpenColorPicker && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); onOpenColorPicker(); }} 
+          className="p-1 hover:bg-zinc-700 hover:text-white text-zinc-400" 
+          title="Section Color"
+        >
+          <Palette size={14} />
+        </button>
+      )}
       {onAdd && (
-        <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className={`p-1 hover:bg-zinc-700 hover:text-white ${!onToggleJournal ? 'rounded-l' : ''} text-zinc-400`} title={addTitle}>
+        <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className={`p-1 hover:bg-zinc-700 hover:text-white ${!onToggleJournal && !onOpenColorPicker ? 'rounded-l' : ''} text-zinc-400`} title={addTitle}>
           <Plus size={14} />
         </button>
       )}
@@ -328,6 +354,17 @@ function NotebookItem({
   );
 }
 
+export const SECTION_COLORS = [
+  { name: 'Purple', hex: '#a855f7' },
+  { name: 'Blue', hex: '#3b82f6' },
+  { name: 'Teal', hex: '#14b8a6' },
+  { name: 'Green', hex: '#22c55e' },
+  { name: 'Amber', hex: '#f59e0b' },
+  { name: 'Coral', hex: '#ef4444' },
+  { name: 'Pink', hex: '#ec4899' },
+  { name: 'Indigo', hex: '#6366f1' },
+];
+
 function SectionItem({
   section, selectedPageId, onSelectPage,
   onAddPage, onUpdate, onDelete,
@@ -335,6 +372,38 @@ function SectionItem({
 }: any) {
   const [expanded, setExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+
+  const [sectionColor, setSectionColor] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`cubnotes_sec_color_${section.id}`);
+      if (saved) return saved;
+    }
+    let hash = 0;
+    for (let i = 0; i < section.id.length; i++) hash = (hash << 5) - hash + section.id.charCodeAt(i);
+    return SECTION_COLORS[Math.abs(hash) % SECTION_COLORS.length].hex;
+  });
+
+  useEffect(() => {
+    if (!showColorPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColorPicker]);
+
+  const handleSelectColor = (hex: string) => {
+    setSectionColor(hex);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`cubnotes_sec_color_${section.id}`, hex);
+      window.dispatchEvent(new CustomEvent('cubnotes:section_color_changed', { detail: { sectionId: section.id, color: hex } }));
+    }
+    setShowColorPicker(false);
+  };
 
   return (
     <div className="space-y-1">
@@ -350,9 +419,39 @@ function SectionItem({
           <div className="w-4 flex items-center justify-center">
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </div>
-          <Folder size={14} className="text-zinc-400 flex-shrink-0" />
+          <div className="relative flex items-center">
+            <Folder size={14} style={{ color: sectionColor }} className="flex-shrink-0" />
+            <div 
+              className="w-1.5 h-1.5 rounded-full absolute -top-0.5 -right-0.5 shadow-xs" 
+              style={{ backgroundColor: sectionColor }}
+            />
+          </div>
           <span className="truncate flex-1 text-left text-zinc-300">{section.title}</span>
-          <ItemActions onEdit={() => setIsEditing(true)} onDelete={onDelete} onAdd={() => { setExpanded(true); onAddPage(); }} addTitle="Add Page" />
+          <ItemActions 
+            onEdit={() => setIsEditing(true)} 
+            onDelete={onDelete} 
+            onAdd={() => { setExpanded(true); onAddPage(); }} 
+            addTitle="Add Page" 
+            onOpenColorPicker={() => setShowColorPicker(prev => !prev)}
+          />
+
+          {showColorPicker && (
+            <div 
+              ref={colorPickerRef}
+              onClick={e => e.stopPropagation()}
+              className="absolute right-0 top-full mt-1 z-50 p-2 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl grid grid-cols-4 gap-1.5"
+            >
+              {SECTION_COLORS.map(c => (
+                <button
+                  key={c.hex}
+                  onClick={() => handleSelectColor(c.hex)}
+                  title={c.name}
+                  className={`w-5 h-5 rounded-full border transition-transform hover:scale-110 ${sectionColor === c.hex ? 'border-white ring-2 ring-white/30' : 'border-white/20'}`}
+                  style={{ backgroundColor: c.hex }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </EditableItem>
 
@@ -366,6 +465,7 @@ function SectionItem({
               onSelect={() => onSelectPage(page.id)}
               onUpdate={(title: string) => onUpdatePage(page.id, title)}
               onDelete={() => onDeletePage(page.id)}
+              sectionColor={sectionColor}
             />
           ))}
           <button 
@@ -380,7 +480,7 @@ function SectionItem({
   );
 }
 
-function PageItem({ page, selected, onSelect, onUpdate, onDelete }: any) {
+function PageItem({ page, selected, onSelect, onUpdate, onDelete, sectionColor }: any) {
   const [isEditing, setIsEditing] = useState(false);
 
   return (
@@ -393,11 +493,12 @@ function PageItem({ page, selected, onSelect, onUpdate, onDelete }: any) {
         onClick={onSelect}
         className={`group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
           selected
-            ? "bg-primary-500/10 text-primary-300 font-medium"
+            ? "bg-zinc-800/90 text-white font-medium"
             : "hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200"
         }`}
+        style={selected && sectionColor ? { borderLeft: `3px solid ${sectionColor}`, paddingLeft: '6px' } : undefined}
       >
-        <FileText size={14} className="flex-shrink-0" />
+        <FileText size={14} className="flex-shrink-0" style={selected && sectionColor ? { color: sectionColor } : undefined} />
         <div className="flex flex-col items-start overflow-hidden flex-1">
           <span className="truncate w-full text-left">{page.title}</span>
           {page.is_journal_entry && (
