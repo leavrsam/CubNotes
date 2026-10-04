@@ -284,6 +284,35 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     return Math.max(1, count);
   }, [texts, audios, isJournal]);
 
+  // Auto-resolve vertical block collisions on desktop canvas (prevents images from covering text)
+  useEffect(() => {
+    if (loading || !texts || !images || images.length === 0 || texts.length === 0) return;
+
+    let hasOverlap = false;
+    const adjustedTexts = [...texts];
+
+    images.forEach(img => {
+      const imgWidth = img.width || 400;
+      const imgHeight = img.height || 350;
+      const imgBottom = img.y + imgHeight;
+
+      adjustedTexts.forEach((txt, idx) => {
+        const txtWidth = txt.width || 400;
+        const hOverlap = Math.max(0, Math.min(img.x + imgWidth, txt.x + txtWidth) - Math.max(img.x, txt.x));
+        if (hOverlap > 80) {
+          if (txt.y >= img.y - 20 && txt.y < imgBottom) {
+            adjustedTexts[idx] = { ...txt, y: imgBottom + 32 };
+            hasOverlap = true;
+          }
+        }
+      });
+    });
+
+    if (hasOverlap) {
+      setTexts(adjustedTexts);
+    }
+  }, [loading, images, texts.length]);
+
   // View state
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
   const [pageColor, setPageColor] = useState<string>('default');
@@ -641,7 +670,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           filename: file.name
         }]);
       }
-      toast.success(`${type} uploaded (${result.storage === 'r2' ? 'Cloudflare R2' : 'Storage'})!`, { id: toastId });
+      toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully!`, { id: toastId });
     } catch (error: any) {
       toast.error(`Upload failed: ${error.message}`, { id: toastId });
     } finally {

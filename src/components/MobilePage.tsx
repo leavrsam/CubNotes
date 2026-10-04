@@ -364,7 +364,15 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
   useEffect(() => {
     if (sortedBlocks.length > 0) {
-      setBottomY(sortedBlocks[sortedBlocks.length - 1].y + 200);
+      const last = sortedBlocks[sortedBlocks.length - 1];
+      let height = last.height || (last.type === 'image' ? 400 : 180);
+      if (typeof document !== 'undefined') {
+        const el = document.getElementById(`block-${last.id}`);
+        if (el && el.offsetHeight > 0) {
+          height = el.offsetHeight;
+        }
+      }
+      setBottomY((last.y ?? 0) + height + 32);
     } else {
       setBottomY(100);
     }
@@ -409,8 +417,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
   // Rearrange / Reorder State
   const [isRearranging, setIsRearranging] = useState(false);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const touchStartPosRef = useRef<{ x: number, y: number } | null>(null);
 
   const [isDrawOverlayOpen, setIsDrawOverlayOpen] = useState(false);
   const [drawOverlayBlockId, setDrawOverlayBlockId] = useState<string | null>(null);
@@ -505,21 +511,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           setIsKeyboardOpen(false);
           setKeyboardOffset(0);
         }
-      }, 120);
+      }, 80);
     };
 
     const updateViewport = () => {
       if (!window.visualViewport) return;
+      const isFocused = isEditable(document.activeElement);
       const offset = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
-      const isViewportShrunk = offset > 40 || (window.screen.height - window.visualViewport.height > 180);
+      // Software keyboard is only open if an editable element is actively focused and viewport is significantly compressed
+      const isKbd = isFocused && offset > 60;
       
-      if (isEditable(document.activeElement) || isViewportShrunk) {
-        setIsKeyboardOpen(true);
-        setKeyboardOffset(Math.max(0, offset));
-      } else {
-        setIsKeyboardOpen(false);
-        setKeyboardOffset(0);
-      }
+      setIsKeyboardOpen(isKbd);
+      setKeyboardOffset(isKbd ? Math.max(0, offset) : 0);
     };
 
     window.addEventListener("focusin", handleFocusIn);
@@ -657,37 +660,15 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     window.location.href = "/login";
   };
 
-  const handleCardTouchStart = (blockId: string, e: React.TouchEvent) => {
-    if (isRearranging) return;
-    const touch = e.touches[0];
-    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-
-    longPressTimerRef.current = setTimeout(() => {
-      setIsRearranging(true);
-      setActiveBlockId(blockId);
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(40);
-      }
-      toast.success("Rearrange Mode Activated", { id: 'rearrange-toast', duration: 1500 });
-    }, 450);
-  };
-
-  const handleCardTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartPosRef.current || !longPressTimerRef.current) return;
-    const touch = e.touches[0];
-    const dist = Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y);
-    if (dist > 10) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
-
-  const handleCardTouchEnd = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    touchStartPosRef.current = null;
+  const deleteBlock = (block: any) => {
+    if (block.type === 'text') setTexts(prev => prev.filter(t => t.id !== block.id));
+    else if (block.type === 'image') setImages(prev => prev.filter(i => i.id !== block.id));
+    else if (block.type === 'audio') setAudios(prev => prev.filter(a => a.id !== block.id));
+    else if (block.type === 'file') setFiles(prev => prev.filter(f => f.id !== block.id));
+    else if (block.type === 'video') setVideos(prev => prev.filter(v => v.id !== block.id));
+    else if (block.type === 'drawing') deleteDrawingBlock(block);
+    setActiveBlockId(null);
+    toast.success("Block deleted");
   };
 
   const deleteDrawingBlock = (block: any) => {
@@ -768,13 +749,31 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       const result = await uploadMediaFile(file, pageId);
       const publicUrl = result.url;
 
+      let imgWidth = 400;
+      let imgHeight = 300;
+      try {
+        const imgObj = new Image();
+        imgObj.src = publicUrl;
+        await new Promise((resolve) => {
+          imgObj.onload = resolve;
+          imgObj.onerror = resolve;
+          setTimeout(resolve, 1200);
+        });
+        if (imgObj.naturalWidth && imgObj.naturalHeight) {
+          const aspect = imgObj.naturalHeight / imgObj.naturalWidth;
+          imgHeight = Math.round(imgWidth * aspect);
+        }
+      } catch {}
+
       setImages(prev => [...(prev || []), {
         id: uuidv4(),
         x: 50,
         y: bottomY,
+        width: imgWidth,
+        height: imgHeight,
         url: publicUrl
       }]);
-      toast.success(`Image uploaded (${result.storage === 'r2' ? 'Cloudflare R2' : 'Storage'})!`, { id: toastId });
+      toast.success("Image uploaded successfully!", { id: toastId });
       setTimeout(() => {
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       }, 100);
@@ -941,19 +940,32 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             </button>
           ) : <div />}
 
-          <button 
-            onClick={() => {
-              if (onOpenSettings) {
-                onOpenSettings();
-              } else {
-                setIsInternalSettingsOpen(true);
-              }
-            }}
-            className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
-            title="Settings"
-          >
-            <MoreHorizontal size={19} />
-          </button>
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button 
+              onClick={() => {
+                setIsRearranging(true);
+                toast.success("Rearrange Mode Activated", { id: 'rearrange-toast', duration: 1500 });
+              }}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
+              title="Rearrange Blocks"
+            >
+              <GripVertical size={18} />
+            </button>
+
+            <button 
+              onClick={() => {
+                if (onOpenSettings) {
+                  onOpenSettings();
+                } else {
+                  setIsInternalSettingsOpen(true);
+                }
+              }}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
+              title="Settings"
+            >
+              <MoreHorizontal size={19} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1021,9 +1033,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                   </div>
                 )}
                 <div 
-                  onTouchStart={(e) => handleCardTouchStart(block.id, e)}
-                  onTouchMove={handleCardTouchMove}
-                  onTouchEnd={handleCardTouchEnd}
                   className={`relative transition-all duration-200 ${
                     isRearranging 
                       ? 'p-3 rounded-2xl border-2 border-dashed border-primary-500/40 dark:border-primary-400/40 bg-zinc-50/70 dark:bg-zinc-900/70 shadow-sm' 
@@ -1055,6 +1064,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       >
                         <ChevronDown size={16} />
                       </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); deleteBlock(block); }}
+                        className="p-1 rounded-full text-red-500 hover:bg-red-500/10 transition-colors ml-1"
+                        title="Delete Block"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1076,38 +1092,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     }}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
-                    {isSelected && !isRearranging && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-zinc-200/60 dark:border-white/10 animate-in fade-in zoom-in-95 duration-150">
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'text', block.y); 
-                          }}
-                          className="flex items-center gap-1 text-xs font-semibold text-zinc-700 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                          title="Annotate Text"
-                        >
-                          <PenTool size={13} />
-                          <span>Annotate</span>
-                        </button>
-                        <div className="w-px h-3 bg-zinc-300 dark:bg-white/20" />
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            setTexts(prev => prev.filter(t => t.id !== block.id)); 
-                          }}
-                          className="p-1 text-red-400 hover:text-red-500 dark:hover:text-red-300 transition-colors"
-                          title="Delete Text"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
                     {isJournal && (
                       <div className="flex items-center gap-1.5 px-3 pt-2 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 select-none">
                         <Clock size={11} className="text-amber-500/80" />
@@ -1182,41 +1166,13 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
                     <div className="w-full h-auto overflow-hidden rounded-xl">
-                      <img src={block.url} alt="Canvas Image" className="w-full h-auto object-contain" />
+                      <img 
+                        src={block.url} 
+                        alt="Canvas Image" 
+                        className="w-full h-auto object-contain select-text pointer-events-auto" 
+                        style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+                      />
                     </div>
-                    
-                    {isSelected && !isRearranging && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-white/10">
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'image', block.y); 
-                          }}
-                          className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
-                          title="Annotate"
-                        >
-                          <PenTool size={13} />
-                          <span>Annotate</span>
-                        </button>
-                        <div className="w-px h-3 bg-white/20" />
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            setImages(prev => prev.filter(n => n.id !== block.id)); 
-                          }}
-                          className="p-1 text-red-400 hover:text-red-300 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                   </div>
                 )}
@@ -1238,21 +1194,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{block.filename}</span>
                     </div>
                     <div className="flex items-center gap-1 relative z-30">
-                      {isSelected && !isRearranging && (
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'file', block.y); 
-                          }}
-                          className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                          title="Annotate"
-                        >
-                          <PenTool size={16} />
-                        </button>
-                      )}
                       <a 
                         href={block.url} 
                         download 
@@ -1265,19 +1206,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       >
                         <Download size={16} />
                       </a>
-                      <button 
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        onClick={(e) => { 
-                          e.preventDefault();
-                          e.stopPropagation(); 
-                          setFiles(prev => prev.filter(n => n.id !== block.id)); 
-                        }} 
-                        className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
                     </div>
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                   </div>
@@ -1315,38 +1243,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       );
                     })()}
                     
-                    {isSelected && !isRearranging && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/75 backdrop-blur-md rounded-full px-2.5 py-1 z-30 shadow-lg border border-white/10">
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'video', block.y); 
-                          }}
-                          className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
-                          title="Annotate"
-                        >
-                          <PenTool size={13} />
-                          <span>Annotate</span>
-                        </button>
-                        <div className="w-px h-3 bg-white/20" />
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            setVideos(prev => prev.filter(n => n.id !== block.id)); 
-                          }}
-                          className="p-1 text-red-400 hover:text-red-300 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                   </div>
                 )}
@@ -1361,39 +1257,6 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     } p-4 min-h-[140px] flex flex-col justify-center`}
                     onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
                   >
-                    {isSelected && !isRearranging && (
-                      <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/80 dark:bg-zinc-800/90 backdrop-blur-md rounded-full px-3 py-1.5 z-30 shadow-lg border border-white/10 animate-in fade-in zoom-in-95 duration-150">
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            openDrawOverlay(block.id, 'drawing', block.y); 
-                          }}
-                          className="flex items-center gap-1 text-xs font-semibold text-white/90 hover:text-white transition-colors"
-                          title="Edit Sketch"
-                        >
-                          <PenTool size={13} />
-                          <span>Edit</span>
-                        </button>
-                        <div className="w-px h-3 bg-white/20" />
-                        <button 
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onClick={(e) => { 
-                            e.preventDefault();
-                            e.stopPropagation(); 
-                            deleteDrawingBlock(block); 
-                          }}
-                          className="p-1 text-red-400 hover:text-red-300 transition-colors"
-                          title="Delete Sketch"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
-
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} isStandalone={true} />
                   </div>
                 )}
@@ -1414,9 +1277,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       {!isKeyboardOpen && (
         <div 
           className="fixed left-1/2 -translate-x-1/2 z-[1500] pointer-events-none transition-all duration-200"
-          style={{ bottom: 'max(2px, calc(env(safe-area-inset-bottom, 0px) * 0.12))' }}
+          style={{ bottom: 'max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px))' }}
         >
-          <div className="pointer-events-auto flex items-center gap-8 px-6 py-0.5 rounded-full bg-black/[0.08] dark:bg-white/[0.08] backdrop-blur-md border border-black/10 dark:border-white/15 shadow-sm transition-all">
+          <div className="pointer-events-auto flex items-center gap-7 px-6 py-2.5 rounded-full bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-xl transition-all">
             <input 
               type="file" 
               ref={imageInputRef} 
@@ -1427,7 +1290,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             
             <button 
               onClick={() => imageInputRef.current?.click()} 
-              className="p-1 text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-black/5 dark:hover:bg-white/10"
+              className="p-1.5 text-zinc-700 dark:text-zinc-200 hover:text-black dark:hover:text-white active:scale-90 transition-all rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"
               title="Add Photo / Image"
             >
               <ImageIcon size={22} />
@@ -1436,10 +1299,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             <button 
               onClick={onToggleMeeting}
               disabled={isProcessing}
-              className={`p-1 transition-all rounded-full active:scale-90 ${
+              className={`p-1.5 transition-all rounded-full active:scale-90 ${
                 isRecording 
-                  ? 'text-red-500 animate-pulse bg-red-500/20' 
-                  : 'text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                  ? 'text-red-500 animate-pulse bg-red-500/20 ring-2 ring-red-500/30' 
+                  : 'text-zinc-700 dark:text-zinc-200 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
               title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
             >
@@ -1455,16 +1318,16 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                   startNewSketchBlock();
                 }
               }}
-              className={`p-1 transition-all rounded-full active:scale-90 relative ${
+              className={`p-1.5 transition-all rounded-full active:scale-90 relative ${
                 activeBlockId 
-                  ? 'text-primary-600 dark:text-primary-400 bg-primary-500/20 dark:bg-primary-400/20 ring-1 ring-primary-500/40' 
-                  : 'text-zinc-800 dark:text-zinc-100 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                  ? 'text-primary-600 dark:text-primary-400 bg-primary-500/15 dark:bg-primary-400/20 ring-1 ring-primary-500/30' 
+                  : 'text-zinc-700 dark:text-zinc-200 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
               title={activeBlockId ? "Annotate Selected Block" : "New Sketch Block"}
             >
               <PenTool size={22} />
               {activeBlockId && (
-                <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
               )}
             </button>
           </div>

@@ -190,16 +190,20 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
 
   const cleanMimeType = (params.mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
   
-  // 1. Resolve audio to Base64 if needed
+  // 1. Resolve audio to Base64 only if no audioUrl or if using direct Gemini call
+  const isBlobUrl = params.audioUrl?.startsWith('blob:');
+  const safeAudioUrl = isBlobUrl ? undefined : params.audioUrl;
   let audioBase64 = params.audioBase64;
-  if (!audioBase64 && params.audioUrl && typeof window !== 'undefined') {
+  
+  const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
+
+  // If we have a custom key and no base64 yet, try resolving base64 for direct call (if under 10MB)
+  if (customKey && !audioBase64 && params.audioUrl && typeof window !== 'undefined') {
     audioBase64 = (await convertUrlToBase64(params.audioUrl)) || undefined;
   }
 
-  const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
-
-  // 2. Direct Call if user provided Gemini API Key in Settings
-  if (customKey && audioBase64) {
+  // 2. Direct Call if user provided Gemini API Key in Settings and audio is reasonable size (< 15MB)
+  if (customKey && audioBase64 && audioBase64.length < 15 * 1024 * 1024) {
     try {
       const directResult = await callGeminiDirect(
         customKey,
@@ -216,14 +220,16 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
         };
       }
     } catch (directErr: any) {
-      console.warn("Direct Gemini transcription failed, attempting server API fallback:", directErr);
+      console.warn("Direct Gemini transcription failed, falling back to server API with custom key:", directErr);
     }
   }
 
   // 3. Next.js API Route (/api/transcribe) Fallback
+  // CRITICAL: When safeAudioUrl is available, NEVER include large audioBase64 in the request body!
+  // Vercel serverless functions have a 4.5 MB request payload limit. Sending large base64 causes HTTP 413.
+  // When safeAudioUrl is sent, payload is < 1 KB, and the server downloads and streams audio directly.
   try {
-    const isBlobUrl = params.audioUrl?.startsWith('blob:');
-    const safeAudioUrl = isBlobUrl ? undefined : params.audioUrl;
+    const payloadBase64 = safeAudioUrl ? undefined : (audioBase64 && audioBase64.length < 3.5 * 1024 * 1024 ? audioBase64 : undefined);
 
     const apiRes = await fetch('/api/transcribe', {
       method: 'POST',
@@ -232,7 +238,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
         ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
       },
       body: JSON.stringify({
-        audioBase64: audioBase64 || undefined,
+        audioBase64: payloadBase64,
         audioUrl: safeAudioUrl,
         mimeType: cleanMimeType,
         isJournal: Boolean(params.isJournal),
@@ -262,10 +268,10 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
 
     const message = apiErr?.message || String(apiErr);
     if (message.includes('API key is not configured') || message.includes('API_KEY')) {
-      throw new Error("Gemini API key is not configured. Please open CubNotes Settings > AI to paste your free Google Gemini API key.");
+      throw new Error("Gemini API key is not configured. Please open CubNotes Settings > AI to verify your Google Gemini API key.");
     }
     if (message.includes('413') || message.includes('Payload Too Large')) {
-      throw new Error("Audio recording is large. Please enter your free Gemini API key in Settings > AI so large audio can transcribe directly.");
+      throw new Error("Recording is too large to send directly. Please ensure audio storage is connected.");
     }
 
     throw new Error(`AI Processing failed: ${message}`);
