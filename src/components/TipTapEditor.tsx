@@ -163,6 +163,121 @@ export const LineHeight = Extension.create({
   },
 });
 
+// Custom Paragraph Spacing Extension (Space After & Space Before)
+export const ParagraphSpacing = Extension.create({
+  name: 'paragraphSpacing',
+  addOptions() {
+    return {
+      types: ['paragraph', 'heading', 'blockquote'],
+    };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          spaceAfter: {
+            default: null,
+            parseHTML: element => element.getAttribute('data-space-after') || element.style.marginBottom || null,
+            renderHTML: attributes => {
+              if (!attributes.spaceAfter) return {};
+              return {
+                'data-space-after': attributes.spaceAfter,
+                style: `margin-bottom: ${attributes.spaceAfter}`,
+              };
+            },
+          },
+          spaceBefore: {
+            default: null,
+            parseHTML: element => element.getAttribute('data-space-before') || element.style.marginTop || null,
+            renderHTML: attributes => {
+              if (!attributes.spaceBefore) return {};
+              return {
+                'data-space-before': attributes.spaceBefore,
+                style: `margin-top: ${attributes.spaceBefore}`,
+              };
+            },
+          },
+        },
+      },
+    ];
+  },
+  addCommands(): any {
+    return {
+      setParagraphSpacing: (options: { spaceAfter?: string | null; spaceBefore?: string | null }) => ({ tr, state, dispatch }: any) => {
+        const { selection } = state;
+        let applicable = false;
+        const updateNode = (pos: number, node: any) => {
+          applicable = true;
+          const newAttrs = { ...node.attrs };
+          if (options.spaceAfter !== undefined) {
+            newAttrs.spaceAfter = options.spaceAfter || null;
+          }
+          if (options.spaceBefore !== undefined) {
+            newAttrs.spaceBefore = options.spaceBefore || null;
+          }
+          tr = tr.setNodeMarkup(pos, undefined, newAttrs);
+        };
+
+        if (selection.empty) {
+          const { $from } = selection;
+          for (let d = $from.depth; d > 0; d--) {
+            const node = $from.node(d);
+            if (this.options.types.includes(node.type.name)) {
+              updateNode($from.before(d), node);
+              break;
+            }
+          }
+        } else {
+          const { from, to } = selection;
+          state.doc.nodesBetween(from, to, (node: any, pos: any) => {
+            if (this.options.types.includes(node.type.name)) {
+              updateNode(pos, node);
+            }
+          });
+        }
+        if (applicable && dispatch) {
+          dispatch(tr);
+        }
+        return applicable;
+      },
+      unsetParagraphSpacing: () => ({ tr, state, dispatch }: any) => {
+        const { selection } = state;
+        let applicable = false;
+        const clearNode = (pos: number, node: any) => {
+          applicable = true;
+          const newAttrs = { ...node.attrs };
+          delete newAttrs.spaceAfter;
+          delete newAttrs.spaceBefore;
+          tr = tr.setNodeMarkup(pos, undefined, newAttrs);
+        };
+
+        if (selection.empty) {
+          const { $from } = selection;
+          for (let d = $from.depth; d > 0; d--) {
+            const node = $from.node(d);
+            if (this.options.types.includes(node.type.name)) {
+              clearNode($from.before(d), node);
+              break;
+            }
+          }
+        } else {
+          const { from, to } = selection;
+          state.doc.nodesBetween(from, to, (node: any, pos: any) => {
+            if (this.options.types.includes(node.type.name)) {
+              clearNode(pos, node);
+            }
+          });
+        }
+        if (applicable && dispatch) {
+          dispatch(tr);
+        }
+        return applicable;
+      },
+    };
+  },
+});
+
 // Custom Paragraph & List Indent Extension
 export const Indent = Extension.create({
   name: 'indent',
@@ -393,6 +508,15 @@ export const LINE_SPACING_OPTIONS = [
   { value: "3.0", label: "3.0" },
 ];
 
+export const PARAGRAPH_SPACING_OPTIONS = [
+  { value: "0px", label: "0 pt (No space)" },
+  { value: "4px", label: "4 pt (Compact)" },
+  { value: "8px", label: "8 pt (Tight)" },
+  { value: "12px", label: "10 pt (Normal)" },
+  { value: "16px", label: "14 pt (Relaxed)" },
+  { value: "24px", label: "18 pt (Loose)" },
+];
+
 export const STYLE_OPTIONS = [
   { value: "p", label: "Normal (Body)" },
   { value: "h1", label: "Heading 1" },
@@ -475,9 +599,37 @@ export const getCurrentLineSpacing = (editor: Editor | null): string => {
   return "";
 };
 
+export const getCurrentParagraphSpacing = (editor: Editor | null): { spaceAfter: string | null; spaceBefore: string | null } => {
+  if (!editor) return { spaceAfter: null, spaceBefore: null };
+  const { selection } = editor.state;
+  let spaceAfter: string | null = null;
+  let spaceBefore: string | null = null;
+  if (selection.empty) {
+    const { $from } = selection;
+    for (let d = $from.depth; d > 0; d--) {
+      const node = $from.node(d);
+      if (['paragraph', 'heading', 'blockquote'].includes(node.type.name)) {
+        spaceAfter = node.attrs.spaceAfter || null;
+        spaceBefore = node.attrs.spaceBefore || null;
+        break;
+      }
+    }
+  } else {
+    const { from, to } = selection;
+    editor.state.doc.nodesBetween(from, to, (node: any) => {
+      if (['paragraph', 'heading', 'blockquote'].includes(node.type.name)) {
+        if (!spaceAfter) spaceAfter = node.attrs.spaceAfter || null;
+        if (!spaceBefore) spaceBefore = node.attrs.spaceBefore || null;
+      }
+    });
+  }
+  return { spaceAfter, spaceBefore };
+};
+
 export const clearFormatting = (editor: Editor) => {
   editor.chain().focus().unsetAllMarks().clearNodes().run();
   (editor.chain().focus() as any).unsetLineHeight?.().run();
+  (editor.chain().focus() as any).unsetParagraphSpacing?.().run();
   (editor.chain().focus() as any).unsetFontSize?.().run();
   editor.chain().focus().unsetFontFamily().run();
 };
@@ -578,10 +730,10 @@ export function BubbleDropdown({
   );
 }
 
-// Line Spacing Dropdown Component
+// Line and Paragraph Spacing Dropdown Component (Word & OneNote style)
 export function LineSpacingDropdown({
   editor,
-  dropdownWidth = "w-44",
+  dropdownWidth = "w-56",
   placement = "bottom",
 }: {
   editor: Editor | null;
@@ -591,6 +743,10 @@ export function LineSpacingDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const currentLineHeight = getCurrentLineSpacing(editor);
+  const currentParagraphSpacing = getCurrentParagraphSpacing(editor);
+
+  const hasSpaceBefore = Boolean(currentParagraphSpacing.spaceBefore && currentParagraphSpacing.spaceBefore !== "0px");
+  const hasSpaceAfter = Boolean(currentParagraphSpacing.spaceAfter && currentParagraphSpacing.spaceAfter !== "0px");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -626,12 +782,13 @@ export function LineSpacingDropdown({
 
       {isOpen && editor && (
         <div
-          className={`absolute ${placement === "top" ? "bottom-full mb-1" : "top-full mt-1"} left-0 ${dropdownWidth} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[10000] text-xs font-sans`}
+          className={`absolute ${placement === "top" ? "bottom-full mb-1" : "top-full mt-1"} left-0 ${dropdownWidth} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[10000] text-xs font-sans max-h-96 overflow-y-auto`}
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
           }}
         >
+          {/* 1. Line Spacing Section */}
           <div className="px-3 py-1 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
             Line Spacing
           </div>
@@ -660,6 +817,73 @@ export function LineSpacingDropdown({
               </button>
             );
           })}
+
+          <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+
+          {/* 2. Paragraph Spacing Presets */}
+          <div className="px-3 py-1 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+            Paragraph Spacing
+          </div>
+          {PARAGRAPH_SPACING_OPTIONS.map((opt) => {
+            const isSelected = (currentParagraphSpacing.spaceAfter === opt.value) || (!currentParagraphSpacing.spaceAfter && opt.value === "0px");
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (opt.value === "0px") {
+                    (editor.chain().focus() as any).setParagraphSpacing({ spaceAfter: null }).run();
+                  } else {
+                    (editor.chain().focus() as any).setParagraphSpacing({ spaceAfter: opt.value }).run();
+                  }
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
+                  isSelected ? 'text-primary-600 dark:text-primary-400 font-semibold bg-primary-50/50 dark:bg-primary-900/20' : 'text-zinc-700 dark:text-zinc-200'
+                }`}
+              >
+                <span>{opt.label}</span>
+                {isSelected && <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>}
+              </button>
+            );
+          })}
+
+          <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+
+          {/* 3. Quick Space Before / After Toggles */}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              (editor.chain().focus() as any).setParagraphSpacing({
+                spaceBefore: hasSpaceBefore ? null : "12px"
+              }).run();
+              setIsOpen(false);
+            }}
+            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-200"
+          >
+            <span>{hasSpaceBefore ? "Remove Space Before Paragraph" : "Add Space Before Paragraph"}</span>
+            {hasSpaceBefore && <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>}
+          </button>
+
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              (editor.chain().focus() as any).setParagraphSpacing({
+                spaceAfter: hasSpaceAfter ? null : "12px"
+              }).run();
+              setIsOpen(false);
+            }}
+            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-200"
+          >
+            <span>{hasSpaceAfter ? "Remove Space After Paragraph" : "Add Space After Paragraph"}</span>
+            {hasSpaceAfter && <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>}
+          </button>
         </div>
       )}
     </div>
@@ -819,9 +1043,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
 
   const editor = useEditor({
     extensions: [
-      (StarterKit.configure as any)({
-        history: false,
-      }),
+      StarterKit,
       TextStyle,
       Color,
       FontFamily,
@@ -829,6 +1051,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       Underline,
       FontSize,
       LineHeight,
+      ParagraphSpacing,
       Indent,
       Subscript,
       Superscript,

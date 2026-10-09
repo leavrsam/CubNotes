@@ -1556,6 +1556,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   // Non-passive native wheel listener to isolate canvas zoom/pan from browser-level page zoom
   useEffect(() => {
+    if (loading) return;
     const container = canvasContainerRef.current;
     if (!container) return;
 
@@ -1650,7 +1651,18 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       e.stopPropagation();
     };
 
+    // Global window-level wheel interceptor for Ctrl/Cmd-wheel (trackpad pinch) to guarantee no browser page zoom
+    const onWindowWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        const target = e.target as HTMLElement | null;
+        if (!target?.closest('[role="dialog"]') && !target?.closest('[data-modal="true"]')) {
+          onWheel(e);
+        }
+      }
+    };
+
     container.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('wheel', onWindowWheel, { passive: false });
     container.addEventListener('gesturestart', preventGesture, { passive: false });
     container.addEventListener('gesturechange', preventGesture, { passive: false });
     container.addEventListener('gestureend', preventGesture, { passive: false });
@@ -1659,13 +1671,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
     return () => {
       container.removeEventListener('wheel', onWheel);
+      window.removeEventListener('wheel', onWindowWheel);
       container.removeEventListener('gesturestart', preventGesture);
       container.removeEventListener('gesturechange', preventGesture);
       container.removeEventListener('gestureend', preventGesture);
       window.removeEventListener('gesturestart', preventGesture);
       window.removeEventListener('gesturechange', preventGesture);
     };
-  }, []);
+  }, [loading]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button === 1 || isSpacePanning) { // Middle click or Spacebar pan
@@ -1767,6 +1780,24 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const worldX = (screenPos.x - pan.x) / zoom;
       const worldY = (screenPos.y - pan.y) / zoom;
 
+      // 1. If clipboard contains cubnotes flowchart shapes JSON, do not paste as image
+      const pastedText = e.clipboardData?.getData('text/plain');
+      if (pastedText) {
+        try {
+          const parsed = JSON.parse(pastedText);
+          if (parsed && parsed.type === 'cubnotes/flowchart-shapes') {
+            e.preventDefault();
+            return;
+          }
+        } catch {}
+      }
+
+      // 2. If a flowchart shape is currently selected or copied, do not paste stale image from OS clipboard
+      const isShapeActive = selectedShapeId || (selectedIds && selectedIds.some(id => (shapes || []).some(s => s.id === id)));
+      if (isShapeActive) {
+        return;
+      }
+
       // Check for image in clipboard
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.startsWith('image/')) {
@@ -1792,7 +1823,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       }
 
       // Check for plain text
-      const pastedText = e.clipboardData?.getData('text/plain');
       if (pastedText && pastedText.trim().length > 0) {
         e.preventDefault();
         const snapY = backgroundStyle === 'ruled' || backgroundStyle === 'grid' ? Math.round(worldY / 32) * 32 : worldY;
@@ -1812,7 +1842,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
     window.addEventListener('paste', handleGlobalPaste);
     return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, [pan.x, pan.y, zoom, pageId, backgroundStyle, setImages, setTexts, setSelectedIds]);
+  }, [pan.x, pan.y, zoom, pageId, backgroundStyle, setImages, setTexts, setSelectedIds, selectedShapeId, selectedIds, shapes]);
 
   // Drag-and-drop file upload directly onto canvas
   const handleCanvasDrop = useCallback(async (e: React.DragEvent) => {
@@ -1903,10 +1933,30 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       }
 
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        if (isInputFocused) {
+          if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror'))) {
+            if (activeEditor.can().undo()) {
+              e.preventDefault();
+              activeEditor.chain().focus().undo().run();
+              return;
+            }
+          }
+          return;
+        }
         e.preventDefault();
         undo();
       }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+        if (isInputFocused) {
+          if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror'))) {
+            if (activeEditor.can().redo()) {
+              e.preventDefault();
+              activeEditor.chain().focus().redo().run();
+              return;
+            }
+          }
+          return;
+        }
         e.preventDefault();
         redo();
       }
@@ -1925,7 +1975,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds, handleZoomIn, handleZoomOut, handleResetZoom]);
+  }, [undo, redo, selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds, handleZoomIn, handleZoomOut, handleResetZoom, activeEditor]);
 
   if (loading) {
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
@@ -1997,17 +2047,29 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
           <div className="flex items-center gap-1 mb-1 border-l border-zinc-300 dark:border-zinc-700 pl-4">
             <button
-              onClick={undo}
-              disabled={!canUndo}
-              className={`p-1.5 rounded-md transition-colors ${canUndo ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
+              onClick={() => {
+                if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror')) && activeEditor.can().undo()) {
+                  activeEditor.chain().focus().undo().run();
+                } else {
+                  undo();
+                }
+              }}
+              disabled={!canUndo && !(activeEditor && activeEditor.can().undo())}
+              className={`p-1.5 rounded-md transition-colors ${(canUndo || (activeEditor && activeEditor.can().undo())) ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
               title="Undo (Ctrl+Z)"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
             </button>
             <button
-              onClick={redo}
-              disabled={!canRedo}
-              className={`p-1.5 rounded-md transition-colors ${canRedo ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
+              onClick={() => {
+                if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror')) && activeEditor.can().redo()) {
+                  activeEditor.chain().focus().redo().run();
+                } else {
+                  redo();
+                }
+              }}
+              disabled={!canRedo && !(activeEditor && activeEditor.can().redo())}
+              className={`p-1.5 rounded-md transition-colors ${(canRedo || (activeEditor && activeEditor.can().redo())) ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
               title="Redo (Ctrl+Y)"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
@@ -3140,6 +3202,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionStart={handleDragSelectionStart}
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
         />
       </div>
 
@@ -3269,33 +3333,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         />
       )}
 
-      {/* Floating Canvas Zoom Controls */}
-      <div 
-        className={`absolute z-40 pointer-events-auto flex items-center bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-700/80 rounded-full shadow-lg p-0.5 text-zinc-700 dark:text-zinc-200 select-none text-xs transition-all ${showMinimap ? 'bottom-56 right-6' : 'bottom-6 right-6'}`}
-        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
-      >
-        <button
-          onClick={handleZoomOut}
-          title="Zoom Out (Cmd/Ctrl -)"
-          className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all text-zinc-600 dark:text-zinc-300"
-        >
-          <Minus size={13} />
-        </button>
-        <button
-          onClick={handleResetZoom}
-          title="Reset Zoom to 100% (Cmd/Ctrl 0)"
-          className="px-2 h-7 font-medium text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full transition-colors tabular-nums"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <button
-          onClick={handleZoomIn}
-          title="Zoom In (Cmd/Ctrl +)"
-          className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all text-zinc-600 dark:text-zinc-300"
-        >
-          <Plus size={13} />
-        </button>
-      </div>
+
 
       {/* Foresight & Granola Meeting Workspace Modal */}
       <MeetingWorkspace 

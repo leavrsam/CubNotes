@@ -32,7 +32,8 @@ import {
   MoveRight,
   Split,
   Database,
-  StickyNote
+  StickyNote,
+  ChevronDown
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import toast from "react-hot-toast";
@@ -55,6 +56,8 @@ interface FlowchartOverlayProps {
   onDragSelectionStart?: (id: string) => void;
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
+  selectedIds?: string[];
+  setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 const SHAPE_PALETTE = [
@@ -151,12 +154,20 @@ export function FlowchartOverlay({
   defaultRouting = 'curved',
   onDragSelectionStart,
   onDragSelectionMove,
-  onDragSelectionEnd
+  onDragSelectionEnd,
+  selectedIds,
+  setSelectedIds
 }: FlowchartOverlayProps) {
   // Inline text editing state
   const [editingShapeId, setEditingShapeId] = useState<string | null>(null);
   const [editingConnectorId, setEditingConnectorId] = useState<string | null>(null);
   const [connectorLabelDraft, setConnectorLabelDraft] = useState("");
+
+  // Color dropdown popover state
+  const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
+
+  // Copied shapes clipboard ref
+  const copiedShapesRef = useRef<ShapeNode[]>([]);
 
   // Dragging shape state
   const [draggingShapeId, setDraggingShapeId] = useState<string | null>(null);
@@ -188,11 +199,36 @@ export function FlowchartOverlay({
   // Track hover anchor for magnetic snap
   const [hoverAnchor, setHoverAnchor] = useState<{ shapeId: string; anchor: AnchorPosition } | null>(null);
 
-  // Handle shape dragging
+  // Handle shape dragging and multi-selection (Shift+Click)
   const handleShapePointerDown = (e: React.PointerEvent, shape: ShapeNode) => {
     if (tool !== "home" && tool !== "shape") return;
     e.stopPropagation();
-    setSelectedShapeId(shape.id);
+
+    setIsColorDropdownOpen(false);
+
+    if (e.shiftKey) {
+      if (setSelectedIds) {
+        setSelectedIds(prev => {
+          const isAlreadySelected = prev.includes(shape.id);
+          const next = isAlreadySelected 
+            ? prev.filter(id => id !== shape.id)
+            : [...prev, shape.id];
+          
+          if (next.length === 1) {
+            setSelectedShapeId(next[0]);
+          } else {
+            setSelectedShapeId(null);
+          }
+          return next;
+        });
+      } else {
+        setSelectedShapeId(shape.id);
+      }
+    } else {
+      setSelectedShapeId(shape.id);
+      setSelectedIds?.([shape.id]);
+    }
+
     setSelectedConnectorId(null);
     setDraggingShapeId(shape.id);
     onDragSelectionStart?.(shape.id);
@@ -238,21 +274,24 @@ export function FlowchartOverlay({
   // Global pointer move listener during drag/resize/connect
   useEffect(() => {
     const handleWindowPointerMove = (e: PointerEvent) => {
-      // 1. Dragging shape
+      // 1. Dragging shape (supports multi-selection drag when connected to canvas)
       if (draggingShapeId && dragStartPos.current) {
         const dx = (e.clientX - dragStartPos.current.clientX) / zoom;
         const dy = (e.clientY - dragStartPos.current.clientY) / zoom;
-        setShapes(prev => prev.map(s => {
-          if (s.id === draggingShapeId) {
-            return {
-              ...s,
-              x: Math.round(dragStartPos.current!.shapeX + dx),
-              y: Math.round(dragStartPos.current!.shapeY + dy)
-            };
-          }
-          return s;
-        }));
-        onDragSelectionMove?.(dx, dy);
+        if (onDragSelectionMove) {
+          onDragSelectionMove(dx, dy);
+        } else {
+          setShapes(prev => prev.map(s => {
+            if (s.id === draggingShapeId) {
+              return {
+                ...s,
+                x: Math.round(dragStartPos.current!.shapeX + dx),
+                y: Math.round(dragStartPos.current!.shapeY + dy)
+              };
+            }
+            return s;
+          }));
+        }
       }
 
       // 2. Resizing shape from any of the 4 corners
@@ -373,7 +412,7 @@ export function FlowchartOverlay({
     onDragSelectionEnd
   ]);
 
-  // Keyboard Shortcuts (Delete / Backspace / Escape)
+  // Keyboard Shortcuts (Delete / Backspace / Copy / Paste / Escape)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -384,31 +423,84 @@ export function FlowchartOverlay({
       );
       if (isInput) return;
 
+      // Delete / Backspace
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedShapeId) {
+        const activeIds = selectedIds && selectedIds.length > 0 
+          ? selectedIds.filter(id => shapes.some(s => s.id === id))
+          : (selectedShapeId ? [selectedShapeId] : []);
+
+        if (activeIds.length > 0) {
           e.preventDefault();
-          setShapes(prev => prev.filter(s => s.id !== selectedShapeId));
-          setConnectors(prev => prev.filter(c => c.fromShapeId !== selectedShapeId && c.toShapeId !== selectedShapeId));
+          setShapes(prev => prev.filter(s => !activeIds.includes(s.id)));
+          setConnectors(prev => prev.filter(c => !activeIds.includes(c.fromShapeId) && !activeIds.includes(c.toShapeId)));
           setSelectedShapeId(null);
-          toast.success("Shape deleted");
+          setSelectedIds?.(prev => prev.filter(id => !activeIds.includes(id)));
+          toast.success(activeIds.length === 1 ? "Shape deleted" : `${activeIds.length} shapes deleted`);
         } else if (selectedConnectorId) {
           e.preventDefault();
           setConnectors(prev => prev.filter(c => c.id !== selectedConnectorId));
           setSelectedConnectorId(null);
           toast.success("Connector deleted");
         }
-      } else if (e.key === "Escape") {
+      }
+
+      // Copy: Cmd+C / Ctrl+C
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        const activeIds = selectedIds && selectedIds.length > 0 
+          ? selectedIds.filter(id => shapes.some(s => s.id === id))
+          : (selectedShapeId ? [selectedShapeId] : []);
+
+        const toCopy = shapes.filter(s => activeIds.includes(s.id));
+        if (toCopy.length > 0) {
+          e.preventDefault();
+          copiedShapesRef.current = toCopy.map(s => ({ ...s }));
+          // Write signature to clipboard to invalidate any prior image in clipboard
+          if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(JSON.stringify({
+              type: 'cubnotes/flowchart-shapes',
+              data: toCopy
+            })).catch(() => {});
+          }
+          toast.success(toCopy.length === 1 ? "Shape copied" : `${toCopy.length} shapes copied`, { duration: 1200 });
+        }
+      }
+
+      // Paste: Cmd+V / Ctrl+V
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        if (copiedShapesRef.current.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          const offset = 30;
+          const newShapes: ShapeNode[] = copiedShapesRef.current.map(shape => ({
+            ...shape,
+            id: uuidv4(),
+            x: shape.x + offset,
+            y: shape.y + offset
+          }));
+          // Advance base positions for repeated paste
+          copiedShapesRef.current = newShapes.map(s => ({ ...s }));
+          setShapes(prev => [...prev, ...newShapes]);
+          const newIds = newShapes.map(s => s.id);
+          setSelectedIds?.(newIds);
+          setSelectedShapeId(newIds.length === 1 ? newIds[0] : null);
+          toast.success(newShapes.length === 1 ? "Shape pasted" : `${newShapes.length} shapes pasted`, { duration: 1200 });
+        }
+      }
+
+      if (e.key === "Escape") {
         setSelectedShapeId(null);
+        setSelectedIds?.([]);
         setSelectedConnectorId(null);
         setEditingShapeId(null);
         setEditingConnectorId(null);
         setConnectingState(null);
+        setIsColorDropdownOpen(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedShapeId, selectedConnectorId, setShapes, setConnectors, setSelectedShapeId, setSelectedConnectorId]);
+  }, [selectedShapeId, selectedConnectorId, selectedIds, shapes, setShapes, setConnectors, setSelectedShapeId, setSelectedConnectorId, setSelectedIds]);
 
   // Miro/FigJam Quick Add sibling shape in direction
   const handleQuickAdd = (sourceShape: ShapeNode, direction: AnchorPosition) => {
@@ -815,7 +907,8 @@ export function FlowchartOverlay({
 
       {/* 2. HTML SHAPES LAYER */}
       {shapes.map(shape => {
-        const isSelected = selectedShapeId === shape.id;
+        const isSelected = selectedShapeId === shape.id || (selectedIds ? selectedIds.includes(shape.id) : false);
+        const isSingleSelected = isSelected && (!selectedIds || selectedIds.length <= 1);
         const isEditing = editingShapeId === shape.id;
         const anchors: AnchorPosition[] = ['top', 'right', 'bottom', 'left'];
 
@@ -935,8 +1028,8 @@ export function FlowchartOverlay({
               );
             })}
 
-            {/* Quick Add directional '+' buttons when selected */}
-            {isSelected && !connectingState && (
+            {/* Quick Add directional '+' buttons when single shape is selected */}
+            {isSingleSelected && !connectingState && (
               <>
                 {/* Right + */}
                 <button
@@ -977,8 +1070,8 @@ export function FlowchartOverlay({
               </>
             )}
 
-            {/* 4 Corner Resize Handles */}
-            {isSelected && !connectingState && (
+            {/* 4 Corner Resize Handles when single shape is selected */}
+            {isSingleSelected && !connectingState && (
               <>
                 {/* Top-Left */}
                 <div
@@ -1015,10 +1108,17 @@ export function FlowchartOverlay({
       })}
 
       {/* 3. FLOATING TOOLBAR FOR SELECTED SHAPE */}
-      {selectedShape && (() => {
-        const screenX = selectedShape.x * zoom + pan.x;
-        const screenY = selectedShape.y * zoom + pan.y;
-        const screenH = selectedShape.height * zoom;
+      {(() => {
+        const activeSingleShape = selectedShapeId 
+          ? shapes.find(s => s.id === selectedShapeId) 
+          : (selectedIds && selectedIds.length === 1 ? shapes.find(s => s.id === selectedIds[0]) : null);
+
+        if (!activeSingleShape || (selectedIds && selectedIds.length > 1)) return null;
+
+        const screenX = activeSingleShape.x * zoom + pan.x;
+        const screenY = activeSingleShape.y * zoom + pan.y;
+        const screenW = activeSingleShape.width * zoom;
+        const screenH = activeSingleShape.height * zoom;
 
         // Clearance above/below directional '+' buttons (which extend ~40px out from edges)
         const plusButtonClearance = 56;
@@ -1028,7 +1128,9 @@ export function FlowchartOverlay({
         const toolbarY = showBelow
           ? screenY + screenH + plusButtonClearance
           : screenY - plusButtonClearance;
-        const toolbarX = Math.max(16, screenX);
+        const toolbarX = screenX + screenW / 2;
+
+        const currentPalette = SHAPE_PALETTE.find(p => p.stroke === activeSingleShape.strokeColor) || SHAPE_PALETTE[0];
 
         return (
           <div 
@@ -1036,7 +1138,7 @@ export function FlowchartOverlay({
             style={{
               left: `${toolbarX}px`,
               top: `${toolbarY}px`,
-              transform: showBelow ? 'none' : 'translateY(-100%)',
+              transform: showBelow ? 'translateX(-50%)' : 'translate(-50%, -100%)',
             }}
             onPointerDown={(e) => e.stopPropagation()}
           >
@@ -1052,10 +1154,11 @@ export function FlowchartOverlay({
             ].map(item => (
               <button
                 key={item.type}
+                type="button"
                 onClick={() => {
-                  setShapes(prev => prev.map(s => s.id === selectedShape.id ? { ...s, type: item.type as FlowchartShapeType } : s));
+                  setShapes(prev => prev.map(s => s.id === activeSingleShape.id ? { ...s, type: item.type as FlowchartShapeType } : s));
                 }}
-                className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors ${selectedShape.type === item.type ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' : ''}`}
+                className={`p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors ${activeSingleShape.type === item.type ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' : ''}`}
                 title={item.label}
               >
                 {item.icon}
@@ -1063,82 +1166,95 @@ export function FlowchartOverlay({
             ))}
           </div>
 
-          {/* Color Palette Swatches */}
-          <div className="flex items-center gap-1 pr-1.5 border-r border-zinc-200 dark:border-zinc-700">
-            {SHAPE_PALETTE.map(item => (
-              <button
-                key={item.name}
-                onClick={() => {
-                  setShapes(prev => prev.map(s => s.id === selectedShape.id ? { 
-                    ...s, 
-                    fillColor: item.fill,
-                    strokeColor: item.stroke
-                  } : s));
-                }}
-                className="w-4 h-4 rounded-full border-2 border-white dark:border-zinc-800 shadow-xs hover:scale-125 transition-transform"
-                style={{ backgroundColor: item.preview }}
-                title={item.name}
+          {/* Color Dropdown */}
+          <div className="relative flex items-center pr-1.5 border-r border-zinc-200 dark:border-zinc-700">
+            <button
+              type="button"
+              onClick={() => setIsColorDropdownOpen(prev => !prev)}
+              className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+              title="Change Color"
+            >
+              <div 
+                className="w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 shadow-2xs"
+                style={{ backgroundColor: currentPalette.preview }}
               />
-            ))}
+              <ChevronDown size={11} className="text-zinc-500 dark:text-zinc-400" />
+            </button>
+
+            {isColorDropdownOpen && (
+              <div 
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 p-1.5 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {SHAPE_PALETTE.map(item => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => {
+                      setShapes(prev => prev.map(s => s.id === activeSingleShape.id ? { 
+                        ...s, 
+                        fillColor: item.fill,
+                        strokeColor: item.stroke
+                      } : s));
+                      setIsColorDropdownOpen(false);
+                    }}
+                    className="w-5 h-5 rounded-full border-2 border-white dark:border-zinc-800 shadow-xs hover:scale-125 transition-transform"
+                    style={{ backgroundColor: item.preview }}
+                    title={item.name}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Font Size & Align */}
           <div className="flex items-center gap-1 pr-1.5 border-r border-zinc-200 dark:border-zinc-700">
             <button
+              type="button"
               onClick={() => {
                 const sizes = [12, 14, 16, 20];
-                const currentIdx = sizes.indexOf(selectedShape.fontSize || 14);
+                const currentIdx = sizes.indexOf(activeSingleShape.fontSize || 14);
                 const nextSize = sizes[(currentIdx + 1) % sizes.length];
-                setShapes(prev => prev.map(s => s.id === selectedShape.id ? { ...s, fontSize: nextSize } : s));
+                setShapes(prev => prev.map(s => s.id === activeSingleShape.id ? { ...s, fontSize: nextSize } : s));
               }}
               className="px-1.5 py-1 text-xs font-semibold rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
               title="Font Size"
             >
-              {selectedShape.fontSize || 14}px
+              {activeSingleShape.fontSize || 14}px
             </button>
             <button
+              type="button"
               onClick={() => {
                 const aligns: ('left' | 'center' | 'right')[] = ['left', 'center', 'right'];
-                const curIdx = aligns.indexOf(selectedShape.textAlign || 'center');
+                const curIdx = aligns.indexOf(activeSingleShape.textAlign || 'center');
                 const nextAlign = aligns[(curIdx + 1) % aligns.length];
-                setShapes(prev => prev.map(s => s.id === selectedShape.id ? { ...s, textAlign: nextAlign } : s));
+                setShapes(prev => prev.map(s => s.id === activeSingleShape.id ? { ...s, textAlign: nextAlign } : s));
               }}
               className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
               title="Text Alignment"
             >
-              {selectedShape.textAlign === 'left' ? <AlignLeft size={13} /> : selectedShape.textAlign === 'right' ? <AlignRight size={13} /> : <AlignCenter size={13} />}
+              {activeSingleShape.textAlign === 'left' ? <AlignLeft size={13} /> : activeSingleShape.textAlign === 'right' ? <AlignRight size={13} /> : <AlignCenter size={13} />}
             </button>
           </div>
 
           {/* Duplicate Button */}
           <button
+            type="button"
             onClick={() => {
               const newShape: ShapeNode = {
-                ...selectedShape,
+                ...activeSingleShape,
                 id: uuidv4(),
-                x: selectedShape.x + 30,
-                y: selectedShape.y + 30
+                x: activeSingleShape.x + 30,
+                y: activeSingleShape.y + 30
               };
               setShapes(prev => [...prev, newShape]);
               setSelectedShapeId(newShape.id);
+              setSelectedIds?.([newShape.id]);
             }}
             className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
-            title="Duplicate Shape"
+            title="Duplicate Shape (Cmd/Ctrl + C, V)"
           >
             <Copy size={13} />
-          </button>
-
-          {/* Delete Button */}
-          <button
-            onClick={() => {
-              setShapes(prev => prev.filter(s => s.id !== selectedShape.id));
-              setConnectors(prev => prev.filter(c => c.fromShapeId !== selectedShape.id && c.toShapeId !== selectedShape.id));
-              setSelectedShapeId(null);
-            }}
-            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 transition-colors"
-            title="Delete Shape"
-          >
-            <Trash2 size={13} />
           </button>
           </div>
         );

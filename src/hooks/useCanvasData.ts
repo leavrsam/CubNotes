@@ -27,6 +27,8 @@ export function useCanvasData(pageId: string) {
   // History state
   const [past, setPast] = useState<DocumentState[]>([]);
   const [future, setFuture] = useState<DocumentState[]>([]);
+  const pastRef = useRef<DocumentState[]>([]);
+  const futureRef = useRef<DocumentState[]>([]);
   const lastSavedStateRef = useRef<DocumentState | null>(null);
   const isUndoingRef = useRef(false);
 
@@ -117,11 +119,14 @@ export function useCanvasData(pageId: string) {
       }
 
       if (JSON.stringify(lastSavedStateRef.current) !== JSON.stringify(currentState)) {
-        setPast(prev => [...prev, lastSavedStateRef.current!]);
+        pastRef.current.push(lastSavedStateRef.current);
+        if (pastRef.current.length > 50) pastRef.current.shift();
+        setPast([...pastRef.current]);
         lastSavedStateRef.current = currentState;
-        setFuture([]); // Clear future on new action
+        futureRef.current = [];
+        setFuture([]);
       }
-    }, 500);
+    }, 300);
     
     return () => clearTimeout(timeoutId);
   }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading]);
@@ -280,8 +285,11 @@ export function useCanvasData(pageId: string) {
   const restoreVersion = useCallback((versionState: DocumentState) => {
     // Push current state to past before restoring, so we can undo the restore
     const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
-    setPast(prev => [...prev, currentState]);
+    pastRef.current.push(currentState);
+    if (pastRef.current.length > 50) pastRef.current.shift();
+    setPast([...pastRef.current]);
     lastSavedStateRef.current = versionState;
+    futureRef.current = [];
     setFuture([]);
     
     setStrokes(versionState.strokes || []);
@@ -300,22 +308,20 @@ export function useCanvasData(pageId: string) {
     const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
     const isUncommitted = lastSavedStateRef.current && JSON.stringify(currentState) !== JSON.stringify(lastSavedStateRef.current);
     
-    let currentPast = past;
-    let currentLastSaved = lastSavedStateRef.current;
-    
-    if (isUncommitted) {
-      currentPast = [...past, lastSavedStateRef.current!];
-      currentLastSaved = currentState;
-      setPast(currentPast);
+    if (isUncommitted && lastSavedStateRef.current) {
+      pastRef.current.push(lastSavedStateRef.current);
+      if (pastRef.current.length > 50) pastRef.current.shift();
+      lastSavedStateRef.current = currentState;
     }
     
-    if (currentPast.length === 0) return;
+    if (pastRef.current.length === 0) return;
     
-    const newPast = [...currentPast];
-    const stateToRestore = newPast.pop()!;
+    const stateToRestore = pastRef.current.pop()!;
+    futureRef.current.unshift(lastSavedStateRef.current || currentState);
+    if (futureRef.current.length > 50) futureRef.current.pop();
     
-    setFuture(prev => [currentLastSaved!, ...prev]);
-    setPast(newPast);
+    setPast([...pastRef.current]);
+    setFuture([...futureRef.current]);
     lastSavedStateRef.current = stateToRestore;
     
     setStrokes(stateToRestore.strokes || []);
@@ -328,16 +334,19 @@ export function useCanvasData(pageId: string) {
     setConnectors(stateToRestore.connectors || []);
     
     isUndoingRef.current = true;
-  }, [past, strokes, texts, audios, images, files, videos, shapes, connectors]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
 
   const redo = useCallback(() => {
-    if (future.length === 0) return;
+    if (futureRef.current.length === 0) return;
     
-    const newFuture = [...future];
-    const stateToRestore = newFuture.shift()!; // pop from start
+    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
+    const stateToRestore = futureRef.current.shift()!;
     
-    setPast(prev => [...prev, lastSavedStateRef.current!]);
-    setFuture(newFuture);
+    pastRef.current.push(lastSavedStateRef.current || currentState);
+    if (pastRef.current.length > 50) pastRef.current.shift();
+    
+    setPast([...pastRef.current]);
+    setFuture([...futureRef.current]);
     lastSavedStateRef.current = stateToRestore;
     
     setStrokes(stateToRestore.strokes || []);
@@ -350,7 +359,7 @@ export function useCanvasData(pageId: string) {
     setConnectors(stateToRestore.connectors || []);
     
     isUndoingRef.current = true;
-  }, [future]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
 
   return {
     loading,
