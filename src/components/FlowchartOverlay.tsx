@@ -22,7 +22,7 @@ import {
   Copy, 
   Square, 
   Circle as CircleIcon, 
-  RotateCw, 
+  Diamond, 
   AlignLeft, 
   AlignCenter, 
   AlignRight, 
@@ -1029,7 +1029,7 @@ export function FlowchartOverlay({
             {[
               { type: 'rectangle', icon: <Square size={13} />, label: 'Process' },
               { type: 'rounded', icon: <div className="w-3.5 h-2 rounded-full border border-current" />, label: 'Start/End' },
-              { type: 'diamond', icon: <RotateCw size={13} className="rotate-45" />, label: 'Decision' },
+              { type: 'diamond', icon: <Diamond size={13} />, label: 'Decision' },
               { type: 'circle', icon: <CircleIcon size={13} />, label: 'Event' },
               { type: 'cylinder', icon: <Database size={13} />, label: 'Database' },
               { type: 'note', icon: <StickyNote size={13} />, label: 'Note' }
