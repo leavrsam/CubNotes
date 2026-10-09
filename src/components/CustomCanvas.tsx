@@ -12,6 +12,7 @@ import { RichTextOverlay } from "./RichTextOverlay";
 import { AudioOverlay } from "./AudioOverlay";
 import { MediaOverlay } from "./MediaOverlay";
 import { Minimap } from "./Minimap";
+import { MeetingWorkspace } from "./MeetingWorkspace";
 import { uploadMediaFile } from "@/lib/storage";
 import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
 import { processAudioTranscription } from "@/lib/transcribe";
@@ -391,6 +392,21 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [isVersionsMenuOpen, setIsVersionsMenuOpen] = useState(false);
   const [annotateBlockId, setAnnotateBlockId] = useState<string | null>(null);
 
+  // Foresight Meeting Workspace state
+  const [isMeetingWorkspaceOpen, setIsMeetingWorkspaceOpen] = useState(false);
+  const [meetingWorkspaceAudioId, setMeetingWorkspaceAudioId] = useState<string | null>(null);
+
+  const updateAudioField = useCallback((id: string, field: keyof AudioNode, value: any) => {
+    setAudios(prev => (prev || []).map(a => a.id === id ? { ...a, [field]: value } : a));
+  }, [setAudios]);
+
+  const activeMeetingAudio = useMemo(() => {
+    if (meetingWorkspaceAudioId) {
+      return (audios || []).find(a => a.id === meetingWorkspaceAudioId) || null;
+    }
+    return (audios || []).find(a => a.isLiveRecording) || (audios && audios.length > 0 ? audios[audios.length - 1] : null);
+  }, [audios, meetingWorkspaceAudioId]);
+
   const handleAnnotateBlock = useCallback((id: string) => {
     setAnnotateBlockId(id);
     setTool('pen');
@@ -636,6 +652,36 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     };
   }, [pan, zoom]);
 
+  const handleOpenMeetingWorkspace = useCallback((audioId?: string) => {
+    if (audioId) {
+      setMeetingWorkspaceAudioId(audioId);
+    } else {
+      const existing = (audios || []).find(a => a.isLiveRecording) || (audios && audios.length > 0 ? audios[audios.length - 1] : null);
+      if (existing) {
+        setMeetingWorkspaceAudioId(existing.id);
+      } else {
+        const center = getCanvasCenter();
+        const newId = uuidv4();
+        const newAudio: AudioNode = {
+          id: newId,
+          x: center.x - 220,
+          y: isJournal ? 80 : center.y - 100,
+          width: 500,
+          url: "",
+          title: `Meeting - ${format(new Date(), 'MMM d, yyyy')}`,
+          summary: "",
+          transcript: "",
+          notes: "",
+          audioCreatedAt: Date.now(),
+          isAudioSavedPermanently: true,
+        };
+        setAudios(prev => [...(prev || []), newAudio]);
+        setMeetingWorkspaceAudioId(newId);
+      }
+    }
+    setIsMeetingWorkspaceOpen(true);
+  }, [audios, getCanvasCenter, isJournal, setAudios]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'file' | 'image' | 'audio') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -697,6 +743,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const center = getCanvasCenter();
       const nodeId = uuidv4();
       activeRecordingNodeIdRef.current = nodeId;
+      setMeetingWorkspaceAudioId(nodeId);
 
       // Spawn Audio Card immediately so user can type notes in real-time
       setAudios(prev => [...(prev || []), {
@@ -1553,6 +1600,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
             </button>
           </div>
+
+          <div className="ml-auto mb-1 flex items-center gap-2">
+            <button
+              onClick={() => handleOpenMeetingWorkspace()}
+              className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-full text-xs font-semibold shadow-xs transition-transform active:scale-95"
+              title="Open Foresight & Granola Meeting Workspace"
+            >
+              <Sparkles size={13} className="text-amber-200" />
+              <span>Meeting Workspace</span>
+            </button>
+          </div>
         </div>
         
         {/* Ribbon Content */}
@@ -1797,6 +1855,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   >
                     <FileIcon size={16} strokeWidth={2} />
                     <span className="text-[10px] font-medium mt-0.5">Upload Audio File</span>
+                  </button>
+
+                  <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+
+                  <button
+                    onClick={() => handleOpenMeetingWorkspace()}
+                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-primary-600 dark:text-primary-400 transition-colors"
+                    title="Open Granola & Foresight style Meeting Workspace"
+                  >
+                    <Sparkles size={16} strokeWidth={2} />
+                    <span className="text-[10px] font-bold mt-0.5">Meeting Workspace</span>
                   </button>
                 </div>
               </div>
@@ -2285,6 +2354,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onPauseRecording={pauseRecording}
           onResumeRecording={resumeRecording}
           onStopRecording={stopRecording}
+          onOpenMeetingWorkspace={(audioId) => handleOpenMeetingWorkspace(audioId)}
         />
         <MediaOverlay
           images={images || []}
@@ -2429,6 +2499,38 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           setPan={setPan}
         />
       )}
+
+      {/* Foresight & Granola Meeting Workspace Modal */}
+      <MeetingWorkspace 
+        isOpen={isMeetingWorkspaceOpen}
+        onClose={() => setIsMeetingWorkspaceOpen(false)}
+        activeAudioNode={activeMeetingAudio}
+        updateAudioField={updateAudioField}
+        isLiveRecording={isRecording}
+        recordingDuration={recordingDuration}
+        isRecordingPaused={isPaused}
+        onPauseRecording={pauseRecording}
+        onResumeRecording={resumeRecording}
+        onStopRecording={stopRecording}
+        onStartRecording={startRecording}
+        audios={audios || []}
+        onSelectAudioNode={(id) => setMeetingWorkspaceAudioId(id)}
+        onExplodeToCanvas={(notesText, summaryText) => {
+          setIsMeetingWorkspaceOpen(false);
+          const worldX = (-pan.x + window.innerWidth / 3) / zoom;
+          const worldY = (-pan.y + window.innerHeight / 3) / zoom;
+          if (notesText?.trim()) {
+            const htmlNotes = notesText.split('\n').map(l => `<p>${l || '<br>'}</p>`).join('');
+            setTexts(prev => [...prev, { id: uuidv4(), x: worldX, y: worldY, width: 500, content: htmlNotes }]);
+          }
+          if (summaryText?.trim()) {
+            const htmlSummary = summaryText.split('\n').map(l => `<p>${l || '<br>'}</p>`).join('');
+            setTexts(prev => [...prev, { id: uuidv4(), x: worldX + 540, y: worldY, width: 500, content: htmlSummary }]);
+          }
+          toast.success("Meeting takeaways exploded onto your canvas!");
+        }}
+        pageTitle={pageTitle}
+      />
     </div>
   );
 }
