@@ -115,17 +115,17 @@ DO NOT include markdown wrappers or backticks. Return ONLY raw JSON.
         shapeType = node.type as FlowchartShapeType;
       }
 
-      // Default pastel styling based on role
-      let fillColor = '#ffffff';
+      // Clean semi-transparent styling with crisp borders
+      let fillColor = 'rgba(59, 130, 246, 0.08)';
       let strokeColor = '#3b82f6';
       if (shapeType === 'rounded') {
-        fillColor = '#dcfce7'; // green-ish
+        fillColor = 'rgba(34, 197, 94, 0.12)'; // green-ish
         strokeColor = '#22c55e';
       } else if (shapeType === 'diamond') {
-        fillColor = '#fef3c7'; // amber-ish
+        fillColor = 'rgba(245, 158, 11, 0.12)'; // amber-ish
         strokeColor = '#f59e0b';
       } else if (shapeType === 'cylinder') {
-        fillColor = '#f3e8ff'; // purple
+        fillColor = 'rgba(168, 85, 247, 0.12)'; // purple
         strokeColor = '#a855f7';
       }
 

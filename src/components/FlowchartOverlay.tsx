@@ -58,13 +58,81 @@ interface FlowchartOverlayProps {
 }
 
 const SHAPE_PALETTE = [
-  { name: 'Default', fill: '#ffffff', darkFill: '#18181b', stroke: '#71717a' },
-  { name: 'Blue', fill: '#e0f2fe', darkFill: '#0c4a6e', stroke: '#38bdf8' },
-  { name: 'Green', fill: '#dcfce7', darkFill: '#14532d', stroke: '#4ade80' },
-  { name: 'Amber', fill: '#fef3c7', darkFill: '#78350f', stroke: '#fbbf24' },
-  { name: 'Purple', fill: '#f3e8ff', darkFill: '#581c87', stroke: '#c084fc' },
-  { name: 'Rose', fill: '#ffe4e6', darkFill: '#881337', stroke: '#fb7185' },
+  { name: 'Default', fill: 'rgba(59, 130, 246, 0.08)', stroke: '#3b82f6', preview: '#3b82f6' },
+  { name: 'Blue', fill: 'rgba(56, 189, 248, 0.14)', stroke: '#38bdf8', preview: '#38bdf8' },
+  { name: 'Green', fill: 'rgba(74, 222, 128, 0.14)', stroke: '#4ade80', preview: '#4ade80' },
+  { name: 'Amber', fill: 'rgba(251, 191, 36, 0.14)', stroke: '#fbbf24', preview: '#fbbf24' },
+  { name: 'Purple', fill: 'rgba(192, 132, 252, 0.14)', stroke: '#c084fc', preview: '#c084fc' },
+  { name: 'Rose', fill: 'rgba(251, 113, 133, 0.14)', stroke: '#fb7185', preview: '#fb7185' },
 ];
+
+function getShapeColors(shape: ShapeNode) {
+  let stroke = shape.strokeColor || "#3b82f6";
+  let fill = shape.fillColor || "rgba(59, 130, 246, 0.08)";
+
+  // If the fill is solid white or light hex, make it semi-transparent so text is fully visible
+  if (fill === "#ffffff" || fill === "#fff" || fill === "white") {
+    fill = "rgba(59, 130, 246, 0.08)";
+    if (!shape.strokeColor) stroke = "#3b82f6";
+  } else if (fill.startsWith("#")) {
+    const r = parseInt(fill.slice(1, 3), 16);
+    const g = parseInt(fill.slice(3, 5), 16);
+    const b = parseInt(fill.slice(5, 7), 16);
+    if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+      fill = `rgba(${r}, ${g}, ${b}, 0.14)`;
+    }
+  }
+
+  return { stroke, fill };
+}
+
+function getAutoFontSize(text: string, width: number, height: number, type?: FlowchartShapeType, baseSize = 14): number {
+  if (!text || text.trim().length === 0) return baseSize;
+
+  let widthFactor = 0.85;
+  let heightFactor = 0.82;
+  if (type === 'diamond') {
+    widthFactor = 0.58;
+    heightFactor = 0.58;
+  } else if (type === 'circle') {
+    widthFactor = 0.70;
+    heightFactor = 0.70;
+  } else if (type === 'cylinder') {
+    widthFactor = 0.82;
+    heightFactor = 0.65;
+  }
+
+  const usableWidth = Math.max(30, width * widthFactor);
+  const usableHeight = Math.max(20, height * heightFactor);
+
+  const lines = text.split('\n');
+  let optimalSize = baseSize;
+
+  for (let s = baseSize; s >= 8; s -= 0.5) {
+    const charWidth = s * 0.54;
+    const lineHeight = s * 1.32;
+    const charsPerLine = Math.max(1, Math.floor(usableWidth / charWidth));
+
+    let totalLinesNeeded = 0;
+    for (const line of lines) {
+      if (line.length === 0) {
+        totalLinesNeeded += 1;
+      } else {
+        totalLinesNeeded += Math.max(1, Math.ceil(line.length / charsPerLine));
+      }
+    }
+
+    if (totalLinesNeeded * lineHeight <= usableHeight) {
+      optimalSize = s;
+      break;
+    }
+    optimalSize = s;
+  }
+
+  return Math.max(8, optimalSize);
+}
+
+export type ResizeCorner = 'nw' | 'ne' | 'se' | 'sw';
 
 export function FlowchartOverlay({
   shapes,
@@ -94,9 +162,20 @@ export function FlowchartOverlay({
   const [draggingShapeId, setDraggingShapeId] = useState<string | null>(null);
   const dragStartPos = useRef<{ clientX: number; clientY: number; shapeX: number; shapeY: number } | null>(null);
 
-  // Resizing shape state
-  const [resizingShapeId, setResizingShapeId] = useState<string | null>(null);
-  const resizeStartPos = useRef<{ clientX: number; clientY: number; w: number; h: number } | null>(null);
+  // Resizing shape state (supports all 4 corners)
+  const [resizingState, setResizingState] = useState<{
+    shapeId: string;
+    corner: ResizeCorner;
+  } | null>(null);
+  const resizeStartPos = useRef<{
+    clientX: number;
+    clientY: number;
+    shapeX: number;
+    shapeY: number;
+    w: number;
+    h: number;
+    corner: ResizeCorner;
+  } | null>(null);
 
   // Connecting line interactive state
   const [connectingState, setConnectingState] = useState<{
@@ -126,15 +205,19 @@ export function FlowchartOverlay({
     };
   };
 
-  // Handle shape resizing
-  const handleResizePointerDown = (e: React.PointerEvent, shape: ShapeNode) => {
+  // Handle shape resizing from any corner
+  const handleResizePointerDown = (e: React.PointerEvent, shape: ShapeNode, corner: ResizeCorner) => {
     e.stopPropagation();
-    setResizingShapeId(shape.id);
+    e.preventDefault();
+    setResizingState({ shapeId: shape.id, corner });
     resizeStartPos.current = {
       clientX: e.clientX,
       clientY: e.clientY,
+      shapeX: shape.x,
+      shapeY: shape.y,
       w: shape.width,
-      h: shape.height
+      h: shape.height,
+      corner
     };
   };
 
@@ -172,16 +255,52 @@ export function FlowchartOverlay({
         onDragSelectionMove?.(dx, dy);
       }
 
-      // 2. Resizing shape
-      if (resizingShapeId && resizeStartPos.current) {
-        const dw = (e.clientX - resizeStartPos.current.clientX) / zoom;
-        const dh = (e.clientY - resizeStartPos.current.clientY) / zoom;
+      // 2. Resizing shape from any of the 4 corners
+      if (resizingState && resizeStartPos.current) {
+        const { clientX: startX, clientY: startY, shapeX, shapeY, w: startW, h: startH, corner } = resizeStartPos.current;
+        const dx = (e.clientX - startX) / zoom;
+        const dy = (e.clientY - startY) / zoom;
+
         setShapes(prev => prev.map(s => {
-          if (s.id === resizingShapeId) {
+          if (s.id === resizingState.shapeId) {
+            let newX = shapeX;
+            let newY = shapeY;
+            let newW = startW;
+            let newH = startH;
+
+            const minW = s.type === 'circle' ? 50 : 60;
+            const minH = s.type === 'circle' ? 50 : 40;
+
+            if (corner === 'se') {
+              newW = Math.max(minW, Math.round(startW + dx));
+              newH = Math.max(minH, Math.round(startH + dy));
+            } else if (corner === 'sw') {
+              newW = Math.max(minW, Math.round(startW - dx));
+              newH = Math.max(minH, Math.round(startH + dy));
+              newX = Math.round(shapeX + (startW - newW));
+            } else if (corner === 'ne') {
+              newW = Math.max(minW, Math.round(startW + dx));
+              newH = Math.max(minH, Math.round(startH - dy));
+              newY = Math.round(shapeY + (startH - newH));
+            } else if (corner === 'nw') {
+              newW = Math.max(minW, Math.round(startW - dx));
+              newH = Math.max(minH, Math.round(startH - dy));
+              newX = Math.round(shapeX + (startW - newW));
+              newY = Math.round(shapeY + (startH - newH));
+            }
+
+            if (s.type === 'circle') {
+              const maxDim = Math.max(newW, newH);
+              newW = maxDim;
+              newH = maxDim;
+            }
+
             return {
               ...s,
-              width: Math.max(60, Math.round(resizeStartPos.current!.w + dw)),
-              height: Math.max(40, Math.round(resizeStartPos.current!.h + dh))
+              x: newX,
+              y: newY,
+              width: newW,
+              height: newH
             };
           }
           return s;
@@ -203,8 +322,8 @@ export function FlowchartOverlay({
         onDragSelectionEnd?.();
       }
 
-      if (resizingShapeId) {
-        setResizingShapeId(null);
+      if (resizingState) {
+        setResizingState(null);
         resizeStartPos.current = null;
       }
 
@@ -241,7 +360,7 @@ export function FlowchartOverlay({
     };
   }, [
     draggingShapeId, 
-    resizingShapeId, 
+    resizingState, 
     connectingState, 
     hoverAnchor, 
     zoom, 
@@ -322,6 +441,7 @@ export function FlowchartOverlay({
         break;
     }
 
+    const { stroke, fill } = getShapeColors(sourceShape);
     const newShapeId = uuidv4();
     const newShape: ShapeNode = {
       id: newShapeId,
@@ -331,8 +451,8 @@ export function FlowchartOverlay({
       width: sourceShape.width,
       height: sourceShape.height,
       text: "",
-      fillColor: sourceShape.fillColor,
-      strokeColor: sourceShape.strokeColor,
+      fillColor: fill,
+      strokeColor: stroke,
       strokeWidth: sourceShape.strokeWidth || 2,
       strokeStyle: sourceShape.strokeStyle || 'solid',
       fontSize: sourceShape.fontSize || 14,
@@ -372,8 +492,7 @@ export function FlowchartOverlay({
   const renderShapeGeometry = (shape: ShapeNode) => {
     const w = shape.width;
     const h = shape.height;
-    const fill = shape.fillColor || "#ffffff";
-    const stroke = shape.strokeColor || "#71717a";
+    const { stroke, fill } = getShapeColors(shape);
     const strokeWidth = shape.strokeWidth || 2;
     const strokeDash = shape.strokeStyle === 'dashed' ? '5,5' : undefined;
 
@@ -700,6 +819,8 @@ export function FlowchartOverlay({
         const isEditing = editingShapeId === shape.id;
         const anchors: AnchorPosition[] = ['top', 'right', 'bottom', 'left'];
 
+        const autoFontSize = getAutoFontSize(shape.text || "", shape.width, shape.height, shape.type, shape.fontSize || 14);
+
         return (
           <div
             key={shape.id}
@@ -729,11 +850,10 @@ export function FlowchartOverlay({
 
             {/* Inner Content / Label Container */}
             <div 
-              className="absolute inset-0 flex items-center justify-center p-3 overflow-hidden"
+              className="absolute inset-0 flex items-center justify-center p-2.5 overflow-hidden pointer-events-none"
               style={{
                 textAlign: shape.textAlign || 'center',
                 color: shape.textColor || 'inherit',
-                fontSize: `${(shape.fontSize || 14) * zoom}px`
               }}
             >
               {isEditing ? (
@@ -755,21 +875,27 @@ export function FlowchartOverlay({
                       setEditingShapeId(null);
                     }
                   }}
-                  className="w-full h-full bg-transparent resize-none border-none outline-none font-medium text-center focus:ring-0 text-zinc-900 dark:text-zinc-100"
+                  className="w-full h-full bg-transparent resize-none border-none outline-none font-semibold text-center focus:ring-0 text-zinc-900 dark:text-zinc-50 pointer-events-auto leading-snug"
                   style={{
-                    fontSize: `${(shape.fontSize || 14) * zoom}px`,
+                    fontSize: `${autoFontSize * zoom}px`,
                     textAlign: shape.textAlign || 'center'
                   }}
                 />
               ) : (
-                <span className="font-medium text-zinc-800 dark:text-zinc-100 select-none break-words line-clamp-3">
+                <span 
+                  className="font-semibold text-zinc-900 dark:text-zinc-50 select-none break-words leading-snug max-w-full text-center"
+                  style={{
+                    fontSize: `${autoFontSize * zoom}px`,
+                    textAlign: shape.textAlign || 'center'
+                  }}
+                >
                   {shape.text || (isSelected ? "Double-click to type" : "")}
                 </span>
               )}
             </div>
 
-            {/* 4 Magnetic Snap Anchor Dots */}
-            {anchors.map(anchor => {
+            {/* Magnetic Snap Anchor Dots (shown when connecting, or when unselected on hover) */}
+            {(!isSelected || connectingState) && anchors.map(anchor => {
               let posClasses = "";
               switch (anchor) {
                 case 'top': posClasses = "top-0 left-1/2 -translate-x-1/2 -translate-y-1/2"; break;
@@ -784,7 +910,7 @@ export function FlowchartOverlay({
                 <div
                   key={anchor}
                   className={`absolute ${posClasses} z-40 transition-all ${
-                    isSelected || connectingState ? 'opacity-100 scale-100' : 'opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100'
+                    connectingState ? 'opacity-100 scale-100' : 'opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100'
                   }`}
                   style={{ pointerEvents: 'auto' }}
                   onPointerDown={(e) => handleAnchorPointerDown(e, shape.id, anchor)}
@@ -809,14 +935,14 @@ export function FlowchartOverlay({
               );
             })}
 
-            {/* Miro/FigJam-Style Quick Add directional '+' buttons when selected */}
+            {/* Quick Add directional '+' buttons when selected */}
             {isSelected && !connectingState && (
               <>
                 {/* Right + */}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleQuickAdd(shape, 'right'); }}
-                  className="absolute right-0 top-1/2 translate-x-8 -translate-y-1/2 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
+                  className="absolute right-0 top-1/2 translate-x-7 -translate-y-1/2 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
                   title="Add next step (Right)"
                 >
                   <Plus size={14} />
@@ -825,7 +951,7 @@ export function FlowchartOverlay({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleQuickAdd(shape, 'bottom'); }}
-                  className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-8 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
+                  className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-7 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
                   title="Add next step (Bottom)"
                 >
                   <Plus size={14} />
@@ -834,7 +960,7 @@ export function FlowchartOverlay({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleQuickAdd(shape, 'left'); }}
-                  className="absolute left-0 top-1/2 -translate-x-8 -translate-y-1/2 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
+                  className="absolute left-0 top-1/2 -translate-x-7 -translate-y-1/2 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
                   title="Add step (Left)"
                 >
                   <Plus size={14} />
@@ -843,7 +969,7 @@ export function FlowchartOverlay({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleQuickAdd(shape, 'top'); }}
-                  className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-8 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
+                  className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-7 w-6 h-6 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md flex items-center justify-center transition-transform hover:scale-110 pointer-events-auto z-40"
                   title="Add step (Top)"
                 >
                   <Plus size={14} />
@@ -851,14 +977,38 @@ export function FlowchartOverlay({
               </>
             )}
 
-            {/* Resize Handle at Bottom-Right */}
-            {isSelected && (
-              <div
-                className="absolute bottom-0 right-0 translate-x-1.5 translate-y-1.5 w-3.5 h-3.5 bg-blue-600 border-2 border-white dark:border-zinc-900 rounded-sm shadow-xs cursor-nwse-resize z-40"
-                style={{ pointerEvents: 'auto' }}
-                onPointerDown={(e) => handleResizePointerDown(e, shape)}
-                title="Resize"
-              />
+            {/* 4 Corner Resize Handles */}
+            {isSelected && !connectingState && (
+              <>
+                {/* Top-Left */}
+                <div
+                  className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xs shadow-xs cursor-nwse-resize z-40 hover:scale-125 transition-transform"
+                  style={{ pointerEvents: 'auto' }}
+                  onPointerDown={(e) => handleResizePointerDown(e, shape, 'nw')}
+                  title="Resize (NW)"
+                />
+                {/* Top-Right */}
+                <div
+                  className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xs shadow-xs cursor-nesw-resize z-40 hover:scale-125 transition-transform"
+                  style={{ pointerEvents: 'auto' }}
+                  onPointerDown={(e) => handleResizePointerDown(e, shape, 'ne')}
+                  title="Resize (NE)"
+                />
+                {/* Bottom-Right */}
+                <div
+                  className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xs shadow-xs cursor-nwse-resize z-40 hover:scale-125 transition-transform"
+                  style={{ pointerEvents: 'auto' }}
+                  onPointerDown={(e) => handleResizePointerDown(e, shape, 'se')}
+                  title="Resize (SE)"
+                />
+                {/* Bottom-Left */}
+                <div
+                  className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xs shadow-xs cursor-nesw-resize z-40 hover:scale-125 transition-transform"
+                  style={{ pointerEvents: 'auto' }}
+                  onPointerDown={(e) => handleResizePointerDown(e, shape, 'sw')}
+                  title="Resize (SW)"
+                />
+              </>
             )}
           </div>
         );
@@ -909,8 +1059,8 @@ export function FlowchartOverlay({
                     strokeColor: item.stroke
                   } : s));
                 }}
-                className="w-4 h-4 rounded-full border border-black/10 dark:border-white/10 shadow-xs hover:scale-125 transition-transform"
-                style={{ backgroundColor: item.fill }}
+                className="w-4 h-4 rounded-full border-2 border-white dark:border-zinc-800 shadow-xs hover:scale-125 transition-transform"
+                style={{ backgroundColor: item.preview }}
                 title={item.name}
               />
             ))}

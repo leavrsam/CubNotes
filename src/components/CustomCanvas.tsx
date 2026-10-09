@@ -486,7 +486,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       width: isRound ? 90 : isDiamond ? 140 : 160,
       height: isRound ? 90 : isDiamond ? 90 : 80,
       text: "",
-      fillColor: type === 'note' ? '#fef3c7' : '#ffffff',
+      fillColor: type === 'note' ? 'rgba(251, 191, 36, 0.14)' : 'rgba(59, 130, 246, 0.08)',
       strokeColor: type === 'note' ? '#f59e0b' : '#3b82f6',
       strokeWidth: 2,
       strokeStyle: 'solid',
@@ -1177,7 +1177,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         width: isRound ? 90 : isDiamond ? 140 : 160,
         height: isRound ? 90 : isDiamond ? 90 : 80,
         text: "",
-        fillColor: activeShapeType === 'note' ? '#fef3c7' : '#ffffff',
+        fillColor: activeShapeType === 'note' ? 'rgba(251, 191, 36, 0.14)' : 'rgba(59, 130, 246, 0.08)',
         strokeColor: activeShapeType === 'note' ? '#f59e0b' : '#3b82f6',
         strokeWidth: 2,
         strokeStyle: 'solid',
@@ -3143,7 +3143,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         />
       </div>
 
-      {selectedIds.length > 0 && !(selectedIds.length === 1 && texts.some(t => t.id === selectedIds[0])) && getSelectionBounds() && (() => {
+      {selectedIds.length > 1 && getSelectionBounds() && (() => {
         const bounds = getSelectionBounds()!;
         const screenX = (bounds.x * zoom) + pan.x;
         const screenY = (bounds.y * zoom) + pan.y;
