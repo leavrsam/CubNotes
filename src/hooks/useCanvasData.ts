@@ -9,7 +9,7 @@ import {
   getPendingSyncActions, 
   removeSyncAction 
 } from "@/lib/offlineStore";
-import { Stroke, TextNode, AudioNode, ImageNode, FileNode, VideoNode, DocumentState } from "@/components/CustomCanvas";
+import { Stroke, TextNode, AudioNode, ImageNode, FileNode, VideoNode, ShapeNode, ConnectorNode, DocumentState } from "@/components/CustomCanvas";
 
 export function useCanvasData(pageId: string) {
   const [loading, setLoading] = useState(true);
@@ -21,6 +21,8 @@ export function useCanvasData(pageId: string) {
   const [images, setImages] = useState<ImageNode[]>([]);
   const [files, setFiles] = useState<FileNode[]>([]);
   const [videos, setVideos] = useState<VideoNode[]>([]);
+  const [shapes, setShapes] = useState<ShapeNode[]>([]);
+  const [connectors, setConnectors] = useState<ConnectorNode[]>([]);
 
   // History state
   const [past, setPast] = useState<DocumentState[]>([]);
@@ -43,6 +45,8 @@ export function useCanvasData(pageId: string) {
           setImages(cached.images || []);
           setFiles(cached.files || []);
           setVideos(cached.videos || []);
+          setShapes(cached.shapes || []);
+          setConnectors(cached.connectors || []);
           lastSavedStateRef.current = cached;
           setLoading(false);
         }
@@ -74,6 +78,8 @@ export function useCanvasData(pageId: string) {
           setImages(state.images || []);
           setFiles(state.files || []);
           setVideos(state.videos || []);
+          setShapes(state.shapes || []);
+          setConnectors(state.connectors || []);
           lastSavedStateRef.current = state;
           // Update local cache with fresh state
           setCachedPageState(pageId, state, false);
@@ -103,7 +109,7 @@ export function useCanvasData(pageId: string) {
     }
     
     const timeoutId = setTimeout(() => {
-      const currentState: DocumentState = { strokes, texts, audios, images, files, videos };
+      const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
       
       if (!lastSavedStateRef.current) {
         lastSavedStateRef.current = currentState;
@@ -118,18 +124,20 @@ export function useCanvasData(pageId: string) {
     }, 500);
     
     return () => clearTimeout(timeoutId);
-  }, [strokes, texts, audios, images, files, videos, loading]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading]);
 
   // Save state: Write locally immediately, debounced sync to Supabase
   const saveToSupabase = useCallback(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     debounce(async (
       newStrokes: Stroke[], newTexts: TextNode[], newAudios: AudioNode[],
-      newImages: ImageNode[], newFiles: FileNode[], newVideos: VideoNode[]
+      newImages: ImageNode[], newFiles: FileNode[], newVideos: VideoNode[],
+      newShapes: ShapeNode[], newConnectors: ConnectorNode[]
     ) => {
       const state: DocumentState = { 
         strokes: newStrokes, texts: newTexts, audios: newAudios,
-        images: newImages, files: newFiles, videos: newVideos
+        images: newImages, files: newFiles, videos: newVideos,
+        shapes: newShapes, connectors: newConnectors
       };
 
       const isOfflineNow = typeof navigator !== 'undefined' && !navigator.onLine;
@@ -212,15 +220,21 @@ export function useCanvasData(pageId: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     debounce(async (
       newStrokes: Stroke[], newTexts: TextNode[], newAudios: AudioNode[],
-      newImages: ImageNode[], newFiles: FileNode[], newVideos: VideoNode[]
+      newImages: ImageNode[], newFiles: FileNode[], newVideos: VideoNode[],
+      newShapes: ShapeNode[], newConnectors: ConnectorNode[]
     ) => {
       const state: DocumentState = { 
         strokes: newStrokes, texts: newTexts, audios: newAudios,
-        images: newImages, files: newFiles, videos: newVideos
+        images: newImages, files: newFiles, videos: newVideos,
+        shapes: newShapes, connectors: newConnectors
       };
       
       // Don't save empty states as versions
-      if (newStrokes.length === 0 && newTexts.length === 0 && newImages.length === 0 && newFiles.length === 0 && newVideos.length === 0 && newAudios.length === 0) {
+      if (
+        newStrokes.length === 0 && newTexts.length === 0 && newImages.length === 0 && 
+        newFiles.length === 0 && newVideos.length === 0 && newAudios.length === 0 &&
+        newShapes.length === 0 && newConnectors.length === 0
+      ) {
         return;
       }
       
@@ -238,15 +252,15 @@ export function useCanvasData(pageId: string) {
 
   useEffect(() => {
     if (!loading) {
-      saveToSupabase(strokes, texts, audios, images, files, videos);
-      saveVersionToSupabase(strokes, texts, audios, images, files, videos);
+      saveToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
+      saveVersionToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
     }
     
     return () => {
       saveToSupabase.flush();
       saveVersionToSupabase.flush();
     };
-  }, [strokes, texts, audios, images, files, videos, loading, saveToSupabase, saveVersionToSupabase]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading, saveToSupabase, saveVersionToSupabase]);
 
   // Fetch Page Versions
   const [pageVersions, setPageVersions] = useState<any[]>([]);
@@ -265,7 +279,7 @@ export function useCanvasData(pageId: string) {
 
   const restoreVersion = useCallback((versionState: DocumentState) => {
     // Push current state to past before restoring, so we can undo the restore
-    const currentState: DocumentState = { strokes, texts, audios, images, files, videos };
+    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
     setPast(prev => [...prev, currentState]);
     lastSavedStateRef.current = versionState;
     setFuture([]);
@@ -276,12 +290,14 @@ export function useCanvasData(pageId: string) {
     setImages(versionState.images || []);
     setFiles(versionState.files || []);
     setVideos(versionState.videos || []);
+    setShapes(versionState.shapes || []);
+    setConnectors(versionState.connectors || []);
     
     isUndoingRef.current = true;
-  }, [strokes, texts, audios, images, files, videos]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
 
   const undo = useCallback(() => {
-    const currentState: DocumentState = { strokes, texts, audios, images, files, videos };
+    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
     const isUncommitted = lastSavedStateRef.current && JSON.stringify(currentState) !== JSON.stringify(lastSavedStateRef.current);
     
     let currentPast = past;
@@ -308,9 +324,11 @@ export function useCanvasData(pageId: string) {
     setImages(stateToRestore.images || []);
     setFiles(stateToRestore.files || []);
     setVideos(stateToRestore.videos || []);
+    setShapes(stateToRestore.shapes || []);
+    setConnectors(stateToRestore.connectors || []);
     
     isUndoingRef.current = true;
-  }, [past, strokes, texts, audios, images, files, videos]);
+  }, [past, strokes, texts, audios, images, files, videos, shapes, connectors]);
 
   const redo = useCallback(() => {
     if (future.length === 0) return;
@@ -328,6 +346,8 @@ export function useCanvasData(pageId: string) {
     setImages(stateToRestore.images || []);
     setFiles(stateToRestore.files || []);
     setVideos(stateToRestore.videos || []);
+    setShapes(stateToRestore.shapes || []);
+    setConnectors(stateToRestore.connectors || []);
     
     isUndoingRef.current = true;
   }, [future]);
@@ -340,8 +360,10 @@ export function useCanvasData(pageId: string) {
     images, setImages,
     files, setFiles,
     videos, setVideos,
+    shapes, setShapes,
+    connectors, setConnectors,
     undo, redo,
-    canUndo: past.length > 0 || (lastSavedStateRef.current !== null && JSON.stringify({ strokes, texts, audios, images, files, videos }) !== JSON.stringify(lastSavedStateRef.current)),
+    canUndo: past.length > 0 || (lastSavedStateRef.current !== null && JSON.stringify({ strokes, texts, audios, images, files, videos, shapes, connectors }) !== JSON.stringify(lastSavedStateRef.current)),
     canRedo: future.length > 0,
     pageVersions,
     fetchVersions,

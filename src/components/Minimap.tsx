@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { Stroke, TextNode, ImageNode, FileNode, VideoNode, AudioNode } from './CustomCanvas';
+import { Stroke, TextNode, ImageNode, FileNode, VideoNode, AudioNode, ShapeNode } from './CustomCanvas';
 import { Stage, Layer, Rect, Group, Path, Text } from 'react-konva';
 import { useAccent, ACCENT_COLORS } from './AccentProvider';
 
@@ -10,6 +10,7 @@ interface MinimapProps {
   files: FileNode[];
   videos: VideoNode[];
   audios: AudioNode[];
+  shapes?: ShapeNode[];
   pan: { x: number; y: number };
   zoom: number;
   setPan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
@@ -19,7 +20,7 @@ const MINIMAP_WIDTH = 200;
 const MINIMAP_HEIGHT = 150;
 
 export const Minimap: React.FC<MinimapProps> = ({
-  strokes, texts, images, files, videos, audios, pan, zoom, setPan
+  strokes, texts, images, files, videos, audios, shapes = [], pan, zoom, setPan
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { accentColor } = useAccent();
@@ -59,6 +60,7 @@ export const Minimap: React.FC<MinimapProps> = ({
     files.forEach(f => updateBounds(f.x, f.y, 256, 100));
     audios.forEach(a => updateBounds(a.x, a.y, a.width || 400, 100));
     videos.forEach(v => updateBounds(v.x, v.y, v.width || 480, v.height || 270));
+    shapes.forEach(s => updateBounds(s.x, s.y, s.width, s.height));
 
     // If canvas is empty, use a default viewport box
     if (minX === Infinity) {
@@ -73,7 +75,7 @@ export const Minimap: React.FC<MinimapProps> = ({
       width: (maxX - minX) + pad * 2,
       height: (maxY - minY) + pad * 2
     };
-  }, [strokes, texts, images, files, videos, audios]);
+  }, [strokes, texts, images, files, videos, audios, shapes]);
 
   // Calculate scale factor from virtual canvas to minimap
   const scaleX = MINIMAP_WIDTH / bounds.width;
@@ -220,6 +222,21 @@ export const Minimap: React.FC<MinimapProps> = ({
               height={(('height' in m ? m.height : 100) || 100) * scale}
               fill="#d4d4d8" // zinc-300
               cornerRadius={8 * scale}
+            />
+          ))}
+
+          {/* Render Flowchart Shapes */}
+          {shapes.map(s => (
+            <Rect
+              key={s.id}
+              x={(s.x - bounds.x) * scale + offsetX}
+              y={(s.y - bounds.y) * scale + offsetY}
+              width={s.width * scale}
+              height={s.height * scale}
+              fill={s.fillColor || "#3b82f6"}
+              stroke={s.strokeColor || "#2563eb"}
+              strokeWidth={Math.max(1, (s.strokeWidth || 2) * scale)}
+              cornerRadius={s.type === 'rounded' || s.type === 'circle' ? 12 * scale : 4 * scale}
             />
           ))}
 

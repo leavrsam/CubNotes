@@ -5,12 +5,25 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2 } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, RotateCw, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Link2 } from "lucide-react";
 import { Editor } from "@tiptap/react";
+import { 
+  STYLE_OPTIONS, 
+  LINE_SPACING_OPTIONS, 
+  LineSpacingDropdown, 
+  HighlightDropdown, 
+  executeIndent, 
+  executeOutdent, 
+  applyStyle, 
+  getCurrentStyle, 
+  clearFormatting, 
+  handleToggleLink 
+} from "./TipTapEditor";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
 import { AudioOverlay } from "./AudioOverlay";
 import { MediaOverlay } from "./MediaOverlay";
+import { FlowchartOverlay } from "./FlowchartOverlay";
 import { Minimap } from "./Minimap";
 import { MeetingWorkspace } from "./MeetingWorkspace";
 import { uploadMediaFile } from "@/lib/storage";
@@ -96,10 +109,56 @@ export type VideoNode = {
   height?: number;
 };
 
+export type FlowchartShapeType = 
+  | 'rectangle'       // Process
+  | 'rounded'         // Start / End
+  | 'diamond'         // Decision
+  | 'circle'          // Connector / Event
+  | 'parallelogram'   // Input / Output
+  | 'cylinder'        // Database
+  | 'note';           // Sticky Note
+
+export type AnchorPosition = 'top' | 'right' | 'bottom' | 'left';
+export type ConnectorRouting = 'curved' | 'orthogonal' | 'straight';
+export type ConnectorEnd = 'arrow' | 'none' | 'double-arrow';
+
+export type ShapeNode = {
+  id: string;
+  type: FlowchartShapeType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text?: string;
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  strokeStyle?: 'solid' | 'dashed';
+  fontSize?: number;
+  textColor?: string;
+  textAlign?: 'left' | 'center' | 'right';
+};
+
+export type ConnectorNode = {
+  id: string;
+  fromShapeId?: string;
+  fromAnchor?: AnchorPosition;
+  fromPoint?: { x: number; y: number };
+  toShapeId?: string;
+  toAnchor?: AnchorPosition;
+  toPoint?: { x: number; y: number };
+  routing?: ConnectorRouting;
+  arrowEnd?: ConnectorEnd;
+  strokeColor?: string;
+  strokeWidth?: number;
+  strokeStyle?: 'solid' | 'dashed';
+  label?: string;
+};
+
 import { ColorPickerMenu } from "./ColorPickerMenu";
 
-export type ToolType = "pan" | "home" | "pen" | "eraser" | "lasso";
-export type RibbonTab = "Home" | "Insert" | "Record" | "Draw" | "History" | "View";
+export type ToolType = "pan" | "home" | "pen" | "eraser" | "lasso" | "shape" | "connector";
+export type RibbonTab = "Home" | "Insert" | "Record" | "Draw" | "Flowchart" | "History" | "View";
 
 export type ToolPreset = {
   id: string;
@@ -117,6 +176,8 @@ export type DocumentState = {
   images?: ImageNode[];
   files?: FileNode[];
   videos?: VideoNode[];
+  shapes?: ShapeNode[];
+  connectors?: ConnectorNode[];
 };
 
 import { useCanvasData } from "@/hooks/useCanvasData";
@@ -170,7 +231,8 @@ function CustomSelect({
   options, 
   placeholder, 
   width,
-  disabled
+  disabled,
+  dropdownWidth = "w-full"
 }: { 
   value: string; 
   onChange: (v: string) => void; 
@@ -178,6 +240,7 @@ function CustomSelect({
   placeholder: string;
   width: string;
   disabled: boolean;
+  dropdownWidth?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -208,13 +271,13 @@ function CustomSelect({
           e.stopPropagation();
         }}
         disabled={disabled}
-        className={`w-full flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none text-zinc-900 dark:text-zinc-300 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 text-xs px-2 py-1 rounded border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 outline-none text-zinc-900 dark:text-zinc-300 ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <ChevronDown size={12} className="opacity-50 flex-shrink-0 ml-1" />
       </button>
       {isOpen && !disabled && (
-        <div className="absolute top-full mt-1 left-0 w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
+        <div className={`absolute top-full mt-1 left-0 ${dropdownWidth} bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-lg z-50 max-h-60 overflow-y-auto`}>
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -229,7 +292,7 @@ function CustomSelect({
                 e.preventDefault();
                 e.stopPropagation();
               }}
-              className={`w-full text-left px-2 py-1.5 text-xs hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors ${value === opt.value ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium' : 'text-zinc-700 dark:text-zinc-300'}`}
+              className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors ${value === opt.value ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium' : 'text-zinc-700 dark:text-zinc-300'}`}
             >
               {opt.label}
             </button>
@@ -259,6 +322,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const { 
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
     images, setImages, files, setFiles, videos, setVideos,
+    shapes, setShapes, connectors, setConnectors,
     undo, redo, canUndo, canRedo,
     pageVersions, fetchVersions, restoreVersion
   } = useCanvasData(pageId);
@@ -393,6 +457,142 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [isVersionsMenuOpen, setIsVersionsMenuOpen] = useState(false);
   const [annotateBlockId, setAnnotateBlockId] = useState<string | null>(null);
 
+  // Flowchart & Diagramming state
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null);
+  const [activeShapeType, setActiveShapeType] = useState<FlowchartShapeType>('rectangle');
+  const [connectorRouting, setConnectorRouting] = useState<ConnectorRouting>('curved'); // User default: curved bezier!
+  const [isAiFlowchartModalOpen, setIsAiFlowchartModalOpen] = useState(false);
+  const [aiFlowchartPrompt, setAiFlowchartPrompt] = useState("");
+  const [isGeneratingFlowchart, setIsGeneratingFlowchart] = useState(false);
+
+  // Quick insert helper for flowchart shapes
+  const handleInsertShape = useCallback((type: FlowchartShapeType, label = "Shape") => {
+    const centerX = (-pan.x + (typeof window !== 'undefined' ? window.innerWidth / 2 : 500)) / zoom;
+    const centerY = (-pan.y + (typeof window !== 'undefined' ? window.innerHeight / 2 : 400)) / zoom;
+    const isRound = type === 'circle';
+    const isDiamond = type === 'diamond';
+    const newShape: ShapeNode = {
+      id: uuidv4(),
+      type,
+      x: Math.round(centerX - (isRound ? 45 : isDiamond ? 70 : 80)),
+      y: Math.round(centerY - (isRound ? 45 : isDiamond ? 45 : 40)),
+      width: isRound ? 90 : isDiamond ? 140 : 160,
+      height: isRound ? 90 : isDiamond ? 90 : 80,
+      text: "",
+      fillColor: type === 'note' ? '#fef3c7' : '#ffffff',
+      strokeColor: type === 'note' ? '#f59e0b' : '#3b82f6',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      fontSize: 14,
+      textAlign: 'center'
+    };
+    setShapes(prev => [...prev, newShape]);
+    setSelectedShapeId(newShape.id);
+    setSelectedConnectorId(null);
+    setTool("home");
+    toast.success(`Inserted ${label}`);
+  }, [pan, zoom, setShapes, setSelectedShapeId, setSelectedConnectorId, setTool]);
+
+  // Quick preset workflows
+  const handleInsertPresetWorkflow = useCallback((preset: 'decision' | 'linear') => {
+    const centerX = (-pan.x + (typeof window !== 'undefined' ? window.innerWidth / 2 : 500)) / zoom;
+    const centerY = (-pan.y + (typeof window !== 'undefined' ? window.innerHeight / 2 : 400)) / zoom;
+
+    if (preset === 'linear') {
+      const id1 = uuidv4();
+      const id2 = uuidv4();
+      const id3 = uuidv4();
+
+      const newShapes: ShapeNode[] = [
+        { id: id1, type: 'rounded', x: Math.round(centerX - 240), y: Math.round(centerY - 35), width: 140, height: 70, text: "Start", fillColor: '#dcfce7', strokeColor: '#22c55e', strokeWidth: 2, strokeStyle: 'solid', fontSize: 14, textAlign: 'center' },
+        { id: id2, type: 'rectangle', x: Math.round(centerX - 40), y: Math.round(centerY - 35), width: 150, height: 70, text: "Process Task", fillColor: '#ffffff', strokeColor: '#3b82f6', strokeWidth: 2, strokeStyle: 'solid', fontSize: 14, textAlign: 'center' },
+        { id: id3, type: 'rounded', x: Math.round(centerX + 170), y: Math.round(centerY - 35), width: 140, height: 70, text: "Complete", fillColor: '#e0f2fe', strokeColor: '#0284c7', strokeWidth: 2, strokeStyle: 'solid', fontSize: 14, textAlign: 'center' },
+      ];
+
+      const newConnectors: ConnectorNode[] = [
+        { id: uuidv4(), fromShapeId: id1, fromAnchor: 'right', toShapeId: id2, toAnchor: 'left', routing: 'curved', arrowEnd: 'arrow', strokeColor: '#3b82f6', strokeWidth: 2, strokeStyle: 'solid' },
+        { id: uuidv4(), fromShapeId: id2, fromAnchor: 'right', toShapeId: id3, toAnchor: 'left', routing: 'curved', arrowEnd: 'arrow', strokeColor: '#3b82f6', strokeWidth: 2, strokeStyle: 'solid' }
+      ];
+
+      setShapes(prev => [...prev, ...newShapes]);
+      setConnectors(prev => [...prev, ...newConnectors]);
+      setSelectedShapeId(id1);
+      toast.success("Process preset inserted!");
+    } else {
+      const startId = uuidv4();
+      const decId = uuidv4();
+      const yesId = uuidv4();
+      const noId = uuidv4();
+
+      const newShapes: ShapeNode[] = [
+        { id: startId, type: 'rounded', x: Math.round(centerX - 280), y: Math.round(centerY - 35), width: 130, height: 70, text: "Trigger", fillColor: '#dcfce7', strokeColor: '#22c55e', strokeWidth: 2, strokeStyle: 'solid', fontSize: 13, textAlign: 'center' },
+        { id: decId, type: 'diamond', x: Math.round(centerX - 80), y: Math.round(centerY - 45), width: 140, height: 90, text: "Approved?", fillColor: '#fef3c7', strokeColor: '#f59e0b', strokeWidth: 2, strokeStyle: 'solid', fontSize: 13, textAlign: 'center' },
+        { id: yesId, type: 'rectangle', x: Math.round(centerX + 130), y: Math.round(centerY - 100), width: 150, height: 70, text: "Proceed Flow", fillColor: '#ffffff', strokeColor: '#3b82f6', strokeWidth: 2, strokeStyle: 'solid', fontSize: 13, textAlign: 'center' },
+        { id: noId, type: 'rectangle', x: Math.round(centerX + 130), y: Math.round(centerY + 30), width: 150, height: 70, text: "Request Changes", fillColor: '#ffe4e6', strokeColor: '#f43f5e', strokeWidth: 2, strokeStyle: 'solid', fontSize: 13, textAlign: 'center' },
+      ];
+
+      const newConnectors: ConnectorNode[] = [
+        { id: uuidv4(), fromShapeId: startId, fromAnchor: 'right', toShapeId: decId, toAnchor: 'left', routing: 'curved', arrowEnd: 'arrow', strokeColor: '#3b82f6', strokeWidth: 2, strokeStyle: 'solid' },
+        { id: uuidv4(), fromShapeId: decId, fromAnchor: 'top', toShapeId: yesId, toAnchor: 'left', routing: 'curved', arrowEnd: 'arrow', strokeColor: '#22c55e', strokeWidth: 2, strokeStyle: 'solid', label: 'Yes' },
+        { id: uuidv4(), fromShapeId: decId, fromAnchor: 'bottom', toShapeId: noId, toAnchor: 'left', routing: 'curved', arrowEnd: 'arrow', strokeColor: '#f43f5e', strokeWidth: 2, strokeStyle: 'solid', label: 'No' },
+      ];
+
+      setShapes(prev => [...prev, ...newShapes]);
+      setConnectors(prev => [...prev, ...newConnectors]);
+      setSelectedShapeId(startId);
+      toast.success("Decision tree preset inserted!");
+    }
+  }, [pan, zoom, setShapes, setConnectors, setSelectedShapeId]);
+
+  // AI Flowchart Generator caller
+  const handleGenerateAiFlowchart = async (customPrompt?: string, useMeetingNotes?: boolean) => {
+    setIsGeneratingFlowchart(true);
+    const toastId = toast.loading("Generating flowchart with Gemini 3.8 Flash...");
+
+    try {
+      const centerX = (-pan.x + (typeof window !== 'undefined' ? window.innerWidth / 3 : 300)) / zoom;
+      const centerY = (-pan.y + (typeof window !== 'undefined' ? window.innerHeight / 3 : 200)) / zoom;
+
+      let notesContent = "";
+      if (useMeetingNotes) {
+        const textParts = texts.map(t => t.content.replace(/<[^>]*>?/gm, '')).filter(Boolean);
+        const audioParts = (audios || []).map(a => `${a.title || 'Meeting'}: ${a.summary || ''} ${a.transcript || ''}`).filter(Boolean);
+        notesContent = [...textParts, ...audioParts].join('\n\n');
+      }
+
+      const res = await fetch('/api/generate-flowchart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: customPrompt || aiFlowchartPrompt,
+          notes: notesContent,
+          startX: Math.round(centerX),
+          startY: Math.round(centerY)
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate flowchart");
+      }
+
+      if (data.shapes && Array.isArray(data.shapes)) {
+        setShapes(prev => [...prev, ...data.shapes]);
+        if (data.connectors && Array.isArray(data.connectors)) {
+          setConnectors(prev => [...prev, ...data.connectors]);
+        }
+        toast.success(`Generated flowchart with ${data.shapes.length} steps!`, { id: toastId });
+        setIsAiFlowchartModalOpen(false);
+        setAiFlowchartPrompt("");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Flowchart generation failed", { id: toastId });
+    } finally {
+      setIsGeneratingFlowchart(false);
+    }
+  };
+
   // Foresight Meeting Workspace state
   const [isMeetingWorkspaceOpen, setIsMeetingWorkspaceOpen] = useState(false);
   const [meetingWorkspaceAudioId, setMeetingWorkspaceAudioId] = useState<string | null>(null);
@@ -450,6 +650,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     videos: any[];
     files: any[];
     audios: any[];
+    shapes: any[];
   } | null>(null);
 
   const handleDragSelectionStart = useCallback((draggedId: string) => {
@@ -464,9 +665,10 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       images: images.filter(i => activeIds.includes(i.id)),
       videos: videos.filter(v => activeIds.includes(v.id)),
       files: files.filter(f => activeIds.includes(f.id)),
-      audios: audios.filter(a => activeIds.includes(a.id))
+      audios: audios.filter(a => activeIds.includes(a.id)),
+      shapes: (shapes || []).filter(s => activeIds.includes(s.id))
     };
-  }, [selectedIds, strokes, texts, images, videos, files, audios]);
+  }, [selectedIds, strokes, texts, images, videos, files, audios, shapes]);
 
   const handleDragSelectionMove = useCallback((deltaX: number, deltaY: number) => {
     const orig = originalSelectionRef.current;
@@ -487,7 +689,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     if (orig.videos.length > 0) setVideos(prev => prev.map(v => orig.videos.find(ov => ov.id === v.id) ? { ...v, x: orig.videos.find(ov => ov.id === v.id).x + deltaX, y: orig.videos.find(ov => ov.id === v.id).y + deltaY } : v));
     if (orig.files.length > 0) setFiles(prev => prev.map(f => orig.files.find(of => of.id === f.id) ? { ...f, x: orig.files.find(of => of.id === f.id).x + deltaX, y: orig.files.find(of => of.id === f.id).y + deltaY } : f));
     if (orig.audios.length > 0) setAudios(prev => prev.map(a => orig.audios.find(oa => oa.id === a.id) ? { ...a, x: orig.audios.find(oa => oa.id === a.id).x + deltaX, y: orig.audios.find(oa => oa.id === a.id).y + deltaY } : a));
-  }, [setStrokes, setTexts, setImages, setVideos, setFiles, setAudios]);
+    if (orig.shapes.length > 0) setShapes(prev => prev.map(s => orig.shapes.find(os => os.id === s.id) ? { ...s, x: orig.shapes.find(os => os.id === s.id).x + deltaX, y: orig.shapes.find(os => os.id === s.id).y + deltaY } : s));
+  }, [setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setShapes]);
 
   const handleDragSelectionEnd = useCallback(() => {
     if (backgroundStyle === 'ruled' || backgroundStyle === 'grid') {
@@ -580,8 +783,15 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       }
     });
 
+    // Find shapes
+    shapes?.forEach(s => {
+      if (Math.max(s.x, minX) <= Math.min(s.x + s.width, maxX) && Math.max(s.y, minY) <= Math.min(s.y + s.height, maxY)) {
+        foundIds.push(s.id);
+      }
+    });
+
     return foundIds;
-  }, [strokes, texts, images, videos, files, audios, blockOffsetMap]);
+  }, [strokes, texts, images, videos, files, audios, shapes, blockOffsetMap]);
 
   const handleSelectionBoxChange = useCallback((minX: number, maxX: number, minY: number, maxY: number) => {
     const ids = findIntersectingIds(minX, maxX, minY, maxY);
@@ -601,8 +811,10 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     if (setVideos) setVideos(prev => prev.filter(v => !selectedIds.includes(v.id)));
     if (setFiles) setFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
     if (setAudios) setAudios(prev => prev.filter(a => !selectedIds.includes(a.id)));
+    setShapes(prev => prev.filter(s => !selectedIds.includes(s.id)));
+    setConnectors(prev => prev.filter(c => !selectedIds.includes(c.fromShapeId || '') && !selectedIds.includes(c.toShapeId || '')));
     setSelectedIds([]);
-  }, [selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds]);
+  }, [selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setShapes, setConnectors, setSelectedIds]);
 
   const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
   const toolbarDragRef = useRef<{ x: number; y: number } | null>(null);
@@ -947,8 +1159,36 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const handleCanvasClick = useCallback((x: number, y: number) => {
+    // If in shape placer mode, clicking canvas places the active shape
+    if (tool === "shape") {
+      const isRound = activeShapeType === 'circle';
+      const isDiamond = activeShapeType === 'diamond';
+      const newShape: ShapeNode = {
+        id: uuidv4(),
+        type: activeShapeType,
+        x: Math.round(x - (isRound ? 45 : isDiamond ? 70 : 80)),
+        y: Math.round(y - (isRound ? 45 : isDiamond ? 45 : 40)),
+        width: isRound ? 90 : isDiamond ? 140 : 160,
+        height: isRound ? 90 : isDiamond ? 90 : 80,
+        text: "",
+        fillColor: activeShapeType === 'note' ? '#fef3c7' : '#ffffff',
+        strokeColor: activeShapeType === 'note' ? '#f59e0b' : '#3b82f6',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        fontSize: 14,
+        textAlign: 'center'
+      };
+      setShapes(prev => [...prev, newShape]);
+      setSelectedShapeId(newShape.id);
+      setSelectedConnectorId(null);
+      setTool("home");
+      return;
+    }
+
     // In 'home' mode, clicking the canvas creates a text block
     if (tool === "home") {
+      setSelectedShapeId(null);
+      setSelectedConnectorId(null);
       if (typeof document !== 'undefined' && document.activeElement) {
         (document.activeElement as HTMLElement)?.blur?.();
       }
@@ -975,7 +1215,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       });
       setSelectedIds([newId]);
     }
-  }, [tool, setTexts, backgroundStyle, setSelectedIds]);
+  }, [tool, activeShapeType, setShapes, setSelectedShapeId, setSelectedConnectorId, setTool, setTexts, backgroundStyle, setSelectedIds]);
 
   useEffect(() => {
     const handleStartRecordingNode = (e: Event) => {
@@ -1122,12 +1362,15 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       
       const video = videos?.find(v => v.id === id);
       if (video) updateBounds(video.x, video.y, video.width || 480, video.height || 270);
+
+      const shape = shapes?.find(s => s.id === id);
+      if (shape) updateBounds(shape.x, shape.y, shape.width, shape.height);
     });
 
     if (minX === Infinity) return null;
 
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-  }, [selectedIds, strokes, texts, images, files, audios, videos]);
+  }, [selectedIds, strokes, texts, images, files, audios, videos, shapes]);
 
   const handleOrganize = async () => {
     if (selectedIds.length < 2) return;
@@ -1572,13 +1815,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           )}
 
           <div className="flex gap-1">
-            {(["Home", "Insert", "Record", "Draw", "History", "View"] as RibbonTab[]).map(tab => (
+            {(["Home", "Insert", "Record", "Draw", "Flowchart", "History", "View"] as RibbonTab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => {
                   setActiveTab(tab);
                   setIsRibbonExpanded(true);
                   if (tab === "Draw") setTool("pen");
+                  else if (tab === "Flowchart") setTool("home");
                   else setTool("home");
                 }}
                 onDoubleClick={() => {
@@ -2113,6 +2357,120 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 </div>
               </div>
             )}
+            {activeTab === "Flowchart" && (
+              <div className="flex items-center gap-3 h-full py-1 overflow-x-auto no-scrollbar">
+                {/* Pointer / Navigation Tools */}
+                <div className="flex items-center gap-1 h-full">
+                  <button
+                    onClick={() => setTool("home")}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${tool === "home" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-semibold' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    title="Select & Move (Home)"
+                  >
+                    <MousePointer2 size={15} />
+                    <span className="text-[10px] font-medium leading-none mt-1">Select</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
+                {/* Connector Tools */}
+                <div className="flex items-center gap-1 h-full">
+                  <button
+                    onClick={() => {
+                      setTool("connector");
+                      setConnectorRouting("curved");
+                    }}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${tool === "connector" && connectorRouting === "curved" ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    title="Curved Bezier Connector (Default)"
+                  >
+                    <Spline size={15} />
+                    <span className="text-[10px] font-medium leading-none mt-1">Curved</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTool("connector");
+                      setConnectorRouting("orthogonal");
+                    }}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${tool === "connector" && connectorRouting === "orthogonal" ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    title="Elbow (Orthogonal 90° Connector)"
+                  >
+                    <CornerDownRight size={15} />
+                    <span className="text-[10px] font-medium leading-none mt-1">Elbow</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTool("connector");
+                      setConnectorRouting("straight");
+                    }}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${tool === "connector" && connectorRouting === "straight" ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    title="Straight Connector"
+                  >
+                    <MoveRight size={15} />
+                    <span className="text-[10px] font-medium leading-none mt-1">Straight</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
+                {/* Shape Palette (Click to insert) */}
+                <div className="flex items-center gap-1 h-full">
+                  {[
+                    { type: 'rectangle', icon: <Square size={14} />, label: 'Process' },
+                    { type: 'rounded', icon: <div className="w-4 h-2.5 rounded-full border border-current" />, label: 'Start/End' },
+                    { type: 'diamond', icon: <RotateCw size={13} className="rotate-45" />, label: 'Decision' },
+                    { type: 'circle', icon: <CircleIcon size={14} />, label: 'Event' },
+                    { type: 'cylinder', icon: <Database size={14} />, label: 'Database' },
+                    { type: 'note', icon: <StickyNote size={14} />, label: 'Note' },
+                  ].map(sh => (
+                    <button
+                      key={sh.type}
+                      onClick={() => handleInsertShape(sh.type as FlowchartShapeType, sh.label)}
+                      className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                      title={`Insert ${sh.label}`}
+                    >
+                      {sh.icon}
+                      <span className="text-[10px] font-medium leading-none mt-1">{sh.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1 h-full">
+                  <button
+                    onClick={() => handleInsertPresetWorkflow('linear')}
+                    className="flex flex-col items-center justify-center h-full px-2.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Insert 3-Step Linear Process"
+                  >
+                    <span className="text-xs font-bold leading-none">1→2→3</span>
+                    <span className="text-[10px] font-medium leading-none mt-1">Process</span>
+                  </button>
+                  <button
+                    onClick={() => handleInsertPresetWorkflow('decision')}
+                    className="flex flex-col items-center justify-center h-full px-2.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Insert Decision Tree Template"
+                  >
+                    <span className="text-xs font-bold leading-none">◇⇄</span>
+                    <span className="text-[10px] font-medium leading-none mt-1">Decision</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
+                {/* AI Flowchart Generator (gemini-3.8-flash) */}
+                <div className="flex items-center h-full">
+                  <button
+                    onClick={() => setIsAiFlowchartModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium text-xs shadow-xs transition-transform active:scale-95"
+                    title="Generate Flowchart with Gemini 3.8 Flash"
+                  >
+                    <Workflow size={14} className="text-blue-100" />
+                    <span>AI Flowchart</span>
+                  </button>
+                </div>
+              </div>
+            )}
             {activeTab === "History" && (
               <div className="flex items-center gap-4 h-full py-1">
                 <div className="flex items-center h-full relative">
@@ -2432,6 +2790,25 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onDragSelectionEnd={handleDragSelectionEnd}
           onAnnotate={handleAnnotateBlock}
         />
+        <FlowchartOverlay
+          shapes={shapes || []}
+          setShapes={setShapes}
+          connectors={connectors || []}
+          setConnectors={setConnectors}
+          pan={pan}
+          zoom={zoom}
+          tool={tool}
+          setTool={setTool}
+          selectedShapeId={selectedShapeId}
+          setSelectedShapeId={setSelectedShapeId}
+          selectedConnectorId={selectedConnectorId}
+          setSelectedConnectorId={setSelectedConnectorId}
+          activeShapeType={activeShapeType}
+          defaultRouting={connectorRouting}
+          onDragSelectionStart={handleDragSelectionStart}
+          onDragSelectionMove={handleDragSelectionMove}
+          onDragSelectionEnd={handleDragSelectionEnd}
+        />
       </div>
 
       {selectedIds.length > 0 && !(selectedIds.length === 1 && texts.some(t => t.id === selectedIds[0])) && getSelectionBounds() && (() => {
@@ -2553,6 +2930,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           files={files || []}
           videos={videos || []}
           audios={audios || []}
+          shapes={shapes || []}
           pan={pan}
           zoom={zoom}
           setPan={setPan}
@@ -2590,6 +2968,126 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         }}
         pageTitle={pageTitle}
       />
+
+      {/* AI Flowchart Generator Modal (Powered by Gemini 3.8 Flash) */}
+      {isAiFlowchartModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 pointer-events-auto animate-in fade-in duration-150"
+          onClick={() => !isGeneratingFlowchart && setIsAiFlowchartModalOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 flex flex-col gap-4 text-zinc-900 dark:text-zinc-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <Workflow size={20} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base">AI Flowchart Generator</h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Powered by Google Gemini 3.8 Flash</p>
+                </div>
+              </div>
+              <button
+                disabled={isGeneratingFlowchart}
+                onClick={() => setIsAiFlowchartModalOpen(false)}
+                className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Prompt input */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Describe the workflow, decision tree, or process:
+              </label>
+              <textarea
+                autoFocus
+                disabled={isGeneratingFlowchart}
+                rows={4}
+                value={aiFlowchartPrompt}
+                onChange={(e) => setAiFlowchartPrompt(e.target.value)}
+                placeholder="e.g. User onboarding flow: Sign up, verify email, if verified take to dashboard, else send reminder and allow resend..."
+                className="w-full text-xs p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100 resize-none"
+              />
+            </div>
+
+            {/* Quick Suggestions */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] text-zinc-500 font-medium">Quick Suggestions:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  "User Sign-Up & Verification",
+                  "Customer Refund Decision Tree",
+                  "Bug Triage & Resolution Cycle",
+                  "Product Launch Roadmap"
+                ].map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    disabled={isGeneratingFlowchart}
+                    onClick={() => setAiFlowchartPrompt(sug)}
+                    className="text-[11px] px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 border border-transparent hover:border-blue-400 transition-colors"
+                  >
+                    {sug}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Context from Page Notes & Audios */}
+            {((texts && texts.length > 0) || (audios && audios.length > 0)) && (
+              <div className="p-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 rounded-xl flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-blue-900 dark:text-blue-200">Current Page Notes Available</p>
+                  <p className="text-[11px] text-blue-700/80 dark:text-blue-400">Generate directly from your meeting transcript and notes</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isGeneratingFlowchart}
+                  onClick={() => handleGenerateAiFlowchart(undefined, true)}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors whitespace-nowrap"
+                >
+                  Use Page Notes
+                </button>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                disabled={isGeneratingFlowchart}
+                onClick={() => setIsAiFlowchartModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isGeneratingFlowchart || !aiFlowchartPrompt.trim()}
+                onClick={() => handleGenerateAiFlowchart(aiFlowchartPrompt, false)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl shadow-xs transition-transform active:scale-95"
+              >
+                {isGeneratingFlowchart ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Generating with Gemini 3.8 Flash...</span>
+                  </>
+                ) : (
+                  <>
+                    <Workflow size={14} />
+                    <span>Generate Flowchart</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
