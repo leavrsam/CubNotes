@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
-import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown } from "lucide-react";
+import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, ChevronRight, Minimize2, Maximize2, Play, Pause, Mic } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,42 @@ import toast from "react-hot-toast";
 import { processAudioTranscription } from "@/lib/transcribe";
 
 const supabase = createClient();
+
+function MiniAudioPlayButton({ url }: { url: string }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      <audio 
+        ref={audioRef} 
+        src={url} 
+        preload="none" 
+        onEnded={() => setIsPlaying(false)} 
+        onPause={() => setIsPlaying(false)} 
+      />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-6 h-6 rounded-full bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/60 text-primary-600 dark:text-primary-400 flex items-center justify-center transition-colors border border-primary-200 dark:border-primary-800/60 shrink-0"
+        title={isPlaying ? "Pause audio" : "Play audio"}
+      >
+        {isPlaying ? <Pause size={10} fill="currentColor" /> : <Play size={10} fill="currentColor" className="ml-0.5" />}
+      </button>
+    </div>
+  );
+}
 
 interface AudioOverlayProps {
   audios: AudioNode[];
@@ -29,6 +65,7 @@ interface AudioOverlayProps {
   onResumeRecording?: () => void;
   onStopRecording?: () => void;
   onOpenMeetingWorkspace?: (id: string) => void;
+  onToggleCollapseAll?: (collapsed?: boolean) => void;
 }
 
 type TabType = 'notes' | 'enhanced' | 'transcript' | 'summary' | 'chat';
@@ -51,7 +88,8 @@ function AudioNodeCard({
   onPauseRecording,
   onResumeRecording,
   onStopRecording,
-  onOpenMeetingWorkspace
+  onOpenMeetingWorkspace,
+  onToggleCollapseAll
 }: {
   node: AudioNode;
   tool: ToolType;
@@ -71,6 +109,7 @@ function AudioNodeCard({
   onResumeRecording?: () => void;
   onStopRecording?: () => void;
   onOpenMeetingWorkspace?: (id: string) => void;
+  onToggleCollapseAll?: (collapsed?: boolean) => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'transcript' : 'summary');
   const [liveStatus, setLiveStatus] = useState<string>(node.isLiveRecording ? 'listening' : 'idle');
@@ -314,29 +353,179 @@ function AudioNodeCard({
         </>
       )}
 
-      <div className="w-full flex flex-col bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 overflow-hidden">
-        
-        {/* Header / Audio Player / Recording Status */}
-        <div className="bg-white/95 dark:bg-zinc-900/95 pt-5 pb-3 px-5 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
-          <div className="flex justify-between items-center mb-1">
-            <input 
-              type="text"
-              value={node.title || "Meeting Notes"}
-              onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-              className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 -ml-2 rounded-lg transition-colors w-full tracking-tight`}
-              placeholder="Recording Name..."
-            />
-            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-              {onOpenMeetingWorkspace && (
-                <button
-                  onClick={() => onOpenMeetingWorkspace(node.id)}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 px-2 py-1 rounded-lg transition-colors border border-primary-200 dark:border-primary-800/60"
-                  title="Open in Foresight Meeting Workspace"
-                >
-                  <Sparkles size={12} />
-                  <span>Meeting View</span>
-                </button>
+      {node.isCollapsed ? (
+        <div 
+          onClick={() => updateAudioField(node.id, 'isCollapsed', false)}
+          className="w-full flex items-center justify-between bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-xl shadow-lg border border-zinc-200/80 dark:border-zinc-700/80 px-3 py-2 cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 transition-all select-none group/collapsed"
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                updateAudioField(node.id, 'isCollapsed', false);
+              }}
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Expand recording card"
+            >
+              <ChevronRight size={16} />
+            </button>
+
+            {/* Status / Mic indicator */}
+            {node.isLiveRecording ? (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 text-[11px] font-bold shrink-0">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                <span>{formatTimer(elapsedSeconds)}</span>
+              </span>
+            ) : node.isTranscribing ? (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-600 dark:text-amber-400 text-[11px] font-semibold shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>Transcribing</span>
+              </span>
+            ) : (
+              <div className="w-6 h-6 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
+                <Mic size={13} />
+              </div>
+            )}
+
+            {/* Title */}
+            <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-[70px]">
+              {node.title || "Meeting Notes"}
+            </span>
+
+            {/* Timestamp */}
+            <span className="text-[10px] text-zinc-400 shrink-0 hidden sm:inline">
+              {format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}
+            </span>
+
+            {/* Content tags/pills */}
+            <div className="flex items-center gap-1 shrink-0">
+              {node.summary && (
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  Summary
+                </span>
               )}
+              {node.notes && (
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  Notes
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 shrink-0 ml-2">
+            {node.url && (
+              <MiniAudioPlayButton url={node.url} />
+            )}
+
+            {onOpenMeetingWorkspace && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenMeetingWorkspace(node.id);
+                }}
+                className="flex items-center gap-1 text-[10px] font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 px-2 py-1 rounded-md transition-colors border border-primary-200 dark:border-primary-800/60"
+                title="Open in Foresight Meeting Workspace"
+              >
+                <span>Meeting View</span>
+              </button>
+            )}
+
+            {onToggleCollapseAll && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleCollapseAll(false);
+                }}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 text-[10px] font-medium px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors hidden group-hover:inline-block"
+                title="Expand all cards"
+              >
+                Expand All
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                updateAudioField(node.id, 'isCollapsed', false);
+              }}
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              title="Expand card"
+            >
+              <Maximize2 size={13} />
+            </button>
+
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteAudioNode(node.id);
+              }}
+              className="text-zinc-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              title="Delete Recording"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full flex flex-col bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 overflow-hidden">
+          {/* Header / Audio Player / Recording Status */}
+          <div className="bg-white/95 dark:bg-zinc-900/95 pt-5 pb-3 px-5 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
+            <div className="flex justify-between items-center mb-1">
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
+                  className="p-1 -ml-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors shrink-0"
+                  title="Collapse card"
+                >
+                  <ChevronDown size={17} />
+                </button>
+                <input 
+                  type="text"
+                  value={node.title || "Meeting Notes"}
+                  onChange={(e) => updateAudioTitle(node.id, e.target.value)}
+                  className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-colors w-full tracking-tight`}
+                  placeholder="Recording Name..."
+                />
+              </div>
+              <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                {onToggleCollapseAll && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleCollapseAll(true);
+                    }}
+                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 text-[10px] font-medium px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors hidden group-hover:inline-block"
+                    title="Collapse all cards on canvas"
+                  >
+                    Collapse All
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
+                  className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  title="Collapse card"
+                >
+                  <Minimize2 size={15} />
+                </button>
+                {onOpenMeetingWorkspace && (
+                  <button
+                    onClick={() => onOpenMeetingWorkspace(node.id)}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 px-2 py-1 rounded-lg transition-colors border border-primary-200 dark:border-primary-800/60"
+                    title="Open in Foresight Meeting Workspace"
+                  >
+                    <Sparkles size={12} />
+                    <span>Meeting View</span>
+                  </button>
+                )}
               {node.url && (
                 <button 
                   onClick={handleDownloadAudio}
@@ -713,6 +902,7 @@ function AudioNodeCard({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -729,7 +919,8 @@ export function AudioOverlay({
   onPauseRecording,
   onResumeRecording,
   onStopRecording,
-  onOpenMeetingWorkspace
+  onOpenMeetingWorkspace,
+  onToggleCollapseAll
 }: AudioOverlayProps) {
   
   // Dragging state
@@ -821,6 +1012,7 @@ export function AudioOverlay({
             onResumeRecording={onResumeRecording}
             onStopRecording={onStopRecording}
             onOpenMeetingWorkspace={onOpenMeetingWorkspace}
+            onToggleCollapseAll={onToggleCollapseAll}
             onDragSelectionStart={(id) => {
               if (tool === 'home') {
                 setSelectedIds?.([id]);

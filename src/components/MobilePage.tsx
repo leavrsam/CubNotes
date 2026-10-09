@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, useState, useRef, useCallback } from "react"
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor } from "./TipTapEditor";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -1007,6 +1007,25 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 </>
               )}
               <span>{format(new Date(pageCreatedAt), "MMMM d, yyyy 'at' h:mm a")}</span>
+            </div>
+          )}
+          {audios && audios.length > 0 && (
+            <div className="flex items-center gap-2 mt-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const targetState = !audios.every(a => a.isCollapsed);
+                  setAudios(prev => prev.map(a => ({ ...a, isCollapsed: targetState })));
+                  toast.success(targetState ? "All cards collapsed" : "All cards expanded", { duration: 1500 });
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border border-zinc-200 dark:border-zinc-700 shadow-2xs"
+              >
+                {audios.every(a => a.isCollapsed) ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                <span>{audios.every(a => a.isCollapsed) ? "Expand All Cards" : "Collapse All Cards"}</span>
+                <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 rounded-full font-bold">
+                  {audios.length}
+                </span>
+              </button>
             </div>
           )}
         </div>

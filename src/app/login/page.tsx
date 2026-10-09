@@ -395,7 +395,7 @@ export default function LoginPage() {
                   onClick={() => switchMode('signin')}
                   className="text-primary-400 font-semibold underline pl-6 hover:text-primary-300 block text-left"
                 >
-                  👉 Switch to Sign In
+                  Switch to Sign In
                 </button>
               )}
               {error.action === 'switch_to_signup' && (
@@ -404,7 +404,7 @@ export default function LoginPage() {
                   onClick={() => switchMode('signup')}
                   className="text-primary-400 font-semibold underline pl-6 hover:text-primary-300 block text-left"
                 >
-                  👉 Create Account instead
+                  Create Account instead
                 </button>
               )}
             </div>

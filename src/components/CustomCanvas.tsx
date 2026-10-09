@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2 } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { SpatialCanvas } from "./SpatialCanvas";
 import { RichTextOverlay } from "./RichTextOverlay";
@@ -67,6 +67,7 @@ export type AudioNode = {
   audioCreatedAt?: number;
   audioExpiresAt?: number;
   isAudioSavedPermanently?: boolean;
+  isCollapsed?: boolean;
 };
 
 export type ImageNode = {
@@ -406,6 +407,19 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
     return (audios || []).find(a => a.isLiveRecording) || (audios && audios.length > 0 ? audios[audios.length - 1] : null);
   }, [audios, meetingWorkspaceAudioId]);
+
+  const areAllAudiosCollapsed = useMemo(() => {
+    if (!audios || audios.length === 0) return false;
+    return audios.every(a => a.isCollapsed);
+  }, [audios]);
+
+  const toggleCollapseAllAudios = useCallback((forceState?: boolean) => {
+    setAudios(prev => {
+      const targetState = forceState !== undefined ? forceState : !prev.every(a => a.isCollapsed);
+      return (prev || []).map(a => ({ ...a, isCollapsed: targetState }));
+    });
+    toast.success(areAllAudiosCollapsed ? "All cards expanded" : "All cards collapsed", { duration: 1500 });
+  }, [areAllAudiosCollapsed, setAudios]);
 
   const handleAnnotateBlock = useCallback((id: string) => {
     setAnnotateBlockId(id);
@@ -1104,7 +1118,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       
       const file = files?.find(f => f.id === id);
       const audio = audios?.find(a => a.id === id);
-      if (audio) updateBounds(audio.x, audio.y, audio.width || 400, 100);
+      if (audio) updateBounds(audio.x, audio.y, audio.width || 400, audio.isCollapsed ? 52 : 450);
       
       const video = videos?.find(v => v.id === id);
       if (video) updateBounds(video.x, video.y, video.width || 480, video.height || 270);
@@ -1602,6 +1616,19 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           </div>
 
           <div className="ml-auto mb-1 flex items-center gap-2">
+            {audios && audios.length > 0 && (
+              <button
+                onClick={() => toggleCollapseAllAudios()}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-full transition-colors border border-zinc-200 dark:border-zinc-700 shadow-2xs"
+                title={areAllAudiosCollapsed ? "Expand all cards on canvas" : "Collapse all cards on canvas"}
+              >
+                {areAllAudiosCollapsed ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                <span>{areAllAudiosCollapsed ? "Expand All Cards" : "Collapse All Cards"}</span>
+                <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 rounded-full font-bold text-zinc-700 dark:text-zinc-300">
+                  {audios.length}
+                </span>
+              </button>
+            )}
             <button
               onClick={() => handleOpenMeetingWorkspace()}
               className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-full text-xs font-semibold shadow-xs transition-transform active:scale-95"
@@ -1807,7 +1834,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     >
                       <Mic size={18} strokeWidth={2} />
                       <span className="text-[11px] font-bold mt-1 flex items-center gap-1">
-                        Start Meeting ✨
+                        Start Meeting
                       </span>
                     </button>
                   ) : (
@@ -1867,6 +1894,23 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     <Sparkles size={16} strokeWidth={2} />
                     <span className="text-[10px] font-bold mt-0.5">Meeting Workspace</span>
                   </button>
+
+                  {audios && audios.length > 0 && (
+                    <>
+                      <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+
+                      <button
+                        onClick={() => toggleCollapseAllAudios()}
+                        className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                        title={areAllAudiosCollapsed ? "Expand all meeting & recording cards" : "Collapse all meeting & recording cards"}
+                      >
+                        {areAllAudiosCollapsed ? <Maximize2 size={16} strokeWidth={2} /> : <Minimize2 size={16} strokeWidth={2} />}
+                        <span className="text-[10px] font-medium mt-0.5">
+                          {areAllAudiosCollapsed ? "Expand All Cards" : "Collapse All Cards"}
+                        </span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -2279,6 +2323,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               </span>
             )}
             <span>{format(new Date(pageCreatedAt), "EEEE, MMMM d, yyyy     h:mm a")}</span>
+            {audios && audios.length > 0 && (
+              <button
+                type="button"
+                onClick={() => toggleCollapseAllAudios()}
+                className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-white/90 dark:bg-zinc-800/90 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 shadow-xs border border-zinc-200 dark:border-zinc-700 transition-colors ml-3"
+                title={areAllAudiosCollapsed ? "Expand all cards" : "Collapse all cards"}
+              >
+                {areAllAudiosCollapsed ? <Maximize2 size={11} /> : <Minimize2 size={11} />}
+                <span>{areAllAudiosCollapsed ? "Expand All Cards" : "Collapse All Cards"}</span>
+                <span className="text-[10px] bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.2 rounded-full font-bold">
+                  {audios.length}
+                </span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -2355,6 +2413,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onResumeRecording={resumeRecording}
           onStopRecording={stopRecording}
           onOpenMeetingWorkspace={(audioId) => handleOpenMeetingWorkspace(audioId)}
+          onToggleCollapseAll={toggleCollapseAllAudios}
         />
         <MediaOverlay
           images={images || []}

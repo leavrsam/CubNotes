@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Trash2, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown } from "lucide-react";
+import { Trash2, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, ChevronRight, Minimize2, Maximize2, Play, Pause, Mic } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,42 @@ import { processAudioTranscription } from "@/lib/transcribe";
 import type { AudioNode } from "./CustomCanvas";
 
 const supabase = createClient();
+
+function MiniAudioPlayButton({ url }: { url: string }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      <audio 
+        ref={audioRef} 
+        src={url} 
+        preload="none" 
+        onEnded={() => setIsPlaying(false)} 
+        onPause={() => setIsPlaying(false)} 
+      />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-6 h-6 rounded-full bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/60 text-primary-600 dark:text-primary-400 flex items-center justify-center transition-colors border border-primary-200 dark:border-primary-800/60 shrink-0"
+        title={isPlaying ? "Pause audio" : "Play audio"}
+      >
+        {isPlaying ? <Pause size={10} fill="currentColor" /> : <Play size={10} fill="currentColor" className="ml-0.5" />}
+      </button>
+    </div>
+  );
+}
 
 type TabType = 'notes' | 'enhanced' | 'transcript' | 'summary' | 'chat';
 
@@ -230,19 +266,121 @@ export function MobileAudioCard({
 
   return (
     <div className="w-full relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 z-10 overflow-hidden mb-4">
-      <div className="w-full flex flex-col">
-        
-        {/* Header / Audio Player / Recording Status */}
-        <div className="bg-white/95 dark:bg-zinc-900/95 pt-4 pb-3 px-4 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
-          <div className="flex justify-between items-center mb-1">
-            <input 
-              type="text"
-              value={node.title || "Meeting Recording"}
-              onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-              className="text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 -ml-2 rounded-lg transition-colors w-full tracking-tight"
-              placeholder="Recording Name..."
-            />
-            <div className="flex items-center gap-1 ml-2">
+      {node.isCollapsed ? (
+        <div 
+          onClick={() => updateAudioField(node.id, 'isCollapsed', false)}
+          className="w-full flex items-center justify-between p-3.5 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors select-none"
+        >
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                updateAudioField(node.id, 'isCollapsed', false);
+              }}
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors shrink-0"
+              title="Expand recording card"
+            >
+              <ChevronRight size={16} />
+            </button>
+
+            {node.isLiveRecording ? (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 text-[11px] font-bold shrink-0">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                <span>{formatTimer(elapsedSeconds)}</span>
+              </span>
+            ) : node.isTranscribing ? (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-600 dark:text-amber-400 text-[11px] font-semibold shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>Transcribing</span>
+              </span>
+            ) : (
+              <div className="w-6 h-6 rounded-lg bg-primary-50 dark:bg-primary-950/50 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
+                <Mic size={13} />
+              </div>
+            )}
+
+            <span className="font-bold text-sm text-zinc-900 dark:text-white truncate flex-1 min-w-[70px]">
+              {node.title || "Meeting Recording"}
+            </span>
+
+            <span className="text-[10px] text-zinc-400 shrink-0">
+              {format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}
+            </span>
+
+            <div className="flex items-center gap-1 shrink-0">
+              {node.summary && (
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  Summary
+                </span>
+              )}
+              {node.notes && (
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  Notes
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0 ml-2">
+            {node.url && (
+              <MiniAudioPlayButton url={node.url} />
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                updateAudioField(node.id, 'isCollapsed', false);
+              }}
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+              title="Expand"
+            >
+              <Maximize2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteAudioNode(node.id);
+              }}
+              className="p-1 rounded-md text-zinc-400 hover:text-red-500"
+              title="Delete"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full flex flex-col">
+          {/* Header / Audio Player / Recording Status */}
+          <div className="bg-white/95 dark:bg-zinc-900/95 pt-4 pb-3 px-4 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
+            <div className="flex justify-between items-center mb-1">
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
+                  className="p-1 -ml-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md transition-colors shrink-0"
+                  title="Collapse card"
+                >
+                  <ChevronDown size={17} />
+                </button>
+                <input 
+                  type="text"
+                  value={node.title || "Meeting Recording"}
+                  onChange={(e) => updateAudioTitle(node.id, e.target.value)}
+                  className="text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-colors w-full tracking-tight"
+                  placeholder="Recording Name..."
+                />
+              </div>
+              <div className="flex items-center gap-1 ml-2">
+                <button
+                  type="button"
+                  onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
+                  className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
+                  title="Collapse card"
+                >
+                  <Minimize2 size={15} />
+                </button>
               {node.url && (
                 <button 
                   onClick={handleDownloadAudio}
@@ -603,6 +741,7 @@ export function MobileAudioCard({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
