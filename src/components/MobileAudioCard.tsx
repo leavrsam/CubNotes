@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Trash2, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, ChevronRight, Minimize2, Maximize2, Play, Pause, Mic } from "lucide-react";
+import { Trash2, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, Minimize2, Maximize2, Play, Pause, Mic } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -271,19 +271,7 @@ export function MobileAudioCard({
           onClick={() => updateAudioField(node.id, 'isCollapsed', false)}
           className="w-full flex items-center justify-between p-3.5 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors select-none"
         >
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                updateAudioField(node.id, 'isCollapsed', false);
-              }}
-              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors shrink-0"
-              title="Expand recording card"
-            >
-              <ChevronRight size={16} />
-            </button>
-
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
             {node.isLiveRecording ? (
               <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 text-[11px] font-bold shrink-0">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
@@ -300,29 +288,12 @@ export function MobileAudioCard({
               </div>
             )}
 
-            <span className="font-bold text-sm text-zinc-900 dark:text-white truncate flex-1 min-w-[70px]">
+            <span className="font-bold text-sm text-zinc-900 dark:text-white truncate">
               {node.title || "Meeting Recording"}
             </span>
-
-            <span className="text-[10px] text-zinc-400 shrink-0">
-              {format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}
-            </span>
-
-            <div className="flex items-center gap-1 shrink-0">
-              {node.summary && (
-                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                  Summary
-                </span>
-              )}
-              {node.notes && (
-                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                  Notes
-                </span>
-              )}
-            </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 ml-2">
+          <div className="flex items-center gap-2 shrink-0">
             {node.url && (
               <MiniAudioPlayButton url={node.url} />
             )}
@@ -332,21 +303,10 @@ export function MobileAudioCard({
                 e.stopPropagation();
                 updateAudioField(node.id, 'isCollapsed', false);
               }}
-              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
               title="Expand"
             >
-              <Maximize2 size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteAudioNode(node.id);
-              }}
-              className="p-1 rounded-md text-zinc-400 hover:text-red-500"
-              title="Delete"
-            >
-              <Trash2 size={14} />
+              <Maximize2 size={16} />
             </button>
           </div>
         </div>

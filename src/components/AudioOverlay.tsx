@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
-import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, ChevronRight, Minimize2, Maximize2, Play, Pause, Mic } from "lucide-react";
+import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, Minimize2, Maximize2, Play, Pause, Mic } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -358,19 +358,7 @@ function AudioNodeCard({
           onClick={() => updateAudioField(node.id, 'isCollapsed', false)}
           className="w-full flex items-center justify-between bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-xl shadow-lg border border-zinc-200/80 dark:border-zinc-700/80 px-3 py-2 cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 transition-all select-none group/collapsed"
         >
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                updateAudioField(node.id, 'isCollapsed', false);
-              }}
-              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-              title="Expand recording card"
-            >
-              <ChevronRight size={16} />
-            </button>
-
+          <div className="flex items-center gap-2 min-w-0 flex-1 mr-3">
             {/* Status / Mic indicator */}
             {node.isLiveRecording ? (
               <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 text-[11px] font-bold shrink-0">
@@ -389,62 +377,15 @@ function AudioNodeCard({
             )}
 
             {/* Title */}
-            <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate flex-1 min-w-[70px]">
+            <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100 truncate">
               {node.title || "Meeting Notes"}
             </span>
-
-            {/* Timestamp */}
-            <span className="text-[10px] text-zinc-400 shrink-0 hidden sm:inline">
-              {format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}
-            </span>
-
-            {/* Content tags/pills */}
-            <div className="flex items-center gap-1 shrink-0">
-              {node.summary && (
-                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                  Summary
-                </span>
-              )}
-              {node.notes && (
-                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                  Notes
-                </span>
-              )}
-            </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-1 shrink-0 ml-2">
+          {/* Action buttons: Play and Expand */}
+          <div className="flex items-center gap-1.5 shrink-0">
             {node.url && (
               <MiniAudioPlayButton url={node.url} />
-            )}
-
-            {onOpenMeetingWorkspace && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenMeetingWorkspace(node.id);
-                }}
-                className="flex items-center gap-1 text-[10px] font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 px-2 py-1 rounded-md transition-colors border border-primary-200 dark:border-primary-800/60"
-                title="Open in Foresight Meeting Workspace"
-              >
-                <span>Meeting View</span>
-              </button>
-            )}
-
-            {onToggleCollapseAll && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleCollapseAll(false);
-                }}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 text-[10px] font-medium px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors hidden group-hover:inline-block"
-                title="Expand all cards"
-              >
-                Expand All
-              </button>
             )}
 
             <button
@@ -456,19 +397,7 @@ function AudioNodeCard({
               className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
               title="Expand card"
             >
-              <Maximize2 size={13} />
-            </button>
-
-            <button 
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteAudioNode(node.id);
-              }}
-              className="text-zinc-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              title="Delete Recording"
-            >
-              <Trash2 size={13} />
+              <Maximize2 size={14} />
             </button>
           </div>
         </div>
