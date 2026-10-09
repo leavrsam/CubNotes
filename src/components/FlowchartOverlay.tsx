@@ -1015,15 +1015,31 @@ export function FlowchartOverlay({
       })}
 
       {/* 3. FLOATING TOOLBAR FOR SELECTED SHAPE */}
-      {selectedShape && (
-        <div 
-          className="absolute z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200"
-          style={{
-            transform: `translate(${selectedShape.x * zoom + pan.x}px, ${Math.max(10, (selectedShape.y - 50) * zoom + pan.y)}px)`,
-            transformOrigin: '0 0'
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
+      {selectedShape && (() => {
+        const screenX = selectedShape.x * zoom + pan.x;
+        const screenY = selectedShape.y * zoom + pan.y;
+        const screenH = selectedShape.height * zoom;
+
+        // Clearance above/below directional '+' buttons (which extend ~40px out from edges)
+        const plusButtonClearance = 56;
+        const topHeaderHeight = 76;
+        const showBelow = (screenY - 110) < topHeaderHeight;
+
+        const toolbarY = showBelow
+          ? screenY + screenH + plusButtonClearance
+          : screenY - plusButtonClearance;
+        const toolbarX = Math.max(16, screenX);
+
+        return (
+          <div 
+            className="absolute z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 animate-in fade-in zoom-in-95 duration-100"
+            style={{
+              left: `${toolbarX}px`,
+              top: `${toolbarY}px`,
+              transform: showBelow ? 'none' : 'translateY(-100%)',
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
           {/* Shape Type Selector */}
           <div className="flex items-center gap-1 pr-1.5 border-r border-zinc-200 dark:border-zinc-700">
             {[
@@ -1124,8 +1140,9 @@ export function FlowchartOverlay({
           >
             <Trash2 size={13} />
           </button>
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {/* 4. FLOATING TOOLBAR FOR SELECTED CONNECTOR */}
       {selectedConnector && (
