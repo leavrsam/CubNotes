@@ -1886,19 +1886,37 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         
         {/* Ribbon Content */}
         {isRibbonExpanded && (
-          <div className="h-[48px] bg-white dark:bg-zinc-900 flex items-center px-4 gap-4 shadow-sm border-b border-zinc-200 dark:border-zinc-800">
+          <div className="h-[48px] bg-white dark:bg-zinc-900 flex items-center px-3 gap-2 shadow-sm border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar">
             {activeTab === "Home" && (
-              <div className="flex items-center gap-2 h-full py-1">
+              <div className="flex items-center gap-1.5 h-full py-1">
+                {/* 1. Selection Tool */}
                 <button
                   onClick={() => setTool("home")}
-                  className={`flex flex-col items-center justify-center h-full px-3 rounded ${tool === "home" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                  className={`flex flex-col items-center justify-center h-full px-2.5 rounded ${tool === "home" ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                  title="Select / Pointer"
                 >
                   <MousePointer2 size={16} strokeWidth={2} />
-                  <span className="text-[10px] font-medium mt-0.5">Select</span>
+                  <span className="text-[9px] font-medium mt-0.5">Select</span>
                 </button>
                 
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
 
+                {/* 2. Styles / Heading Dropdown */}
+                <CustomSelect
+                  width="w-28"
+                  dropdownWidth="w-36"
+                  placeholder="Style"
+                  options={STYLE_OPTIONS}
+                  disabled={!activeEditor}
+                  value={getCurrentStyle(activeEditor)}
+                  onChange={(val) => {
+                    if (activeEditor) applyStyle(activeEditor, val);
+                  }}
+                />
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+
+                {/* 3. Font Family & Size */}
                 <div className="flex items-center gap-1">
                   <CustomSelect
                     width="w-28"
@@ -1944,7 +1962,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                       (activeEditor.chain().focus() as any).setFontSize(`${nextSize}px`).run();
                     }}
                     disabled={!activeEditor}
-                    className={`px-1.5 py-1 text-xs font-bold rounded transition-colors flex items-center gap-0.5 ${!activeEditor ? 'opacity-50 cursor-not-allowed text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    className={`px-1.5 py-1 text-xs font-bold rounded transition-colors flex items-center gap-0.5 ${!activeEditor ? 'opacity-40 cursor-not-allowed text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
                     title="Increase Font Size (A▲)"
                   >
                     <span>A</span><span className="text-[8px] leading-none">▲</span>
@@ -1960,22 +1978,36 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                       (activeEditor.chain().focus() as any).setFontSize(`${prevSize}px`).run();
                     }}
                     disabled={!activeEditor}
-                    className={`px-1.5 py-1 text-xs font-bold rounded transition-colors flex items-center gap-0.5 ${!activeEditor ? 'opacity-50 cursor-not-allowed text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    className={`px-1.5 py-1 text-xs font-bold rounded transition-colors flex items-center gap-0.5 ${!activeEditor ? 'opacity-40 cursor-not-allowed text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
                     title="Decrease Font Size (A▼)"
                   >
                     <span>A</span><span className="text-[8px] leading-none">▼</span>
                   </button>
+
+                  {/* Clear Formatting */}
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (activeEditor) clearFormatting(activeEditor);
+                    }}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${!activeEditor ? 'opacity-40 cursor-not-allowed text-zinc-400' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    title="Clear All Formatting (Remove styles, fonts, sizes)"
+                  >
+                    <RemoveFormatting size={14} />
+                  </button>
                 </div>
 
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
 
+                {/* 4. Bold, Italic, Underline, Strikethrough, Sub, Sup */}
                 <div className="flex items-center">
                   <button
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleBold().run()}
                     disabled={!activeEditor}
-                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('bold') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                    title="Bold"
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('bold') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Bold (Ctrl+B)"
                   >
                     <Bold size={14} />
                   </button>
@@ -1983,8 +2015,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleItalic().run()}
                     disabled={!activeEditor}
-                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('italic') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                    title="Italic"
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('italic') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Italic (Ctrl+I)"
                   >
                     <Italic size={14} />
                   </button>
@@ -1992,31 +2024,54 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleUnderline().run()}
                     disabled={!activeEditor}
-                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('underline') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                    title="Underline"
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('underline') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Underline (Ctrl+U)"
                   >
                     <UnderlineIcon size={14} />
                   </button>
                   <button
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => activeEditor?.chain().focus().toggleHighlight().run()}
+                    onClick={() => activeEditor?.chain().focus().toggleStrike().run()}
                     disabled={!activeEditor}
-                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('highlight') ? 'bg-yellow-200 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-500' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                    title="Highlight"
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('strike') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Strikethrough"
                   >
-                    <Highlighter size={14} />
+                    <Strikethrough size={14} />
                   </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => (activeEditor?.chain().focus() as any)?.toggleSubscript().run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${(activeEditor as any)?.isActive('subscript') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Subscript (X₂)"
+                  >
+                    <SubscriptIcon size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => (activeEditor?.chain().focus() as any)?.toggleSuperscript().run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${(activeEditor as any)?.isActive('superscript') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Superscript (X²)"
+                  >
+                    <SuperscriptIcon size={14} />
+                  </button>
+                </div>
 
-                  <div className="flex px-2 items-center ml-1 relative">
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+
+                {/* 5. Text Color & Highlight Color */}
+                <div className="flex items-center gap-0.5">
+                  <div className="flex items-center relative">
                     <button
                       disabled={!activeEditor}
                       title={!activeEditor ? "Click inside a text block first" : "Text Color"}
-                      className={`w-6 h-6 p-0 border-0 rounded flex items-center justify-center transition-opacity relative ${!activeEditor ? 'opacity-50 cursor-not-allowed' : 'opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                      className={`w-7 h-7 p-0 border-0 rounded flex flex-col items-center justify-center transition-opacity relative ${!activeEditor ? 'opacity-40 cursor-not-allowed' : 'opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
                       style={{ color: activeEditor?.getAttributes('textStyle')?.color || '#000000' }}
                       onClick={() => setOpenColorMenu(openColorMenu === 'text' ? null : 'text')}
                     >
-                      <div className="font-serif text-sm font-bold leading-none">A</div>
-                      <div className="absolute bottom-0.5 left-1 right-1 h-[3px]" style={{ backgroundColor: activeEditor?.getAttributes('textStyle')?.color || '#000000' }}></div>
+                      <div className="font-serif text-xs font-bold leading-none">A</div>
+                      <div className="w-4 h-[3px] mt-0.5 rounded-xs" style={{ backgroundColor: activeEditor?.getAttributes('textStyle')?.color || '#000000' }}></div>
                     </button>
                     <ColorPickerMenu 
                       isOpen={openColorMenu === 'text'} 
@@ -2030,16 +2085,96 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                       }}
                     />
                   </div>
+
+                  {/* Highlighter dropdown palette */}
+                  <HighlightDropdown 
+                    editor={activeEditor}
+                    isOpen={openColorMenu === 'highlight'}
+                    onToggle={() => setOpenColorMenu(openColorMenu === 'highlight' ? null : 'highlight')}
+                    onClose={() => setOpenColorMenu(null)}
+                  />
                 </div>
 
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
 
+                {/* 6. Alignment, Indent & Line Spacing */}
+                <div className="flex items-center">
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor?.chain().focus().setTextAlign('left').run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive({ textAlign: 'left' }) ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Align Left"
+                  >
+                    <AlignLeft size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor?.chain().focus().setTextAlign('center').run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive({ textAlign: 'center' }) ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Align Center"
+                  >
+                    <AlignCenter size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor?.chain().focus().setTextAlign('right').run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive({ textAlign: 'right' }) ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Align Right"
+                  >
+                    <AlignRight size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor?.chain().focus().setTextAlign('justify').run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive({ textAlign: 'justify' }) ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Justify"
+                  >
+                    <AlignJustify size={14} />
+                  </button>
+
+                  <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
+                  {/* Indent / Outdent */}
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor && executeOutdent(activeEditor)}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Decrease Indent (Shift+Tab)"
+                  >
+                    <OutdentIcon size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor && executeIndent(activeEditor)}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Increase Indent (Tab)"
+                  >
+                    <IndentIcon size={14} />
+                  </button>
+
+                  <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
+                  {/* Line Spacing Adjuster */}
+                  <LineSpacingDropdown 
+                    editor={activeEditor}
+                  />
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+
+                {/* 7. Lists */}
                 <div className="flex items-center">
                   <button
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleBulletList().run()}
                     disabled={!activeEditor}
-                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('bulletList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('bulletList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
                     title="Bullet List"
                   >
                     <List size={14} />
@@ -2048,7 +2183,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => activeEditor?.chain().focus().toggleOrderedList().run()}
                     disabled={!activeEditor}
-                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('orderedList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('orderedList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
                     title="Numbered List"
                   >
                     <ListOrdered size={14} />
@@ -2057,10 +2192,52 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => (activeEditor?.chain().focus() as any)?.toggleTaskList().run()}
                     disabled={!activeEditor}
-                    className={`p-1.5 rounded transition-colors ${(activeEditor as any)?.isActive('taskList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
-                    title="To-Do List (Checkboxes)"
+                    className={`p-1.5 rounded transition-colors ${(activeEditor as any)?.isActive('taskList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="To-Do Checklist"
                   >
                     <CheckSquare size={14} />
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+
+                {/* 8. Insert Extras: Quote, Code, Horizontal Line, Link */}
+                <div className="flex items-center">
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor?.chain().focus().toggleBlockquote().run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('blockquote') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Blockquote"
+                  >
+                    <Quote size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor?.chain().focus().toggleCode().run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('code') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Inline Code"
+                  >
+                    <Code size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor?.chain().focus().setHorizontalRule().run()}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title="Horizontal Line / Divider"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => activeEditor && handleToggleLink(activeEditor)}
+                    disabled={!activeEditor}
+                    className={`p-1.5 rounded transition-colors ${activeEditor?.isActive('link') ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${!activeEditor ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title={activeEditor?.isActive('link') ? "Remove Link" : "Insert Hyperlink"}
+                  >
+                    <Link2 size={14} />
                   </button>
                 </div>
               </div>

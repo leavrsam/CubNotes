@@ -91,9 +91,9 @@ export const LineHeight = Extension.create({
       },
     ];
   },
-  addCommands() {
+  addCommands(): any {
     return {
-      setLineHeight: (lineHeight: string) => ({ tr, state, dispatch }) => {
+      setLineHeight: (lineHeight: string) => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
         let applicable = false;
         if (selection.empty) {
@@ -112,7 +112,7 @@ export const LineHeight = Extension.create({
           }
         } else {
           const { from, to } = selection;
-          state.doc.nodesBetween(from, to, (node, pos) => {
+          state.doc.nodesBetween(from, to, (node: any, pos: any) => {
             if (this.options.types.includes(node.type.name)) {
               applicable = true;
               tr = tr.setNodeMarkup(pos, undefined, {
@@ -127,7 +127,7 @@ export const LineHeight = Extension.create({
         }
         return applicable;
       },
-      unsetLineHeight: () => ({ tr, state, dispatch }) => {
+      unsetLineHeight: () => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
         let applicable = false;
         if (selection.empty) {
@@ -145,7 +145,7 @@ export const LineHeight = Extension.create({
           }
         } else {
           const { from, to } = selection;
-          state.doc.nodesBetween(from, to, (node, pos) => {
+          state.doc.nodesBetween(from, to, (node: any, pos: any) => {
             if (this.options.types.includes(node.type.name)) {
               applicable = true;
               const newAttrs = { ...node.attrs };
@@ -202,9 +202,9 @@ export const Indent = Extension.create({
       },
     ];
   },
-  addCommands() {
+  addCommands(): any {
     return {
-      indent: () => ({ tr, state, dispatch }) => {
+      indent: () => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
         let applicable = false;
         if (selection.empty) {
@@ -226,7 +226,7 @@ export const Indent = Extension.create({
           }
         } else {
           const { from, to } = selection;
-          state.doc.nodesBetween(from, to, (node, pos) => {
+          state.doc.nodesBetween(from, to, (node: any, pos: any) => {
             if (this.options.types.includes(node.type.name)) {
               applicable = true;
               const currentIndent = node.attrs.indent || 0;
@@ -244,7 +244,7 @@ export const Indent = Extension.create({
         }
         return applicable;
       },
-      outdent: () => ({ tr, state, dispatch }) => {
+      outdent: () => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
         let applicable = false;
         if (selection.empty) {
@@ -266,7 +266,7 @@ export const Indent = Extension.create({
           }
         } else {
           const { from, to } = selection;
-          state.doc.nodesBetween(from, to, (node, pos) => {
+          state.doc.nodesBetween(from, to, (node: any, pos: any) => {
             if (this.options.types.includes(node.type.name)) {
               applicable = true;
               const currentIndent = node.attrs.indent || 0;
@@ -313,11 +313,11 @@ export const Subscript = Mark.create({
   renderHTML({ HTMLAttributes }) {
     return ['sub', HTMLAttributes, 0];
   },
-  addCommands() {
+  addCommands(): any {
     return {
-      setSubscript: () => ({ commands }) => commands.setMark(this.name),
-      toggleSubscript: () => ({ commands }) => commands.toggleMark(this.name),
-      unsetSubscript: () => ({ commands }) => commands.unsetMark(this.name),
+      setSubscript: () => ({ commands }: any) => commands.setMark(this.name),
+      toggleSubscript: () => ({ commands }: any) => commands.toggleMark(this.name),
+      unsetSubscript: () => ({ commands }: any) => commands.unsetMark(this.name),
     };
   },
 });
@@ -330,11 +330,11 @@ export const Superscript = Mark.create({
   renderHTML({ HTMLAttributes }) {
     return ['sup', HTMLAttributes, 0];
   },
-  addCommands() {
+  addCommands(): any {
     return {
-      setSuperscript: () => ({ commands }) => commands.setMark(this.name),
-      toggleSuperscript: () => ({ commands }) => commands.toggleMark(this.name),
-      unsetSuperscript: () => ({ commands }) => commands.unsetMark(this.name),
+      setSuperscript: () => ({ commands }: any) => commands.setMark(this.name),
+      toggleSuperscript: () => ({ commands }: any) => commands.toggleMark(this.name),
+      unsetSuperscript: () => ({ commands }: any) => commands.unsetMark(this.name),
     };
   },
 });
@@ -819,7 +819,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
+      (StarterKit.configure as any)({
         history: false,
       }),
       TextStyle,
@@ -883,7 +883,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       const { from, to } = editor.state.selection;
-      editor.commands.setContent(content, false);
+      editor.commands.setContent(content, { emitUpdate: false });
       try {
         editor.commands.setTextSelection({ from, to });
       } catch (e) {}
