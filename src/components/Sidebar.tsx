@@ -210,25 +210,50 @@ function EditableItem({
 
   useEffect(() => {
     if (isEditing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
+      setVal(title);
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select();
+        }
+      }, 10);
+      return () => clearTimeout(timer);
     }
-  }, [isEditing]);
+  }, [isEditing, title]);
+
+  const handleSave = () => {
+    const trimmed = val.trim();
+    if (trimmed && trimmed !== title) {
+      onSave(trimmed);
+    } else {
+      onCancel();
+    }
+  };
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-2 px-2 py-1.5 w-full">
+      <div 
+        className="flex items-center gap-2 px-2 py-1.5 w-full bg-zinc-900/90 rounded-md"
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
         <Icon size={16} className={iconColor} />
         <input 
           ref={inputRef}
           value={val}
           onChange={e => setVal(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter') onSave(val);
-            if (e.key === 'Escape') onCancel();
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleSave();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              setVal(title);
+              onCancel();
+            }
           }}
-          onBlur={() => onSave(val)}
-          className="flex-1 bg-zinc-900 border border-primary-500 rounded px-1 text-sm text-zinc-100 outline-none"
+          onBlur={handleSave}
+          className="flex-1 bg-zinc-900 border border-primary-500 rounded px-1.5 py-0.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-primary-500"
         />
       </div>
     );
@@ -298,7 +323,12 @@ function NotebookItem({
       >
         <div 
           onClick={() => setExpanded(!expanded)}
-          className="group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm font-medium rounded-md hover:bg-zinc-800/50 transition-colors text-zinc-200 cursor-pointer"
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+            setIsEditing(true);
+          }}
+          className="group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm font-medium rounded-md hover:bg-zinc-800/50 transition-colors text-zinc-200 cursor-pointer select-none"
         >
           <div className="w-4 flex items-center justify-center">
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -308,7 +338,14 @@ function NotebookItem({
           ) : (
             <Book size={16} className="text-primary-400 flex-shrink-0" />
           )}
-          <span className="truncate flex-1 text-left flex items-center gap-1.5">
+          <span 
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+              setIsEditing(true);
+            }}
+            className="truncate flex-1 text-left flex items-center gap-1.5 select-none"
+          >
             {notebook.title}
             {notebook.is_journal && (
               <span className="text-[10px] uppercase font-semibold px-1.5 py-0.2 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded">
@@ -414,7 +451,12 @@ function SectionItem({
       >
         <div 
           onClick={() => setExpanded(!expanded)}
-          className="group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-zinc-800/50 transition-colors cursor-pointer"
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+            setIsEditing(true);
+          }}
+          className="group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-zinc-800/50 transition-colors cursor-pointer select-none"
         >
           <div className="w-4 flex items-center justify-center">
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -426,7 +468,16 @@ function SectionItem({
               style={{ backgroundColor: sectionColor }}
             />
           </div>
-          <span className="truncate flex-1 text-left text-zinc-300">{section.title}</span>
+          <span 
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+              setIsEditing(true);
+            }}
+            className="truncate flex-1 text-left text-zinc-300 select-none"
+          >
+            {section.title}
+          </span>
           <ItemActions 
             onEdit={() => setIsEditing(true)} 
             onDelete={onDelete} 
@@ -491,7 +542,12 @@ function PageItem({ page, selected, onSelect, onUpdate, onDelete, sectionColor }
     >
       <div
         onClick={onSelect}
-        className={`group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+          setIsEditing(true);
+        }}
+        className={`group relative w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors cursor-pointer select-none ${
           selected
             ? "bg-zinc-800/90 text-white font-medium"
             : "hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200"
@@ -499,8 +555,17 @@ function PageItem({ page, selected, onSelect, onUpdate, onDelete, sectionColor }
         style={selected && sectionColor ? { borderLeft: `3px solid ${sectionColor}`, paddingLeft: '6px' } : undefined}
       >
         <FileText size={14} className="flex-shrink-0" style={selected && sectionColor ? { color: sectionColor } : undefined} />
-        <div className="flex flex-col items-start overflow-hidden flex-1">
-          <span className="truncate w-full text-left">{page.title}</span>
+        <div className="flex flex-col items-start overflow-hidden flex-1 select-none">
+          <span 
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+              setIsEditing(true);
+            }}
+            className="truncate w-full text-left select-none"
+          >
+            {page.title}
+          </span>
           {page.is_journal_entry && (
             <span className="text-[10px] text-zinc-500">{page.date}</span>
           )}

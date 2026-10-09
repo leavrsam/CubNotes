@@ -400,46 +400,6 @@ export function SpatialCanvas({
     return () => window.removeEventListener('pointerup', handleWindowPointerUp);
   }, [marqueeBox, onSelectionBoxComplete]);
 
-  // Handle Zoom & Pan via Trackpad / Mouse Wheel
-  const handleWheel = (e: any) => {
-    e.evt.preventDefault();
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    // Trackpad Pinch-to-Zoom (or Ctrl/Meta + Mouse Wheel)
-    if (e.evt.ctrlKey || e.evt.metaKey) {
-      const oldScale = zoom;
-      const pointer = stage.getPointerPosition() || {
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      };
-
-      const mousePointTo = {
-        x: (pointer.x - pan.x) / oldScale,
-        y: (pointer.y - pan.y) / oldScale,
-      };
-
-      // Smooth zoom factor for trackpad pinch
-      const factor = Math.exp(-e.evt.deltaY * 0.01);
-      let newScale = Math.max(0.1, Math.min(oldScale * factor, 5));
-
-      setZoom(newScale);
-      setPan({
-        x: pointer.x - mousePointTo.x * newScale,
-        y: pointer.y - mousePointTo.y * newScale,
-      });
-    } else {
-      // Two-finger Trackpad Pan / Mouse Wheel Scroll (Pans the canvas)
-      const dx = e.evt.shiftKey ? e.evt.deltaY : e.evt.deltaX;
-      const dy = e.evt.shiftKey ? 0 : e.evt.deltaY;
-
-      setPan(prev => ({
-        x: prev.x - dx,
-        y: prev.y - dy,
-      }));
-    }
-  };
-
   const visibleStrokes = useMemo(() => {
     if (annotateBlockId) {
       return strokes.filter(s => 
@@ -462,7 +422,6 @@ export function SpatialCanvas({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onWheel={handleWheel}
         draggable={tool === 'pan'}
         onDragStart={() => {
           if (tool === 'pan') {

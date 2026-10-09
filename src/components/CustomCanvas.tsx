@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, RotateCw, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Link2 } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, RotateCw, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2 } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { 
   STYLE_OPTIONS, 
@@ -451,6 +451,12 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   // Viewport state
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const ribbonRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -1485,45 +1491,181 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const mousePosRef = useRef<{ x: number, y: number } | null>(null);
   const spaceDragStartRef = useRef<{ x: number, y: number, panX: number, panY: number } | null>(null);
 
-  // Smooth Cursor-Anchored Zoom & Pan
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    // Don't pan or zoom if scrolling inside a scrollable text editor
-    const target = e.target as HTMLElement;
-    if (target.closest('.ProseMirror') && target.scrollHeight > target.clientHeight) {
-      return;
-    }
+  // Center-anchored zoom helpers (for buttons, shortcuts, etc.)
+  const handleZoomIn = useCallback(() => {
+    const container = canvasContainerRef.current;
+    const oldScale = zoomRef.current;
+    const newScale = Math.min(5.0, oldScale * 1.2);
+    if (newScale === oldScale) return;
 
-    if (e.ctrlKey || e.metaKey) {
+    const cx = (container?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 1000)) / 2;
+    const cy = (container?.clientHeight || (typeof window !== 'undefined' ? window.innerHeight : 800)) / 2;
+    const worldX = (cx - panRef.current.x) / oldScale;
+    const worldY = (cy - panRef.current.y) / oldScale;
+
+    const newPan = {
+      x: cx - worldX * newScale,
+      y: cy - worldY * newScale,
+    };
+    zoomRef.current = newScale;
+    panRef.current = newPan;
+    setZoom(newScale);
+    setPan(newPan);
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const container = canvasContainerRef.current;
+    const oldScale = zoomRef.current;
+    const newScale = Math.max(0.1, oldScale / 1.2);
+    if (newScale === oldScale) return;
+
+    const cx = (container?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 1000)) / 2;
+    const cy = (container?.clientHeight || (typeof window !== 'undefined' ? window.innerHeight : 800)) / 2;
+    const worldX = (cx - panRef.current.x) / oldScale;
+    const worldY = (cy - panRef.current.y) / oldScale;
+
+    const newPan = {
+      x: cx - worldX * newScale,
+      y: cy - worldY * newScale,
+    };
+    zoomRef.current = newScale;
+    panRef.current = newPan;
+    setZoom(newScale);
+    setPan(newPan);
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    const container = canvasContainerRef.current;
+    const oldScale = zoomRef.current;
+    const newScale = 1.0;
+
+    const cx = (container?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 1000)) / 2;
+    const cy = (container?.clientHeight || (typeof window !== 'undefined' ? window.innerHeight : 800)) / 2;
+    const worldX = (cx - panRef.current.x) / oldScale;
+    const worldY = (cy - panRef.current.y) / oldScale;
+
+    const newPan = {
+      x: cx - worldX * newScale,
+      y: cy - worldY * newScale,
+    };
+    zoomRef.current = newScale;
+    panRef.current = newPan;
+    setZoom(newScale);
+    setPan(newPan);
+  }, []);
+
+  // Non-passive native wheel listener to isolate canvas zoom/pan from browser-level page zoom
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    const onWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+
+      // Don't pan or zoom canvas if scrolling inside top ribbon, a modal dialog, or dropdowns
+      if (
+        target?.closest('[role="dialog"]') ||
+        target?.closest('[data-modal="true"]') ||
+        (ribbonRef.current && ribbonRef.current.contains(target))
+      ) {
+        return;
+      }
+
+      // If scrolling inside an editable text area that has its own vertical scroll overflow, let it scroll
+      const editorEl = target?.closest('.ProseMirror') as HTMLElement | null;
+      if (editorEl && !e.ctrlKey && !e.metaKey && editorEl.scrollHeight > editorEl.clientHeight) {
+        return;
+      }
+
+      // Block native browser page zoom and document scroll
       e.preventDefault();
-      const oldScale = zoom;
-      const pointer = {
-        x: e.clientX,
-        y: e.clientY,
-      };
+      e.stopPropagation();
 
-      const mousePointTo = {
-        x: (pointer.x - pan.x) / oldScale,
-        y: (pointer.y - pan.y) / oldScale,
-      };
+      const rect = container.getBoundingClientRect();
+      const pointerX = e.clientX - rect.left;
+      const pointerY = e.clientY - rect.top;
 
-      const factor = Math.exp(-e.deltaY * 0.01);
-      const newScale = Math.max(0.1, Math.min(oldScale * factor, 5));
+      // Trackpad Pinch-to-Zoom OR Ctrl/Cmd + Mouse Wheel
+      if (e.ctrlKey || e.metaKey) {
+        const oldScale = zoomRef.current;
+        const currentPan = panRef.current;
 
-      setZoom(newScale);
-      setPan({
-        x: pointer.x - mousePointTo.x * newScale,
-        y: pointer.y - mousePointTo.y * newScale,
-      });
-    } else {
-      // Pan
-      const dx = e.shiftKey ? e.deltaY : e.deltaX;
-      const dy = e.shiftKey ? 0 : e.deltaY;
-      setPan(prev => ({
-        x: prev.x - dx,
-        y: prev.y - dy,
-      }));
-    }
-  }, [pan.x, pan.y, zoom]);
+        // Position in canvas world space under the cursor
+        const mousePointTo = {
+          x: (pointerX - currentPan.x) / oldScale,
+          y: (pointerY - currentPan.y) / oldScale,
+        };
+
+        // Normalize delta based on deltaMode (pixel vs line vs page)
+        let delta = -e.deltaY;
+        if (e.deltaMode === 1) {
+          delta *= 24;
+        } else if (e.deltaMode === 2) {
+          delta *= 100;
+        }
+
+        // Clamp delta magnitude to prevent huge jumps from fast flicks
+        const clampedDelta = Math.max(-120, Math.min(120, delta));
+
+        // Smooth calibrated exponential scaling (~10-15% per mouse wheel notch, continuous for trackpad)
+        const zoomFactor = Math.exp(clampedDelta * 0.0015);
+        const newScale = Math.max(0.1, Math.min(5.0, oldScale * zoomFactor));
+
+        // Pan adjustment keeps the exact world point under the cursor unchanged
+        const newPan = {
+          x: pointerX - mousePointTo.x * newScale,
+          y: pointerY - mousePointTo.y * newScale,
+        };
+
+        zoomRef.current = newScale;
+        panRef.current = newPan;
+
+        setZoom(newScale);
+        setPan(newPan);
+      } else {
+        // Trackpad 2-finger pan or regular mouse wheel scroll
+        let dx = e.shiftKey ? e.deltaY : e.deltaX;
+        let dy = e.shiftKey ? 0 : e.deltaY;
+
+        if (e.deltaMode === 1) {
+          dx *= 24;
+          dy *= 24;
+        } else if (e.deltaMode === 2) {
+          dx *= 100;
+          dy *= 100;
+        }
+
+        const newPan = {
+          x: panRef.current.x - dx,
+          y: panRef.current.y - dy,
+        };
+
+        panRef.current = newPan;
+        setPan(newPan);
+      }
+    };
+
+    const preventGesture = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+    container.addEventListener('gesturestart', preventGesture, { passive: false });
+    container.addEventListener('gesturechange', preventGesture, { passive: false });
+    container.addEventListener('gestureend', preventGesture, { passive: false });
+    window.addEventListener('gesturestart', preventGesture, { passive: false });
+    window.addEventListener('gesturechange', preventGesture, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('gesturestart', preventGesture);
+      container.removeEventListener('gesturechange', preventGesture);
+      container.removeEventListener('gestureend', preventGesture);
+      window.removeEventListener('gesturestart', preventGesture);
+      window.removeEventListener('gesturechange', preventGesture);
+    };
+  }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button === 1 || isSpacePanning) { // Middle click or Spacebar pan
@@ -1768,10 +1910,22 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         e.preventDefault();
         redo();
       }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        handleZoomIn();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        handleZoomOut();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        handleResetZoom();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds]);
+  }, [undo, redo, selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds, handleZoomIn, handleZoomOut, handleResetZoom]);
 
   if (loading) {
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
@@ -1779,9 +1933,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
   return (
     <div 
+      ref={canvasContainerRef}
       className={`w-full h-full relative overflow-hidden ${pageColor === 'default' ? 'bg-[#fafafa] dark:bg-zinc-900' : ''}`}
       style={{ touchAction: 'none', backgroundColor: pageColor === 'default' ? undefined : pageColor }}
-      onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -1801,6 +1955,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       
       {/* Top Ribbon Container */}
       <div 
+        ref={ribbonRef}
         className="absolute top-0 left-0 w-full bg-[#f3f2f1] dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 z-50 flex flex-col pointer-events-auto"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
@@ -2698,28 +2853,28 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               <div className="flex items-center gap-4 h-full py-1">
                 <div className="flex items-center h-full gap-1">
                   <button
-                    onClick={() => setZoom(z => Math.min(5, z * 1.2))}
+                    onClick={handleZoomIn}
                     className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
-                    title="Zoom In"
+                    title="Zoom In (Cmd/Ctrl +)"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                     <span className="text-[10px] font-medium leading-none mt-0.5">Zoom In</span>
                   </button>
                   <button
-                    onClick={() => setZoom(z => Math.max(0.1, z / 1.2))}
+                    onClick={handleZoomOut}
                     className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
-                    title="Zoom Out"
+                    title="Zoom Out (Cmd/Ctrl -)"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                     <span className="text-[10px] font-medium leading-none mt-0.5">Zoom Out</span>
                   </button>
                   <button
-                    onClick={() => setZoom(1)}
+                    onClick={handleResetZoom}
                     className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
-                    title="Zoom to 100%"
+                    title="Reset to 100% (Cmd/Ctrl 0)"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-0.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 10.5 12 7l3 3.5"/><path d="M9 13.5 12 17l3-3.5"/></svg>
-                    <span className="text-[10px] font-medium leading-none mt-0.5">100%</span>
+                    <span className="text-[10px] font-medium leading-none mt-0.5">{Math.round(zoom * 100)}%</span>
                   </button>
                 </div>
 
@@ -3113,6 +3268,34 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           setPan={setPan}
         />
       )}
+
+      {/* Floating Canvas Zoom Controls */}
+      <div 
+        className={`absolute z-40 pointer-events-auto flex items-center bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border border-zinc-200/80 dark:border-zinc-700/80 rounded-full shadow-lg p-0.5 text-zinc-700 dark:text-zinc-200 select-none text-xs transition-all ${showMinimap ? 'bottom-56 right-6' : 'bottom-6 right-6'}`}
+        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <button
+          onClick={handleZoomOut}
+          title="Zoom Out (Cmd/Ctrl -)"
+          className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all text-zinc-600 dark:text-zinc-300"
+        >
+          <Minus size={13} />
+        </button>
+        <button
+          onClick={handleResetZoom}
+          title="Reset Zoom to 100% (Cmd/Ctrl 0)"
+          className="px-2 h-7 font-medium text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full transition-colors tabular-nums"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          onClick={handleZoomIn}
+          title="Zoom In (Cmd/Ctrl +)"
+          className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 transition-all text-zinc-600 dark:text-zinc-300"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
 
       {/* Foresight & Granola Meeting Workspace Modal */}
       <MeetingWorkspace 
