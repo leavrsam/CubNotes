@@ -539,91 +539,119 @@ export const HIGHLIGHT_COLORS = [
 ];
 
 export const executeIndent = (editor: Editor) => {
-  if (editor.can().sinkListItem('listItem')) {
-    editor.chain().focus().sinkListItem('listItem').run();
-  } else if (editor.can().sinkListItem('taskItem')) {
-    editor.chain().focus().sinkListItem('taskItem').run();
-  } else {
-    (editor.chain().focus() as any).indent().run();
+  if (!editor || editor.isDestroyed) return;
+  try {
+    if (editor.can?.()?.sinkListItem?.('listItem')) {
+      editor.chain().focus().sinkListItem('listItem').run();
+    } else if (editor.can?.()?.sinkListItem?.('taskItem')) {
+      editor.chain().focus().sinkListItem('taskItem').run();
+    } else {
+      (editor.chain().focus() as any).indent?.().run();
+    }
+  } catch (err) {
+    console.warn("executeIndent failed:", err);
   }
 };
 
 export const executeOutdent = (editor: Editor) => {
-  if (editor.can().liftListItem('listItem')) {
-    editor.chain().focus().liftListItem('listItem').run();
-  } else if (editor.can().liftListItem('taskItem')) {
-    editor.chain().focus().liftListItem('taskItem').run();
-  } else {
-    (editor.chain().focus() as any).outdent().run();
+  if (!editor || editor.isDestroyed) return;
+  try {
+    if (editor.can?.()?.liftListItem?.('listItem')) {
+      editor.chain().focus().liftListItem('listItem').run();
+    } else if (editor.can?.()?.liftListItem?.('taskItem')) {
+      editor.chain().focus().liftListItem('taskItem').run();
+    } else {
+      (editor.chain().focus() as any).outdent?.().run();
+    }
+  } catch (err) {
+    console.warn("executeOutdent failed:", err);
   }
 };
 
 export const getCurrentStyle = (editor: Editor | null): string => {
-  if (!editor) return "p";
-  if (editor.isActive('heading', { level: 1 })) return "h1";
-  if (editor.isActive('heading', { level: 2 })) return "h2";
-  if (editor.isActive('heading', { level: 3 })) return "h3";
-  if (editor.isActive('blockquote')) return "quote";
-  if (editor.isActive('codeBlock')) return "codeBlock";
+  if (!editor || editor.isDestroyed) return "p";
+  try {
+    if (editor.isActive('heading', { level: 1 })) return "h1";
+    if (editor.isActive('heading', { level: 2 })) return "h2";
+    if (editor.isActive('heading', { level: 3 })) return "h3";
+    if (editor.isActive('blockquote')) return "quote";
+    if (editor.isActive('codeBlock')) return "codeBlock";
+  } catch {
+    return "p";
+  }
   return "p";
 };
 
 export const applyStyle = (editor: Editor, style: string) => {
-  const chain = editor.chain().focus();
-  if (style === "p") {
-    chain.setParagraph().run();
-  } else if (style === "h1") {
-    chain.setHeading({ level: 1 }).run();
-  } else if (style === "h2") {
-    chain.setHeading({ level: 2 }).run();
-  } else if (style === "h3") {
-    chain.setHeading({ level: 3 }).run();
-  } else if (style === "quote") {
-    chain.setBlockquote().run();
-  } else if (style === "codeBlock") {
-    chain.setCodeBlock().run();
+  if (!editor || editor.isDestroyed) return;
+  try {
+    const chain = editor.chain().focus();
+    if (style === "p") {
+      chain.setParagraph().run();
+    } else if (style === "h1") {
+      chain.setHeading({ level: 1 }).run();
+    } else if (style === "h2") {
+      chain.setHeading({ level: 2 }).run();
+    } else if (style === "h3") {
+      chain.setHeading({ level: 3 }).run();
+    } else if (style === "quote") {
+      chain.setBlockquote().run();
+    } else if (style === "codeBlock") {
+      chain.setCodeBlock().run();
+    }
+  } catch (err) {
+    console.warn("applyStyle failed:", err);
   }
 };
 
 export const getCurrentLineSpacing = (editor: Editor | null): string => {
-  if (!editor) return "";
-  const { state } = editor;
-  const { selection } = state;
-  const { $from } = selection;
-  for (let d = $from.depth; d > 0; d--) {
-    const node = $from.node(d);
-    if (node.attrs && node.attrs.lineHeight) {
-      return String(node.attrs.lineHeight);
+  if (!editor || editor.isDestroyed) return "";
+  try {
+    const { state } = editor;
+    if (!state) return "";
+    const { selection } = state;
+    const { $from } = selection;
+    for (let d = $from.depth; d > 0; d--) {
+      const node = $from.node(d);
+      if (node?.attrs && node.attrs.lineHeight) {
+        return String(node.attrs.lineHeight);
+      }
     }
+  } catch {
+    return "";
   }
   return "";
 };
 
 export const getCurrentParagraphSpacing = (editor: Editor | null): { spaceAfter: string | null; spaceBefore: string | null } => {
-  if (!editor) return { spaceAfter: null, spaceBefore: null };
-  const { selection } = editor.state;
-  let spaceAfter: string | null = null;
-  let spaceBefore: string | null = null;
-  if (selection.empty) {
-    const { $from } = selection;
-    for (let d = $from.depth; d > 0; d--) {
-      const node = $from.node(d);
-      if (['paragraph', 'heading', 'blockquote'].includes(node.type.name)) {
-        spaceAfter = node.attrs.spaceAfter || null;
-        spaceBefore = node.attrs.spaceBefore || null;
-        break;
+  if (!editor || editor.isDestroyed) return { spaceAfter: null, spaceBefore: null };
+  try {
+    const { selection } = editor.state;
+    let spaceAfter: string | null = null;
+    let spaceBefore: string | null = null;
+    if (selection.empty) {
+      const { $from } = selection;
+      for (let d = $from.depth; d > 0; d--) {
+        const node = $from.node(d);
+        if (['paragraph', 'heading', 'blockquote'].includes(node?.type?.name)) {
+          spaceAfter = node.attrs.spaceAfter || null;
+          spaceBefore = node.attrs.spaceBefore || null;
+          break;
+        }
       }
+    } else {
+      const { from, to } = selection;
+      editor.state.doc.nodesBetween(from, to, (node: any) => {
+        if (['paragraph', 'heading', 'blockquote'].includes(node?.type?.name)) {
+          if (!spaceAfter) spaceAfter = node.attrs.spaceAfter || null;
+          if (!spaceBefore) spaceBefore = node.attrs.spaceBefore || null;
+        }
+      });
     }
-  } else {
-    const { from, to } = selection;
-    editor.state.doc.nodesBetween(from, to, (node: any) => {
-      if (['paragraph', 'heading', 'blockquote'].includes(node.type.name)) {
-        if (!spaceAfter) spaceAfter = node.attrs.spaceAfter || null;
-        if (!spaceBefore) spaceBefore = node.attrs.spaceBefore || null;
-      }
-    });
+    return { spaceAfter, spaceBefore };
+  } catch {
+    return { spaceAfter: null, spaceBefore: null };
   }
-  return { spaceAfter, spaceBefore };
 };
 
 export const clearFormatting = (editor: Editor) => {
@@ -1092,6 +1120,9 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       } else {
         onBlurText?.(editor.getText());
       }
+    },
+    onDestroy: () => {
+      setActiveEditor?.(null);
     },
   });
 

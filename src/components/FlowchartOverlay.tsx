@@ -89,31 +89,47 @@ function getShapeColors(shape: ShapeNode) {
   return { stroke, fill };
 }
 
+function getShapeContentInset(type?: FlowchartShapeType) {
+  switch (type) {
+    case 'diamond':
+      // Rhombus safe inscribed box is ~52% of width and height
+      return { top: '22%', bottom: '22%', left: '22%', right: '22%' };
+    case 'circle':
+      return { top: '15%', bottom: '15%', left: '15%', right: '15%' };
+    case 'cylinder':
+      return { top: '20%', bottom: '14%', left: '10%', right: '10%' };
+    case 'note':
+      return { top: '10%', bottom: '10%', left: '12%', right: '12%' };
+    default:
+      return { top: '8px', bottom: '8px', left: '10px', right: '10px' };
+  }
+}
+
 function getAutoFontSize(text: string, width: number, height: number, type?: FlowchartShapeType, baseSize = 14): number {
   if (!text || text.trim().length === 0) return baseSize;
 
   let widthFactor = 0.85;
-  let heightFactor = 0.82;
+  let heightFactor = 0.80;
   if (type === 'diamond') {
-    widthFactor = 0.58;
-    heightFactor = 0.58;
+    widthFactor = 0.52;
+    heightFactor = 0.52;
   } else if (type === 'circle') {
-    widthFactor = 0.70;
-    heightFactor = 0.70;
+    widthFactor = 0.68;
+    heightFactor = 0.68;
   } else if (type === 'cylinder') {
-    widthFactor = 0.82;
-    heightFactor = 0.65;
+    widthFactor = 0.78;
+    heightFactor = 0.62;
   }
 
-  const usableWidth = Math.max(30, width * widthFactor);
-  const usableHeight = Math.max(20, height * heightFactor);
+  const usableWidth = Math.max(20, width * widthFactor);
+  const usableHeight = Math.max(16, height * heightFactor);
 
   const lines = text.split('\n');
   let optimalSize = baseSize;
 
-  for (let s = baseSize; s >= 8; s -= 0.5) {
-    const charWidth = s * 0.54;
-    const lineHeight = s * 1.32;
+  for (let s = baseSize; s >= 6.5; s -= 0.5) {
+    const charWidth = s * 0.55;
+    const lineHeight = s * 1.30;
     const charsPerLine = Math.max(1, Math.floor(usableWidth / charWidth));
 
     let totalLinesNeeded = 0;
@@ -132,7 +148,7 @@ function getAutoFontSize(text: string, width: number, height: number, type?: Flo
     optimalSize = s;
   }
 
-  return Math.max(8, optimalSize);
+  return Math.max(6.5, optimalSize);
 }
 
 export type ResizeCorner = 'nw' | 'ne' | 'se' | 'sw';
@@ -158,6 +174,9 @@ export function FlowchartOverlay({
   selectedIds,
   setSelectedIds
 }: FlowchartOverlayProps) {
+  // Container element ref for calculating screen offsets
+  const containerRef = useRef<HTMLDivElement>(null);
+
   // Inline text editing state
   const [editingShapeId, setEditingShapeId] = useState<string | null>(null);
   const [editingConnectorId, setEditingConnectorId] = useState<string | null>(null);
@@ -346,10 +365,13 @@ export function FlowchartOverlay({
         }));
       }
 
-      // 3. Drawing connector
+      // 3. Drawing connector with accurate screen-to-world conversion
       if (connectingState) {
-        const worldX = (e.clientX - pan.x) / zoom;
-        const worldY = (e.clientY - pan.y) / zoom;
+        const containerRect = containerRef.current?.getBoundingClientRect();
+        const clientLeft = containerRect?.left ?? 0;
+        const clientTop = containerRect?.top ?? 0;
+        const worldX = (e.clientX - clientLeft - pan.x) / zoom;
+        const worldY = (e.clientY - clientTop - pan.y) / zoom;
         setConnectingState(prev => prev ? { ...prev, currentWorldPos: { x: worldX, y: worldY } } : null);
       }
     };
@@ -713,7 +735,7 @@ export function FlowchartOverlay({
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none" style={{ zIndex: 25 }}>
+    <div ref={containerRef} className="absolute inset-0 pointer-events-none select-none" style={{ zIndex: 25 }}>
       {/* 1. SVG LAYER: CONNECTORS & ARROWHEADS */}
       <svg 
         className="absolute inset-0 w-full h-full pointer-events-none" 
@@ -872,26 +894,28 @@ export function FlowchartOverlay({
               {(() => {
                 const sourceShape = shapes.find(s => s.id === connectingState.fromShapeId);
                 if (!sourceShape) return null;
-                const startPt = getAnchorPoint(sourceShape, connectingState.fromAnchor);
-                const endPt = connectingState.currentWorldPos;
 
-                // Bezier preview
-                const dx = endPt.x - startPt.x;
-                const dy = endPt.y - startPt.y;
-                const dist = Math.hypot(dx, dy);
-                const curv = Math.max(30, dist * 0.4);
+                const targetShape = hoverAnchor ? shapes.find(s => s.id === hoverAnchor.shapeId) : undefined;
+                const previewConnector: ConnectorNode = {
+                  id: 'preview-connector',
+                  fromShapeId: sourceShape.id,
+                  fromAnchor: connectingState.fromAnchor,
+                  toShapeId: targetShape?.id,
+                  toAnchor: hoverAnchor?.anchor,
+                  toPoint: targetShape ? undefined : connectingState.currentWorldPos,
+                  routing: defaultRouting || 'curved',
+                  arrowEnd: 'arrow',
+                  strokeColor: '#3b82f6',
+                  strokeWidth: 2,
+                  strokeStyle: 'dashed'
+                };
 
-                let cp1 = { x: startPt.x, y: startPt.y };
-                if (connectingState.fromAnchor === 'right') cp1.x += curv;
-                if (connectingState.fromAnchor === 'left') cp1.x -= curv;
-                if (connectingState.fromAnchor === 'bottom') cp1.y += curv;
-                if (connectingState.fromAnchor === 'top') cp1.y -= curv;
-
-                const pathD = `M ${startPt.x} ${startPt.y} Q ${cp1.x} ${cp1.y} ${endPt.x} ${endPt.y}`;
+                const route = generateConnectorRoute(previewConnector, shapes, connectingState.currentWorldPos);
+                if (!route) return null;
 
                 return (
                   <path
-                    d={pathD}
+                    d={route.path}
                     fill="none"
                     stroke="#3b82f6"
                     strokeWidth={2}
@@ -942,50 +966,75 @@ export function FlowchartOverlay({
             </svg>
 
             {/* Inner Content / Label Container */}
-            <div 
-              className="absolute inset-0 flex items-center justify-center p-2.5 overflow-hidden pointer-events-none"
-              style={{
-                textAlign: shape.textAlign || 'center',
-                color: shape.textColor || 'inherit',
-              }}
-            >
-              {isEditing ? (
-                <textarea
-                  autoFocus
-                  defaultValue={shape.text || ""}
-                  onBlur={(e) => {
-                    const text = e.target.value;
-                    setShapes(prev => prev.map(s => s.id === shape.id ? { ...s, text } : s));
-                    setEditingShapeId(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      const text = (e.target as HTMLTextAreaElement).value;
-                      setShapes(prev => prev.map(s => s.id === shape.id ? { ...s, text } : s));
-                      setEditingShapeId(null);
-                    } else if (e.key === "Escape") {
-                      setEditingShapeId(null);
-                    }
-                  }}
-                  className="w-full h-full bg-transparent resize-none border-none outline-none font-semibold text-center focus:ring-0 text-zinc-900 dark:text-zinc-50 pointer-events-auto leading-snug"
+            {(() => {
+              const inset = getShapeContentInset(shape.type);
+              return (
+                <div 
+                  className="absolute flex items-center justify-center p-0 overflow-hidden pointer-events-none"
                   style={{
-                    fontSize: `${autoFontSize * zoom}px`,
-                    textAlign: shape.textAlign || 'center'
-                  }}
-                />
-              ) : (
-                <span 
-                  className="font-semibold text-zinc-900 dark:text-zinc-50 select-none break-words leading-snug max-w-full text-center"
-                  style={{
-                    fontSize: `${autoFontSize * zoom}px`,
-                    textAlign: shape.textAlign || 'center'
+                    top: inset.top,
+                    bottom: inset.bottom,
+                    left: inset.left,
+                    right: inset.right,
+                    textAlign: shape.textAlign || 'center',
+                    color: shape.textColor || 'inherit',
                   }}
                 >
-                  {shape.text || (isSelected ? "Double-click to type" : "")}
-                </span>
-              )}
-            </div>
+                  {isEditing ? (
+                    <textarea
+                      ref={(el) => {
+                        if (el) {
+                          el.style.height = 'auto';
+                          el.style.height = `${el.scrollHeight}px`;
+                        }
+                      }}
+                      rows={1}
+                      autoFocus
+                      defaultValue={shape.text || ""}
+                      onInput={(e) => {
+                        const el = e.currentTarget;
+                        el.style.height = 'auto';
+                        el.style.height = `${el.scrollHeight}px`;
+                      }}
+                      onBlur={(e) => {
+                        const text = e.target.value;
+                        setShapes(prev => prev.map(s => s.id === shape.id ? { ...s, text } : s));
+                        setEditingShapeId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          const text = (e.target as HTMLTextAreaElement).value;
+                          setShapes(prev => prev.map(s => s.id === shape.id ? { ...s, text } : s));
+                          setEditingShapeId(null);
+                        } else if (e.key === "Escape") {
+                          setEditingShapeId(null);
+                        }
+                      }}
+                      className="w-full max-h-full bg-transparent resize-none border-none outline-none font-semibold text-center focus:ring-0 text-zinc-900 dark:text-zinc-50 pointer-events-auto leading-snug p-0 m-0 overflow-hidden break-words"
+                      style={{
+                        fontSize: `${autoFontSize * zoom}px`,
+                        textAlign: shape.textAlign || 'center',
+                        overflowWrap: 'break-word',
+                        wordBreak: 'break-word',
+                      }}
+                    />
+                  ) : (
+                    <span 
+                      className="font-semibold text-zinc-900 dark:text-zinc-50 select-none leading-snug w-full text-center p-0 m-0 break-words"
+                      style={{
+                        fontSize: `${autoFontSize * zoom}px`,
+                        textAlign: shape.textAlign || 'center',
+                        overflowWrap: 'break-word',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {shape.text || (isSelected ? "Double-click to type" : "")}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Magnetic Snap Anchor Dots (shown when connecting, or when unselected on hover) */}
             {(!isSelected || connectingState) && anchors.map(anchor => {

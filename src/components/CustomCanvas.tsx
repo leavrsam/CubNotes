@@ -448,6 +448,62 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [editorUpdateTick, setEditorUpdateTick] = useState(0);
 
+  const isEditorUsable = useCallback((editor: Editor | null | undefined): editor is Editor => {
+    if (!editor || editor.isDestroyed) return false;
+    if (!editor.view || !(editor as any).view?.dom) return false;
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (activeEditor && activeEditor.isDestroyed) {
+      setActiveEditor(null);
+    }
+  }, [activeEditor, editorUpdateTick]);
+
+  const canEditorUndo = useMemo(() => {
+    if (!isEditorUsable(activeEditor)) return false;
+    try {
+      return Boolean(activeEditor.can?.()?.undo?.());
+    } catch {
+      return false;
+    }
+  }, [activeEditor, editorUpdateTick, isEditorUsable]);
+
+  const canEditorRedo = useMemo(() => {
+    if (!isEditorUsable(activeEditor)) return false;
+    try {
+      return Boolean(activeEditor.can?.()?.redo?.());
+    } catch {
+      return false;
+    }
+  }, [activeEditor, editorUpdateTick, isEditorUsable]);
+
+  const safeEditorUndo = useCallback(() => {
+    if (!isEditorUsable(activeEditor)) return false;
+    try {
+      if (activeEditor.can?.()?.undo?.()) {
+        activeEditor.chain().focus().undo().run();
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  }, [activeEditor, isEditorUsable]);
+
+  const safeEditorRedo = useCallback(() => {
+    if (!isEditorUsable(activeEditor)) return false;
+    try {
+      if (activeEditor.can?.()?.redo?.()) {
+        activeEditor.chain().focus().redo().run();
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  }, [activeEditor, isEditorUsable]);
+
   // Viewport state
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -1934,10 +1990,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         if (isInputFocused) {
-          if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror'))) {
-            if (activeEditor.can().undo()) {
+          if (isEditorUsable(activeEditor) && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror'))) {
+            if (safeEditorUndo()) {
               e.preventDefault();
-              activeEditor.chain().focus().undo().run();
               return;
             }
           }
@@ -1948,10 +2003,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
         if (isInputFocused) {
-          if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror'))) {
-            if (activeEditor.can().redo()) {
+          if (isEditorUsable(activeEditor) && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror'))) {
+            if (safeEditorRedo()) {
               e.preventDefault();
-              activeEditor.chain().focus().redo().run();
               return;
             }
           }
@@ -1975,7 +2029,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds, handleZoomIn, handleZoomOut, handleResetZoom, activeEditor]);
+  }, [undo, redo, selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setSelectedIds, handleZoomIn, handleZoomOut, handleResetZoom, activeEditor, isEditorUsable, safeEditorUndo, safeEditorRedo]);
 
   if (loading) {
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading canvas...</div>;
@@ -2048,28 +2102,28 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           <div className="flex items-center gap-1 mb-1 border-l border-zinc-300 dark:border-zinc-700 pl-4">
             <button
               onClick={() => {
-                if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror')) && activeEditor.can().undo()) {
-                  activeEditor.chain().focus().undo().run();
+                if (isEditorUsable(activeEditor) && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror')) && canEditorUndo) {
+                  safeEditorUndo();
                 } else {
                   undo();
                 }
               }}
-              disabled={!canUndo && !(activeEditor && activeEditor.can().undo())}
-              className={`p-1.5 rounded-md transition-colors ${(canUndo || (activeEditor && activeEditor.can().undo())) ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
+              disabled={!canUndo && !canEditorUndo}
+              className={`p-1.5 rounded-md transition-colors ${(canUndo || canEditorUndo) ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
               title="Undo (Ctrl+Z)"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
             </button>
             <button
               onClick={() => {
-                if (activeEditor && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror')) && activeEditor.can().redo()) {
-                  activeEditor.chain().focus().redo().run();
+                if (isEditorUsable(activeEditor) && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror')) && canEditorRedo) {
+                  safeEditorRedo();
                 } else {
                   redo();
                 }
               }}
-              disabled={!canRedo && !(activeEditor && activeEditor.can().redo())}
-              className={`p-1.5 rounded-md transition-colors ${(canRedo || (activeEditor && activeEditor.can().redo())) ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
+              disabled={!canRedo && !canEditorRedo}
+              className={`p-1.5 rounded-md transition-colors ${(canRedo || canEditorRedo) ? 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'}`}
               title="Redo (Ctrl+Y)"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
