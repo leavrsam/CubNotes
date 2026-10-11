@@ -314,7 +314,7 @@ export function MobileAudioCard({
       ) : (
         <div className="w-full flex flex-col">
           {/* Header / Audio Player / Recording Status */}
-          <div className="bg-white/95 dark:bg-zinc-900/95 pt-4 pb-3 px-4 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
+          <div className="bg-white/95 dark:bg-zinc-900/95 pt-3 pb-2.5 px-2.5 sm:px-4 sm:pt-4 sm:pb-3 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
             <div className="flex justify-between items-center mb-1">
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                 <button
