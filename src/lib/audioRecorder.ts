@@ -63,6 +63,7 @@ export class WebAudioRecorder {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
+          sampleRate: 24000,
           noiseSuppression: true,
           echoCancellation: true,
           autoGainControl: true,
@@ -79,21 +80,24 @@ export class WebAudioRecorder {
     this.chosenMimeType = mimeType;
     this.chosenExt = fileExt;
 
+    // Voice-optimized bitrate: 28-32 kbps mono gives crystal clear speech while keeping 1 hour < 14MB
+    const targetBits = mimeType.includes('webm') ? 28000 : 32000;
     const recorderOptions: MediaRecorderOptions = {};
     if (mimeType) {
       recorderOptions.mimeType = mimeType;
     }
-    // Only set audioBitsPerSecond for webm/opus containers (some mobile Safari MP4 encoders fail with this set)
-    if (mimeType.includes('webm')) {
-      recorderOptions.audioBitsPerSecond = 28000;
-    }
+    recorderOptions.audioBitsPerSecond = targetBits;
 
     let recorder: MediaRecorder;
     try {
       recorder = new MediaRecorder(stream, recorderOptions);
     } catch (recErr) {
-      console.warn('MediaRecorder constructor with options failed, falling back to default:', recErr);
-      recorder = new MediaRecorder(stream);
+      console.warn('MediaRecorder constructor with options failed, falling back to basic mimeType:', recErr);
+      try {
+        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      } catch {
+        recorder = new MediaRecorder(stream);
+      }
     }
 
     this.mediaRecorder = recorder;

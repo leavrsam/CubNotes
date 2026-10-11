@@ -1108,9 +1108,10 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         console.warn("Audio upload warning:", uploadErr);
       }
 
-      // 2. Transcribe with Gemini 3.8 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
+      // 2. Transcribe with Gemini 3.8 Flash
       const transcriptionResult = await processAudioTranscription({
-        audioBase64: (result.blob.size < 4 * 1024 * 1024) ? result.base64 : undefined,
+        audioBlob: result.blob,
+        audioBase64: result.base64,
         audioUrl: audioUrl || undefined,
         mimeType: result.mimeType,
         isJournal: Boolean(isJournal),
@@ -2060,6 +2061,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       {/* Top Ribbon Container */}
       <div 
         ref={ribbonRef}
+        data-ribbon="true"
         className="absolute top-0 left-0 w-full bg-[#f3f2f1] dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 z-50 flex flex-col pointer-events-auto"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
@@ -2821,14 +2823,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
 
-                {/* Connector Tools */}
+                {/* Connector Routing Style */}
                 <div className="flex items-center gap-1 h-full">
                   <button
                     onClick={() => {
-                      setTool("connector");
                       setConnectorRouting("curved");
+                      if (selectedConnectorId) {
+                        setConnectors(prev => prev.map(c => c.id === selectedConnectorId ? { ...c, routing: 'curved' } : c));
+                      }
+                      setTool("home");
                     }}
-                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${tool === "connector" && connectorRouting === "curved" ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${(connectors?.find(c => c.id === selectedConnectorId)?.routing === 'curved' || (!selectedConnectorId && connectorRouting === 'curved')) ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
                     title="Curved Bezier Connector (Default)"
                   >
                     <Spline size={15} />
@@ -2836,10 +2841,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   </button>
                   <button
                     onClick={() => {
-                      setTool("connector");
                       setConnectorRouting("orthogonal");
+                      if (selectedConnectorId) {
+                        setConnectors(prev => prev.map(c => c.id === selectedConnectorId ? { ...c, routing: 'orthogonal' } : c));
+                      }
+                      setTool("home");
                     }}
-                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${tool === "connector" && connectorRouting === "orthogonal" ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${(connectors?.find(c => c.id === selectedConnectorId)?.routing === 'orthogonal' || (!selectedConnectorId && connectorRouting === 'orthogonal')) ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
                     title="Elbow (Orthogonal 90° Connector)"
                   >
                     <CornerDownRight size={15} />
@@ -2847,10 +2855,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   </button>
                   <button
                     onClick={() => {
-                      setTool("connector");
                       setConnectorRouting("straight");
+                      if (selectedConnectorId) {
+                        setConnectors(prev => prev.map(c => c.id === selectedConnectorId ? { ...c, routing: 'straight' } : c));
+                      }
+                      setTool("home");
                     }}
-                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${tool === "connector" && connectorRouting === "straight" ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${(connectors?.find(c => c.id === selectedConnectorId)?.routing === 'straight' || (!selectedConnectorId && connectorRouting === 'straight')) ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-blue-400/50' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}
                     title="Straight Connector"
                   >
                     <MoveRight size={15} />

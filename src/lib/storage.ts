@@ -22,9 +22,9 @@ export async function uploadMediaFile(
   pageId: string,
   bucket = 'recordings'
 ): Promise<UploadResult> {
-  // Client-side file size guard (15 MB)
-  if (file.size > 15 * 1024 * 1024) {
-    throw new Error(`File size (${(file.size / 1024 / 1024).toFixed(1)} MB) exceeds the 15 MB limit.`);
+  // Client-side file size guard (100 MB)
+  if (file.size > 100 * 1024 * 1024) {
+    throw new Error(`File size (${(file.size / 1024 / 1024).toFixed(1)} MB) exceeds the 100 MB limit.`);
   }
 
   let fileToUpload: Blob | File = file;
@@ -44,30 +44,32 @@ export async function uploadMediaFile(
   const ext = filename.split('.').pop() || 'bin';
   const key = `${pageId}/${uuidv4()}.${ext}`;
 
-  // 1. Try Cloudflare R2 via Next.js API
-  try {
-    const formData = new FormData();
-    formData.append('file', fileToUpload, filename);
-    formData.append('pageId', pageId);
-    formData.append('key', key);
+  // 1. Try Cloudflare R2 via Next.js API (only for files <= 4 MB due to Vercel serverless 4.5 MB request body limit)
+  if (fileToUpload.size <= 4 * 1024 * 1024) {
+    try {
+      const formData = new FormData();
+      formData.append('file', fileToUpload, filename);
+      formData.append('pageId', pageId);
+      formData.append('key', key);
 
-    const r2Res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
+      const r2Res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-    if (r2Res.ok) {
-      const data = await r2Res.json();
-      if (data.url) {
-        return {
-          url: data.url,
-          storage: 'r2',
-          key: data.key || key,
-        };
+      if (r2Res.ok) {
+        const data = await r2Res.json();
+        if (data.url) {
+          return {
+            url: data.url,
+            storage: 'r2',
+            key: data.key || key,
+          };
+        }
       }
+    } catch (err) {
+      console.warn('R2 upload skipped or unavailable:', err);
     }
-  } catch (err) {
-    console.warn('R2 upload skipped or unavailable:', err);
   }
 
   // 2. Fallback to Supabase Storage (try specified bucket, then common alternatives)

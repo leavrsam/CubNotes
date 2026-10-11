@@ -302,6 +302,33 @@ export function getCurvedBezierPath(
   return { path, midpoint };
 }
 
+function cleanOrthogonalPoints(pts: Point[]): Point[] {
+  if (pts.length <= 2) return pts;
+  const filtered: Point[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = filtered[filtered.length - 1];
+    const curr = pts[i];
+    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) >= 1) {
+      filtered.push(curr);
+    }
+  }
+  if (filtered.length <= 2) return filtered;
+
+  const result: Point[] = [filtered[0]];
+  for (let i = 1; i < filtered.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = filtered[i];
+    const next = filtered[i + 1];
+    const isHorizontalCollinear = Math.abs(prev.y - curr.y) < 0.5 && Math.abs(curr.y - next.y) < 0.5;
+    const isVerticalCollinear = Math.abs(prev.x - curr.x) < 0.5 && Math.abs(curr.x - next.x) < 0.5;
+    if (!isHorizontalCollinear && !isVerticalCollinear) {
+      result.push(curr);
+    }
+  }
+  result.push(filtered[filtered.length - 1]);
+  return result;
+}
+
 export function getOrthogonalPath(
   start: Point,
   end: Point,
@@ -310,35 +337,114 @@ export function getOrthogonalPath(
   fromShape?: ShapeNode,
   toShape?: ShapeNode
 ): { path: string; midpoint: Point } {
-  // Use pointsToSmoothCurvedPath with 12px rounded elbow corners
-  const n1 = getAnchorNormal(fromAnchor);
-  const n2 = getAnchorNormal(toAnchor);
+  let n1 = getAnchorNormal(fromAnchor);
+  let n2 = getAnchorNormal(toAnchor);
+
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  // Infer default normals if anchors are unspecified
+  if (n1.x === 0 && n1.y === 0) {
+    n1 = Math.abs(dx) >= Math.abs(dy) ? { x: dx >= 0 ? 1 : -1, y: 0 } : { x: 0, y: dy >= 0 ? 1 : -1 };
+  }
+  if (n2.x === 0 && n2.y === 0) {
+    n2 = Math.abs(dx) >= Math.abs(dy) ? { x: dx >= 0 ? -1 : 1, y: 0 } : { x: 0, y: dy >= 0 ? -1 : 1 };
+  }
+
   const clearance = 24;
+  let rawPoints: Point[] = [start];
 
-  let points: Point[] = [start];
+  const startHorizontal = n1.x !== 0;
+  const endVertical = n2.y !== 0;
 
-  if (fromShape && fromAnchor === 'top' && end.y > fromShape.y + 10) {
-    const exitY = fromShape.y - clearance;
-    const sideX = end.x >= fromShape.x + fromShape.width / 2 ? fromShape.x + fromShape.width + clearance : fromShape.x - clearance;
-    points.push({ x: start.x, y: exitY }, { x: sideX, y: exitY }, { x: sideX, y: end.y }, end);
-    return pointsToSmoothCurvedPath(points, 12);
-  } else if (fromShape && fromAnchor === 'bottom' && end.y < fromShape.y + fromShape.height - 10) {
-    const exitY = fromShape.y + fromShape.height + clearance;
-    const sideX = end.x >= fromShape.x + fromShape.width / 2 ? fromShape.x + fromShape.width + clearance : fromShape.x - clearance;
-    points.push({ x: start.x, y: exitY }, { x: sideX, y: exitY }, { x: sideX, y: end.y }, end);
-    return pointsToSmoothCurvedPath(points, 12);
-  }
+  if (startHorizontal && endVertical) {
+    // Start exits horizontally, End enters vertically (e.g. Right anchor -> Bottom anchor)
+    const movingXMatchesStart = (end.x - start.x) * n1.x > 0;
+    const movingYMatchesEnd = (end.y - start.y) * (-n2.y) > 0; // Approaching end along normal from outside
 
-  // Standard orthogonal elbow
-  if (n1.x !== 0 || (n1.x === 0 && n1.y === 0 && Math.abs(end.x - start.x) >= Math.abs(end.y - start.y))) {
-    const midX = (start.x + end.x) / 2;
-    points.push({ x: midX, y: start.y }, { x: midX, y: end.y }, end);
+    if (movingXMatchesStart && movingYMatchesEnd) {
+      // Clean L-route: across to end.x, then up/down to end.y
+      rawPoints.push({ x: end.x, y: start.y }, end);
+    } else if (movingXMatchesStart && !movingYMatchesEnd) {
+      // Start is on wrong vertical side of target anchor, route around
+      const yEnter = toShape ? (n2.y > 0 ? toShape.y + toShape.height + clearance : toShape.y - clearance) : end.y + n2.y * clearance;
+      const xExit = toShape ? (n1.x > 0 ? toShape.x + toShape.width + clearance : toShape.x - clearance) : end.x + n1.x * clearance;
+      rawPoints.push({ x: xExit, y: start.y }, { x: xExit, y: yEnter }, { x: end.x, y: yEnter }, end);
+    } else {
+      // Target is behind the start anchor
+      const xExit = fromShape ? (n1.x > 0 ? fromShape.x + fromShape.width + clearance : fromShape.x - clearance) : start.x + n1.x * clearance;
+      const yEnter = toShape ? (n2.y > 0 ? toShape.y + toShape.height + clearance : toShape.y - clearance) : end.y + n2.y * clearance;
+      rawPoints.push({ x: xExit, y: start.y }, { x: xExit, y: yEnter }, { x: end.x, y: yEnter }, end);
+    }
+  } else if (!startHorizontal && !endVertical) {
+    // Start exits vertically, End enters horizontally (e.g. Top/Bottom anchor -> Left/Right anchor)
+    const movingYMatchesStart = (end.y - start.y) * n1.y > 0;
+    const movingXMatchesEnd = (end.x - start.x) * (-n2.x) > 0;
+
+    if (movingYMatchesStart && movingXMatchesEnd) {
+      // Clean L-route: up/down to end.y, then across to end.x
+      rawPoints.push({ x: start.x, y: end.y }, end);
+    } else if (movingYMatchesStart && !movingXMatchesEnd) {
+      const xEnter = toShape ? (n2.x > 0 ? toShape.x + toShape.width + clearance : toShape.x - clearance) : end.x + n2.x * clearance;
+      const yExit = toShape ? (n1.y > 0 ? toShape.y + toShape.height + clearance : toShape.y - clearance) : end.y + n1.y * clearance;
+      rawPoints.push({ x: start.x, y: yExit }, { x: xEnter, y: yExit }, { x: xEnter, y: end.y }, end);
+    } else {
+      const yExit = fromShape ? (n1.y > 0 ? fromShape.y + fromShape.height + clearance : fromShape.y - clearance) : start.y + n1.y * clearance;
+      const xEnter = toShape ? (n2.x > 0 ? toShape.x + toShape.width + clearance : toShape.x - clearance) : end.x + n2.x * clearance;
+      rawPoints.push({ x: start.x, y: yExit }, { x: xEnter, y: yExit }, { x: xEnter, y: end.y }, end);
+    }
+  } else if (startHorizontal && !endVertical) {
+    // Both Start and End are Horizontal (e.g. Right -> Left or Right -> Right)
+    if (n1.x === 1 && n2.x === -1 && end.x >= start.x + 2 * clearance) {
+      // Natural S-route between opposing horizontal anchors
+      const midX = (start.x + end.x) / 2;
+      rawPoints.push({ x: midX, y: start.y }, { x: midX, y: end.y }, end);
+    } else if (n1.x === -1 && n2.x === 1 && start.x >= end.x + 2 * clearance) {
+      const midX = (start.x + end.x) / 2;
+      rawPoints.push({ x: midX, y: start.y }, { x: midX, y: end.y }, end);
+    } else if (n1.x === 1 && n2.x === 1) {
+      // Both face right: loop around the right side
+      const maxX = Math.max(fromShape ? fromShape.x + fromShape.width : start.x, toShape ? toShape.x + toShape.width : end.x) + clearance;
+      rawPoints.push({ x: maxX, y: start.y }, { x: maxX, y: end.y }, end);
+    } else if (n1.x === -1 && n2.x === -1) {
+      // Both face left: loop around the left side
+      const minX = Math.min(fromShape ? fromShape.x : start.x, toShape ? toShape.x : end.x) - clearance;
+      rawPoints.push({ x: minX, y: start.y }, { x: minX, y: end.y }, end);
+    } else {
+      // Overlapping or facing away
+      const xExit = fromShape ? (n1.x > 0 ? fromShape.x + fromShape.width + clearance : fromShape.x - clearance) : start.x + n1.x * clearance;
+      const xEnter = toShape ? (n2.x > 0 ? toShape.x + toShape.width + clearance : toShape.x - clearance) : end.x + n2.x * clearance;
+      const midY = (start.y + end.y) / 2;
+      rawPoints.push({ x: xExit, y: start.y }, { x: xExit, y: midY }, { x: xEnter, y: midY }, { x: xEnter, y: end.y }, end);
+    }
   } else {
-    const midY = (start.y + end.y) / 2;
-    points.push({ x: start.x, y: midY }, { x: end.x, y: midY }, end);
+    // Both Start and End are Vertical (e.g. Bottom -> Top or Bottom -> Bottom)
+    if (n1.y === 1 && n2.y === -1 && end.y >= start.y + 2 * clearance) {
+      // Natural S-route between opposing vertical anchors
+      const midY = (start.y + end.y) / 2;
+      rawPoints.push({ x: start.x, y: midY }, { x: end.x, y: midY }, end);
+    } else if (n1.y === -1 && n2.y === 1 && start.y >= end.y + 2 * clearance) {
+      const midY = (start.y + end.y) / 2;
+      rawPoints.push({ x: start.x, y: midY }, { x: end.x, y: midY }, end);
+    } else if (n1.y === 1 && n2.y === 1) {
+      // Both face bottom: loop around below
+      const maxY = Math.max(fromShape ? fromShape.y + fromShape.height : start.y, toShape ? toShape.y + toShape.height : end.y) + clearance;
+      rawPoints.push({ x: start.x, y: maxY }, { x: end.x, y: maxY }, end);
+    } else if (n1.y === -1 && n2.y === -1) {
+      // Both face top: loop around above
+      const minY = Math.min(fromShape ? fromShape.y : start.y, toShape ? toShape.y : end.y) - clearance;
+      rawPoints.push({ x: start.x, y: minY }, { x: end.x, y: minY }, end);
+    } else {
+      // Overlapping or facing away
+      const yExit = fromShape ? (n1.y > 0 ? fromShape.y + fromShape.height + clearance : fromShape.y - clearance) : start.y + n1.y * clearance;
+      const yEnter = toShape ? (n2.y > 0 ? toShape.y + toShape.height + clearance : toShape.y - clearance) : end.y + n2.y * clearance;
+      const midX = (start.x + end.x) / 2;
+      rawPoints.push({ x: start.x, y: yExit }, { x: midX, y: yExit }, { x: midX, y: yEnter }, { x: end.x, y: yEnter }, end);
+    }
   }
 
-  return pointsToSmoothCurvedPath(points, 12);
+  const cleanPoints = cleanOrthogonalPoints(rawPoints);
+  return pointsToSmoothCurvedPath(cleanPoints, 12);
 }
 
 export function getStraightPath(start: Point, end: Point): { path: string; midpoint: Point } {

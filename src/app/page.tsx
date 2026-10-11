@@ -435,9 +435,10 @@ export default function Home() {
           console.warn("Audio upload warning:", uploadErr);
         }
 
-        // 3. Transcribe with Gemini 3.8 Flash (dual failover: /api/transcribe -> Supabase Edge Function)
+        // 3. Transcribe with Gemini 3.8 Flash
         const transcriptionResult = await processAudioTranscription({
-          audioBase64: (audioBlob.size < 4 * 1024 * 1024 && audioData.base64) ? audioData.base64 : undefined,
+          audioBlob: audioBlob,
+          audioBase64: audioData.base64,
           audioUrl: audioUrl || undefined,
           mimeType: cleanMimeType,
           isJournal: isCurrentJournal,

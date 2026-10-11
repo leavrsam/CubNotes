@@ -1,7 +1,7 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 // Safety Guardrails: Prevent unexpected overages
-export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB per file
+export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB per file
 export const MAX_TOTAL_STORAGE_BYTES = 9.5 * 1024 * 1024 * 1024; // 9.5 GB safety cap (safely below 10 GB free tier)
 export const MAX_MONTHLY_CLASS_A_OPS = 900_000; // 900k ops (safely below 1,000,000 free Class A writes)
 
@@ -116,7 +116,7 @@ export async function uploadToR2(
 ): Promise<string> {
   // 1. Single file size guard
   if (body.byteLength > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File size (${(body.byteLength / 1024 / 1024).toFixed(1)} MB) exceeds the 15 MB safety limit.`);
+    throw new Error(`File size (${(body.byteLength / 1024 / 1024).toFixed(1)} MB) exceeds the 100 MB safety limit.`);
   }
 
   // 2. Class A Operations guard

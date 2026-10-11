@@ -92,20 +92,20 @@ CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
 - DO NOT invent, hallucinate, assume, or extrapolate words, reflections, or topics not directly spoken in the audio.
 - DO NOT pull in phrases, stories, or content from outside sources, podcasts, videos, or templates.
 - If the audio is silent, inaudible, mostly static/noise, or contains no decipherable human speech, you MUST return:
-  "transcript": "",
-  "summary": "No speech detected in this recording."
+  "summary": "No speech detected in this recording.",
+  "transcript": ""
 - If valid speech is present, provide:
-  1. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections.
-  2. "summary": A beautifully written, reflective first-person journal entry in clean Markdown. Include structured sections:
+  1. "summary": A beautifully written, reflective first-person journal entry in clean Markdown. Include structured sections:
      - "### Daily Reflection" (cohesive narrative of thoughts shared)
      - "### Key Insights & Lessons" (notable takeaways or realizations)
      - "### Notable Memories & Highlights" (any specific events or details mentioned)
      Do NOT use emojis anywhere.
+  2. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections.
 
 Return ONLY valid JSON matching this schema:
 {
-  "transcript": "...",
-  "summary": "### Daily Reflection\\n..."
+  "summary": "### Daily Reflection\\n...",
+  "transcript": "..."
 }`
       : `You are an expert executive meeting assistant. I am providing you with an audio recording of a meeting.
 
@@ -114,16 +114,16 @@ CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
 - DO NOT invent, hallucinate, assume, or extrapolate dialogue, attendees, decisions, or topics not directly spoken in the audio.
 - DO NOT pull in phrases, meetings, or transcripts from external training data, YouTube, or generic templates.
 - If the audio is silent, inaudible, mostly background static, or contains no decipherable human speech, you MUST return:
-  "transcript": "",
-  "summary": "No speech detected in this recording."
+  "summary": "No speech detected in this recording.",
+  "transcript": ""
 - If valid speech is present, provide:
-  1. "transcript": A highly accurate transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
-  2. "summary": A rich, professional meeting summary in Markdown. Include sections: "Executive Summary", "Key Decisions", and "Action Items". Do NOT use emojis.
+  1. "summary": A rich, comprehensive executive meeting summary in Markdown. Include sections: "# Executive Summary", "## Key Decisions", and "## Action Items" (checkbox checklist "- [ ] Owner: Task"). Do NOT use emojis.
+  2. "transcript": A highly accurate verbatim transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
 
 Return ONLY valid JSON matching this schema:
 {
-  "transcript": "Speaker 1: ...\\nSpeaker 2: ...",
-  "summary": "# Executive Summary\\n..."
+  "summary": "# Executive Summary\\n...",
+  "transcript": "Speaker 1: ...\\nSpeaker 2: ..."
 }`;
 
     const promptWithReference = (liveTranscript && typeof liveTranscript === 'string' && liveTranscript.trim().length > 0)
@@ -140,6 +140,7 @@ Return ONLY valid JSON matching this schema:
       config: {
         responseMimeType: "application/json",
         temperature: 0.1,
+        maxOutputTokens: 8192,
       }
     });
 
@@ -153,23 +154,58 @@ Return ONLY valid JSON matching this schema:
       cleanJson = cleanJson.replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
     }
 
-    let parsed: { transcript?: string; summary?: string } = {};
+    let parsedSummary = '';
+    let parsedTranscript = '';
+
+    // 1. Direct standard JSON parsing
     try {
-      parsed = JSON.parse(cleanJson);
-    } catch (e) {
-      console.warn("Failed to parse Gemini JSON response directly, extracting fields:", responseText);
-      const transcriptMatch = cleanJson.match(/"transcript"\s*:\s*"([\s\S]*?)(?=",\s*"summary"|"})/);
-      const summaryMatch = cleanJson.match(/"summary"\s*:\s*"([\s\S]*?)(?="})/);
-      parsed = {
-        transcript: transcriptMatch ? transcriptMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
-        summary: summaryMatch ? summaryMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : cleanJson,
-      };
+      const parsed = JSON.parse(cleanJson);
+      parsedSummary = parsed.summary || '';
+      parsedTranscript = parsed.transcript || '';
+    } catch {
+      // 2. Attempt repair for truncated JSON
+      try {
+        let repaired = cleanJson;
+        if (!repaired.endsWith('"}') && !repaired.endsWith('}')) {
+          if (repaired.endsWith('"')) {
+            repaired += '}';
+          } else {
+            repaired += '"}';
+          }
+        }
+        const parsed = JSON.parse(repaired);
+        parsedSummary = parsed.summary || '';
+        parsedTranscript = parsed.transcript || '';
+      } catch {}
+
+      // 3. Robust regex fallback (handles truncation gracefully)
+      if (!parsedSummary) {
+        const summaryMatch = cleanJson.match(/"summary"\s*:\s*"([\s\S]*?)(?=(?:",\s*"transcript"|"(?:\s*})|$))/);
+        if (summaryMatch) {
+          parsedSummary = summaryMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        }
+      }
+
+      if (!parsedTranscript) {
+        const transcriptMatch = cleanJson.match(/"transcript"\s*:\s*"([\s\S]*?)(?=(?:",\s*"summary"|"(?:\s*})|$))/);
+        if (transcriptMatch) {
+          parsedTranscript = transcriptMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        } else {
+          const partialMatch = cleanJson.match(/"transcript"\s*:\s*"([\s\S]*)$/);
+          if (partialMatch) {
+            parsedTranscript = partialMatch[1]
+              .replace(/"\s*}?\s*$/, '')
+              .replace(/\\n/g, '\n')
+              .replace(/\\"/g, '"');
+          }
+        }
+      }
     }
 
     return NextResponse.json({
       success: true,
-      transcript: parsed.transcript || "",
-      summary: parsed.summary || (parsed.transcript ? "Summary could not be generated." : "No speech detected in this recording.")
+      transcript: parsedTranscript || "",
+      summary: parsedSummary || (parsedTranscript ? "Summary completed." : (cleanJson.length > 0 ? cleanJson : "No speech detected in this recording."))
     });
 
   } catch (error: any) {

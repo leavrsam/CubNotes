@@ -247,6 +247,10 @@ export function SpatialCanvas({
       return;
     }
     
+    if (tool !== "pen" && tool !== "eraser" && tool !== "lasso") {
+      return;
+    }
+
     if (setSelectedIds) setSelectedIds([]);
     setIsDrawing(true);
     const rawPos = getPointerPos(e);
@@ -275,15 +279,17 @@ export function SpatialCanvas({
       return;
     }
 
-    setCurrentStroke({
-      id: uuidv4(),
-      points: [[pos.x, pos.y, pos.pressure]],
-      color: activeColor,
-      size: activeSize,
-      type: activePresetType,
-      blockId: annotateBlockId || undefined,
-      blockY: initialBlockY
-    });
+    if (tool === "pen") {
+      setCurrentStroke({
+        id: uuidv4(),
+        points: [[pos.x, pos.y, pos.pressure]],
+        color: activeColor,
+        size: activeSize,
+        type: activePresetType,
+        blockId: annotateBlockId || undefined,
+        blockY: initialBlockY
+      });
+    }
   };
 
   const handlePointerMove = (e: any) => {

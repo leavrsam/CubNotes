@@ -1,6 +1,7 @@
 import { DREWS_PITCH_AUDIO_ID, DREWS_PITCH_SUMMARY, DREWS_PITCH_TRANSCRIPT } from './drewsPitchData';
 
 export interface TranscribeParams {
+  audioBlob?: Blob;
   audioBase64?: string;
   audioUrl?: string;
   mimeType?: string;
@@ -14,29 +15,81 @@ export interface TranscribeResult {
   source: 'direct' | 'api';
 }
 
-function parseGeminiResponse(rawText: string): { transcript: string; summary: string } {
-  let cleanJson = rawText.trim();
-  if (cleanJson.startsWith('```json')) {
-    cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
-  } else if (cleanJson.startsWith('```')) {
-    cleanJson = cleanJson.replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+export function parseGeminiResponse(rawText: string): { transcript: string; summary: string } {
+  let clean = rawText.trim();
+  if (clean.startsWith('```json')) {
+    clean = clean.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+  } else if (clean.startsWith('```')) {
+    clean = clean.replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
   }
 
+  // 1. Direct standard JSON parsing
   try {
-    const parsed = JSON.parse(cleanJson);
+    const parsed = JSON.parse(clean);
     return {
+      summary: parsed.summary || clean,
       transcript: parsed.transcript || '',
-      summary: parsed.summary || cleanJson,
     };
-  } catch {
-    // Regex extraction fallback if JSON has minor syntax issues
-    const transcriptMatch = cleanJson.match(/"transcript"\s*:\s*"([\s\S]*?)(?=",\s*"summary"|"})/);
-    const summaryMatch = cleanJson.match(/"summary"\s*:\s*"([\s\S]*?)(?="})/);
-    return {
-      transcript: transcriptMatch ? transcriptMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
-      summary: summaryMatch ? summaryMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : cleanJson,
-    };
+  } catch {}
+
+  // 2. Attempt repair for truncated JSON (e.g. unclosed strings or missing closing bracket)
+  try {
+    let repaired = clean;
+    if (!repaired.endsWith('"}') && !repaired.endsWith('}')) {
+      if (repaired.endsWith('"')) {
+        repaired += '}';
+      } else {
+        repaired += '"}';
+      }
+    }
+    const parsed = JSON.parse(repaired);
+    if (parsed.summary || parsed.transcript) {
+      return {
+        summary: parsed.summary || clean,
+        transcript: parsed.transcript || '',
+      };
+    }
+  } catch {}
+
+  // 3. Robust Regex Extraction (handles truncated output where transcript or summary cuts off)
+  let summary = '';
+  const summaryMatch = clean.match(/"summary"\s*:\s*"([\s\S]*?)(?=(?:",\s*"transcript"|"(?:\s*})|$))/);
+  if (summaryMatch) {
+    summary = summaryMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
   }
+
+  let transcript = '';
+  const transcriptMatch = clean.match(/"transcript"\s*:\s*"([\s\S]*?)(?=(?:",\s*"summary"|"(?:\s*})|$))/);
+  if (transcriptMatch) {
+    transcript = transcriptMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+  } else {
+    // If transcript was cut off midway at the end of the text
+    const partialMatch = clean.match(/"transcript"\s*:\s*"([\s\S]*)$/);
+    if (partialMatch) {
+      transcript = partialMatch[1]
+        .replace(/"\s*}?\s*$/, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"');
+    }
+  }
+
+  return {
+    summary: summary || (transcript ? "Summary completed." : clean),
+    transcript: transcript || '',
+  };
+}
+
+async function convertBlobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      const b64 = dataUrl.split(',')[1] || '';
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function convertUrlToBase64(url: string): Promise<string | null> {
@@ -44,16 +97,7 @@ async function convertUrlToBase64(url: string): Promise<string | null> {
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        const b64 = dataUrl.split(',')[1] || '';
-        resolve(b64);
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
+    return convertBlobToBase64(blob);
   } catch (err) {
     console.warn("Could not convert audio URL to base64:", err);
     return null;
@@ -68,20 +112,20 @@ CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
 - Transcribe ONLY the human speech that is clearly audible in this audio.
 - DO NOT invent, hallucinate, assume, or extrapolate words, reflections, or topics not directly spoken in the audio.
 - If the audio is silent or contains no decipherable human speech, return:
-  "transcript": "",
-  "summary": "No speech detected in this recording."
+  "summary": "No speech detected in this recording.",
+  "transcript": ""
 - If valid speech is present, provide:
-  1. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections.
-  2. "summary": A beautifully written, reflective first-person journal entry in clean Markdown. Include structured sections:
+  1. "summary": A beautifully written, reflective first-person journal entry in clean Markdown. Include structured sections:
      - "### Daily Reflection"
      - "### Key Insights & Lessons"
      - "### Notable Memories & Highlights"
      Do NOT use emojis anywhere.
+  2. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections.
 
 Return ONLY valid JSON matching this schema:
 {
-  "transcript": "...",
-  "summary": "### Daily Reflection\\n..."
+  "summary": "### Daily Reflection\\n...",
+  "transcript": "..."
 }`
     : `You are an expert executive meeting assistant. I am providing you with an audio recording of a meeting.
 
@@ -89,16 +133,16 @@ CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
 - Transcribe ONLY the actual human speech that is clearly audible in this audio recording.
 - DO NOT invent, hallucinate, assume, or extrapolate dialogue, attendees, decisions, or topics not directly spoken in the audio.
 - If the audio is silent or contains no decipherable human speech, return:
-  "transcript": "",
-  "summary": "No speech detected in this recording."
+  "summary": "No speech detected in this recording.",
+  "transcript": ""
 - If valid speech is present, provide:
-  1. "transcript": A highly accurate transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
-  2. "summary": A rich, professional meeting summary in Markdown. Include sections: "Executive Summary", "Key Decisions", and "Action Items". Do NOT use emojis.
+  1. "summary": A rich, professional executive meeting summary in Markdown. Include sections: "# Executive Summary", "## Key Decisions", and "## Action Items" (with checkbox checklist format "- [ ] Owner: Task"). Do NOT use emojis.
+  2. "transcript": A highly accurate transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
 
 Return ONLY valid JSON matching this schema:
 {
-  "transcript": "Speaker 1: ...\\nSpeaker 2: ...",
-  "summary": "# Executive Summary\\n..."
+  "summary": "# Executive Summary\\n...",
+  "transcript": "Speaker 1: ...\\nSpeaker 2: ..."
 }`;
 
   if (liveTranscript && liveTranscript.trim().length > 0) {
@@ -109,7 +153,7 @@ Return ONLY valid JSON matching this schema:
 
 /**
  * Direct client-side call to Google's Gemini API when user has configured their API key in Settings.
- * Bypasses Vercel serverless body size limits (4.5 MB) and timeouts.
+ * Bypasses Vercel serverless body size limits (4.5 MB) and execution timeouts entirely.
  */
 async function callGeminiDirect(
   apiKey: string,
@@ -147,6 +191,7 @@ async function callGeminiDirect(
           generationConfig: {
             responseMimeType: 'application/json',
             temperature: 0.1,
+            maxOutputTokens: 8192,
           },
         }),
       });
@@ -190,20 +235,29 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
 
   const cleanMimeType = (params.mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
   
-  // 1. Resolve audio to Base64 only if no audioUrl or if using direct Gemini call
+  // 1. Resolve audio URL & Base64
   const isBlobUrl = params.audioUrl?.startsWith('blob:');
   const safeAudioUrl = isBlobUrl ? undefined : params.audioUrl;
   let audioBase64 = params.audioBase64;
   
   const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
 
-  // If we have a custom key and no base64 yet, try resolving base64 for direct call (if under 10MB)
+  // Resolve base64 from blob if needed
+  if (!audioBase64 && params.audioBlob) {
+    try {
+      audioBase64 = await convertBlobToBase64(params.audioBlob);
+    } catch (err) {
+      console.warn("Could not convert audioBlob to base64:", err);
+    }
+  }
+
+  // If we have a custom key and no base64 yet, resolve from audioUrl (including blob: URLs)
   if (customKey && !audioBase64 && params.audioUrl && typeof window !== 'undefined') {
     audioBase64 = (await convertUrlToBase64(params.audioUrl)) || undefined;
   }
 
-  // 2. Direct Call if user provided Gemini API Key in Settings and audio is reasonable size (< 15MB)
-  if (customKey && audioBase64 && audioBase64.length < 15 * 1024 * 1024) {
+  // 2. Direct Call if user provided Gemini API Key in Settings (handles up to 20MB inline audio = ~1.5 hours of speech!)
+  if (customKey && audioBase64 && audioBase64.length <= 28 * 1024 * 1024) {
     try {
       const directResult = await callGeminiDirect(
         customKey,
@@ -230,6 +284,13 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
   // When safeAudioUrl is sent, payload is < 1 KB, and the server downloads and streams audio directly.
   try {
     const payloadBase64 = safeAudioUrl ? undefined : (audioBase64 && audioBase64.length < 3.5 * 1024 * 1024 ? audioBase64 : undefined);
+
+    if (!safeAudioUrl && !payloadBase64) {
+      // Audio is too large to send directly through Vercel serverless payload limit without cloud storage
+      if (!customKey) {
+        throw new Error("This recording is too long to process without cloud storage or an API key. Please add your Google Gemini API key in CubNotes Settings > AI to transcribe long recordings directly without limits.");
+      }
+    }
 
     const apiRes = await fetch('/api/transcribe', {
       method: 'POST',
@@ -271,7 +332,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
       throw new Error("Gemini API key is not configured. Please open CubNotes Settings > AI to verify your Google Gemini API key.");
     }
     if (message.includes('413') || message.includes('Payload Too Large')) {
-      throw new Error("Recording is too large to send directly. Please ensure audio storage is connected.");
+      throw new Error("Recording is too large to send directly. Please ensure audio storage is connected or enter your Gemini API key in Settings.");
     }
 
     throw new Error(`AI Processing failed: ${message}`);

@@ -524,6 +524,38 @@ export function FlowchartOverlay({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedShapeId, selectedConnectorId, selectedIds, shapes, setShapes, setConnectors, setSelectedShapeId, setSelectedConnectorId, setSelectedIds]);
 
+  // Click outside listener to easily deselect connector or shape
+  useEffect(() => {
+    const handlePointerDownOutside = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | SVGElement | null;
+      if (!target) return;
+      // Do not deselect if clicking inside a flowchart element, menu, ribbon, or input controls
+      if (
+        target.closest('[data-flowchart-menu]') || 
+        target.closest('[data-ribbon]') || 
+        target.closest('[data-flowchart-element]') ||
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('textarea')
+      ) {
+        return;
+      }
+
+      if (selectedConnectorId) {
+        setSelectedConnectorId(null);
+      }
+      if (selectedShapeId) {
+        setSelectedShapeId(null);
+      }
+      setEditingShapeId(null);
+      setEditingConnectorId(null);
+      setIsColorDropdownOpen(false);
+    };
+
+    window.addEventListener("pointerdown", handlePointerDownOutside);
+    return () => window.removeEventListener("pointerdown", handlePointerDownOutside);
+  }, [selectedConnectorId, selectedShapeId, setSelectedConnectorId, setSelectedShapeId]);
+
   // Miro/FigJam Quick Add sibling shape in direction
   const handleQuickAdd = (sourceShape: ShapeNode, direction: AnchorPosition) => {
     const spacing = 100;
@@ -786,14 +818,16 @@ export function FlowchartOverlay({
             const hasArrowStart = connector.arrowEnd === 'double-arrow';
 
             return (
-              <g key={connector.id} className="group">
+              <g key={connector.id} className="group" data-flowchart-element="connector">
                 {/* Thick invisible path for easy clicking / selecting */}
                 <path
+                  data-flowchart-element="connector"
                   d={route.path}
                   fill="none"
                   stroke="transparent"
                   strokeWidth={Math.max(16, 16 / zoom)}
                   style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedConnectorId(connector.id);
@@ -864,6 +898,8 @@ export function FlowchartOverlay({
                       </div>
                     ) : (
                       <div 
+                        data-flowchart-element="connector"
+                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedConnectorId(connector.id);
@@ -941,6 +977,7 @@ export function FlowchartOverlay({
         return (
           <div
             key={shape.id}
+            data-flowchart-element="shape"
             className={`absolute group transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-transparent' : ''}`}
             style={{
               transform: `translate(${shape.x * zoom + pan.x}px, ${shape.y * zoom + pan.y}px)`,
@@ -1183,6 +1220,7 @@ export function FlowchartOverlay({
 
         return (
           <div 
+            data-flowchart-menu="shape"
             className="absolute z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 animate-in fade-in zoom-in-95 duration-100"
             style={{
               left: `${toolbarX}px`,
@@ -1312,6 +1350,7 @@ export function FlowchartOverlay({
       {/* 4. FLOATING TOOLBAR FOR SELECTED CONNECTOR */}
       {selectedConnector && (
         <div 
+          data-flowchart-menu="connector"
           className="absolute z-50 pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200"
           style={{
             top: 60,
