@@ -450,7 +450,7 @@ function AudioNodeCard({
                   <button
                     onClick={() => onOpenMeetingWorkspace(node.id)}
                     className="flex items-center gap-1 text-[11px] font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 px-2 py-1 rounded-lg transition-colors border border-primary-200 dark:border-primary-800/60"
-                    title="Open in Foresight Meeting Workspace"
+                    title="Open Meeting Workspace"
                   >
                     <Sparkles size={12} />
                     <span>Meeting View</span>

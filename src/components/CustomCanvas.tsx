@@ -656,7 +656,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  // Foresight Meeting Workspace state
+  // Meeting Workspace state
   const [isMeetingWorkspaceOpen, setIsMeetingWorkspaceOpen] = useState(false);
   const [meetingWorkspaceAudioId, setMeetingWorkspaceAudioId] = useState<string | null>(null);
 
@@ -2153,7 +2153,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
             <button
               onClick={() => handleOpenMeetingWorkspace()}
               className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-full text-xs font-semibold shadow-xs transition-transform active:scale-95"
-              title="Open Foresight & Granola Meeting Workspace"
+              title="Open Meeting Workspace"
             >
               <Sparkles size={13} className="text-amber-200" />
               <span>Meeting Workspace</span>
@@ -2587,7 +2587,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   <button
                     onClick={() => handleOpenMeetingWorkspace()}
                     className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-primary-600 dark:text-primary-400 transition-colors"
-                    title="Open Granola & Foresight style Meeting Workspace"
+                    title="Open Meeting Workspace"
                   >
                     <Sparkles size={16} strokeWidth={2} />
                     <span className="text-[10px] font-bold mt-0.5">Meeting Workspace</span>
@@ -3404,7 +3404,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
 
 
-      {/* Foresight & Granola Meeting Workspace Modal */}
+      {/* Meeting Workspace Modal */}
       <MeetingWorkspace 
         isOpen={isMeetingWorkspaceOpen}
         onClose={() => setIsMeetingWorkspaceOpen(false)}

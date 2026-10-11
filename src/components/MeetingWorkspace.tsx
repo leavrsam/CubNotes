@@ -131,7 +131,7 @@ export function MeetingWorkspace({
     }
   }, [chatHistory, isAsking]);
 
-  // Granola-style "Enhance My Notes"
+  // Enhance My Notes
   const handleEnhanceNotes = async () => {
     const transcript = activeAudioNode?.transcript || "";
     if (!shorthandNotes.trim() && !transcript.trim()) {
@@ -165,7 +165,7 @@ export function MeetingWorkspace({
         updateAudioField(activeAudioNode.id, 'enhancedNotes', data.enhancedNotes);
       }
       setShowEnhanced(true);
-      toast.success("Notes enhanced with Granola-style precision!", { id: toastId });
+      toast.success("Notes enriched with transcript details!", { id: toastId });
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Failed to enhance notes", { id: toastId });
@@ -297,7 +297,7 @@ export function MeetingWorkspace({
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wider font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-1">
               <Sparkles size={13} />
-              <span>Foresight Meeting Workspace</span>
+              <span>Meeting Workspace</span>
             </span>
             <input 
               type="text"
@@ -483,9 +483,6 @@ export function MeetingWorkspace({
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col">
-                    <div className="text-xs text-zinc-400 mb-2 italic">
-                      Granola-style scratchpad: Type shorthand bullets during your meeting. Click &ldquo;Enhance Notes&rdquo; to enrich them with details from the audio.
-                    </div>
                     <textarea
                       value={shorthandNotes}
                       onChange={(e) => {
@@ -494,7 +491,7 @@ export function MeetingWorkspace({
                           updateAudioField(activeAudioNode.id, 'notes', e.target.value);
                         }
                       }}
-                      placeholder="- Dave confirmed 15% discount&#10;- Action: Follow up with revised contract by Friday&#10;- Launch target set for Nov 15..."
+                      placeholder="Type your notes or bullet points here..."
                       className="flex-1 w-full bg-transparent resize-none border-none outline-none text-base leading-relaxed text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 font-sans"
                     />
                   </div>
@@ -555,7 +552,7 @@ export function MeetingWorkspace({
           </div>
         </div>
 
-        {/* RIGHT PANE: Foresight HUD (Interactive Q&A + Knowledge Radar) */}
+        {/* RIGHT PANE: Meeting HUD (Interactive Q&A + Knowledge Radar) */}
         <div className="w-80 md:w-96 flex flex-col bg-zinc-50/50 dark:bg-zinc-950/40 shrink-0 overflow-hidden border-l border-zinc-200 dark:border-zinc-800">
           
           {/* Section: Ask Meeting AI (Interactive Q&A) */}
@@ -651,7 +648,7 @@ export function MeetingWorkspace({
             </form>
           </div>
 
-          {/* Section: Foresight Knowledge Radar (Grounding in past notes) */}
+          {/* Section: Knowledge Radar (Grounding in past notes) */}
           <div className="h-48 border-t border-zinc-200 dark:border-zinc-800 p-3 flex flex-col overflow-hidden bg-white/50 dark:bg-zinc-900/30">
             <div className="flex items-center justify-between pb-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300">
               <div className="flex items-center gap-1.5">

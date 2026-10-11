@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const prompt = `You are an elite executive assistant and meeting note enhancer, inspired by Granola and Google AI Edge Foresight.
+    const prompt = `You are an elite executive assistant and meeting note enhancer.
 Your task is to take the user's raw shorthand meeting notes and ENRICH them using the verbatim meeting transcript.
 
 CRITICAL INSTRUCTIONS:
