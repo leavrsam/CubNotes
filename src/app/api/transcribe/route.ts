@@ -130,19 +130,49 @@ Return ONLY valid JSON matching this schema:
       ? `${prompt}\n\nOPTIONAL REFERENCE: Real-time on-device speech transcript captured during recording:\n"""\n${liveTranscript.trim()}\n"""\nUse the audio recording as your primary ground truth, but reference this to ensure accurate names, technical vocabulary, and verbatim coverage.`
       : prompt;
 
-    // 3. Generate Content using Google's newest model gemini-3.8-flash
-    const result = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [
-        audioPart,
-        { text: promptWithReference }
-      ],
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-        maxOutputTokens: 8192,
+    // 3. Generate Content using Google's newest model gemini-3.8-flash (with retry for transient 503/429 demand spikes)
+    let result: any = null;
+    let lastGenError: any = null;
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        result = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [
+            audioPart,
+            { text: promptWithReference }
+          ],
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.1,
+            maxOutputTokens: 8192,
+          }
+        });
+        lastGenError = null;
+        break;
+      } catch (genErr: any) {
+        lastGenError = genErr;
+        const errMsg = String(genErr?.message || genErr);
+        const isTransient = errMsg.includes('503') || errMsg.includes('429') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
+        
+        if (isTransient && attempt < maxAttempts) {
+          const delayMs = attempt * 2000;
+          console.warn(`[transcribe API] Gemini temporary load spike (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          continue;
+        }
+
+        if (isTransient) {
+          return NextResponse.json({
+            success: false,
+            error: "Google Gemini is currently experiencing high demand. Please try again in a few moments."
+          }, { status: 503 });
+        }
+
+        throw genErr;
       }
-    });
+    }
 
     const responseText: string = (result as any).text || '';
     
@@ -210,10 +240,16 @@ Return ONLY valid JSON matching this schema:
 
   } catch (error: any) {
     console.error('Transcription error:', error);
+    const errMsg = String(error?.message || error);
+    const isTransient = errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
+    const friendlyError = isTransient
+      ? "Google Gemini is currently experiencing high demand. Please try again in a few moments."
+      : (error.message || 'Failed to process audio recording.');
+
     return NextResponse.json({ 
       success: false,
-      error: error.message || 'Failed to process audio recording.' 
-    }, { status: 500 });
+      error: friendlyError 
+    }, { status: isTransient ? 503 : 500 });
   } finally {
     // Clean up uploaded Gemini File if created
     if (ai && uploadedGeminiFileName) {

@@ -603,11 +603,12 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         summary: string; 
         transcript: string;
         url?: string;
+        durationMs?: number;
         audioCreatedAt?: number;
         audioExpiresAt?: number;
         isAudioSavedPermanently?: boolean;
       }>;
-      const { id, summary, transcript, url, audioCreatedAt, audioExpiresAt, isAudioSavedPermanently } = customEvent.detail;
+      const { id, summary, transcript, url, durationMs, audioCreatedAt, audioExpiresAt, isAudioSavedPermanently } = customEvent.detail;
       setAudios(prev => prev.map(audio => {
         if (audio.id === id) {
           return { 
@@ -617,6 +618,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             isLiveRecording: false, 
             isTranscribing: false, 
             url: url !== undefined ? url : audio.url,
+            durationMs: durationMs || audio.durationMs,
             audioCreatedAt: audioCreatedAt || audio.audioCreatedAt || Date.now(),
             audioExpiresAt: audioExpiresAt || audio.audioExpiresAt || (Date.now() + 7 * 24 * 60 * 60 * 1000),
             isAudioSavedPermanently: isAudioSavedPermanently ?? audio.isAudioSavedPermanently ?? false,

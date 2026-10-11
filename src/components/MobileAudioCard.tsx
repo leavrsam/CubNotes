@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 import { processAudioTranscription } from "@/lib/transcribe";
 import type { AudioNode } from "./CustomCanvas";
+import { AudioPlayer } from "./AudioPlayer";
 
 const supabase = createClient();
 
@@ -438,9 +439,11 @@ export function MobileAudioCard({
             </div>
           ) : node.url && !(!node.isAudioSavedPermanently && node.audioExpiresAt && Date.now() > node.audioExpiresAt) ? (
             <div className="flex flex-col gap-2">
-              <audio controls src={node.url} preload="metadata" className="w-full outline-none h-9">
-                Your browser does not support the audio element.
-              </audio>
+              <AudioPlayer 
+                url={node.url} 
+                initialDurationMs={node.durationMs} 
+                className="w-full" 
+              />
               <div className="flex items-center justify-between px-1 pt-0.5">
                 {node.isAudioSavedPermanently ? (
                   <button 

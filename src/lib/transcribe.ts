@@ -160,13 +160,14 @@ async function callGeminiDirect(
   base64Audio: string,
   mimeType: string,
   isJournal: boolean,
-  liveTranscript?: string
+  liveTranscript?: string,
+  maxRetries = 3
 ): Promise<{ transcript: string; summary: string }> {
-  const models = ['gemini-3.8-flash'];
+  const model = 'gemini-3.8-flash';
   const prompt = buildTranscriptionPrompt(isJournal, liveTranscript);
   let lastError: Error | null = null;
 
-  for (const model of models) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const response = await fetch(endpoint, {
@@ -202,15 +203,35 @@ async function callGeminiDirect(
         if (candidateText) {
           return parseGeminiResponse(candidateText);
         }
-      } else {
-        const errJson = await response.json().catch(() => null);
-        const errMsg = errJson?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
-        console.warn(`Direct Gemini call failed on model ${model}:`, errMsg);
-        lastError = new Error(errMsg);
       }
+
+      const errJson = await response.json().catch(() => null);
+      const statusCode = response.status;
+      const errMsg = errJson?.error?.message || `HTTP ${statusCode}: ${response.statusText}`;
+      const isTransient = statusCode === 503 || statusCode === 429 || statusCode === 500 || errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('unavailable');
+
+      if (isTransient && attempt < maxRetries) {
+        const delayMs = attempt * 2000;
+        console.warn(`[Direct Gemini] Model load spike ${statusCode} (attempt ${attempt}/${maxRetries}). Retrying in ${delayMs}ms...`);
+        await new Promise((res) => setTimeout(res, delayMs));
+        continue;
+      }
+
+      lastError = isTransient 
+        ? new Error("Google Gemini is currently experiencing high demand. Please try again in a few moments.")
+        : new Error(errMsg);
     } catch (e: any) {
-      console.warn(`Direct Gemini network exception with ${model}:`, e);
-      lastError = e;
+      const errMsg = e?.message || String(e);
+      const isTransient = errMsg.includes('503') || errMsg.includes('429') || errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('unavailable');
+      if (isTransient && attempt < maxRetries) {
+        const delayMs = attempt * 2000;
+        console.warn(`[Direct Gemini] Transient exception (attempt ${attempt}/${maxRetries}). Retrying in ${delayMs}ms...`);
+        await new Promise((res) => setTimeout(res, delayMs));
+        continue;
+      }
+      lastError = isTransient
+        ? new Error("Google Gemini is currently experiencing high demand. Please try again in a few moments.")
+        : e;
     }
   }
 
@@ -333,6 +354,9 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
     }
     if (message.includes('413') || message.includes('Payload Too Large')) {
       throw new Error("Recording is too large to send directly. Please ensure audio storage is connected or enter your Gemini API key in Settings.");
+    }
+    if (message.includes('503') || message.includes('high demand') || message.includes('UNAVAILABLE')) {
+      throw new Error("Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.");
     }
 
     throw new Error(`AI Processing failed: ${message}`);

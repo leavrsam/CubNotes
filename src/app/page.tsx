@@ -455,6 +455,7 @@ export default function Home() {
             summary: transcriptionResult.summary || "Summary completed.", 
             transcript: transcriptionResult.transcript || audioData.liveTranscript || "",
             url: audioUrl,
+            durationMs: audioData.durationMs,
             audioCreatedAt,
             audioExpiresAt,
             isAudioSavedPermanently,
