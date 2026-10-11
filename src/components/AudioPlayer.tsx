@@ -185,7 +185,7 @@ export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }:
   const progressPercent = Math.min(100, Math.max(0, currentFraction * 100));
 
   return (
-    <div className={`flex flex-col gap-2 p-2 sm:p-2.5 rounded-2xl bg-zinc-100/90 dark:bg-zinc-800/90 border border-zinc-200/90 dark:border-zinc-700/80 shadow-xs select-none ${className}`}>
+    <div className={`flex flex-col gap-1 py-2 px-2.5 sm:px-3 rounded-xl bg-zinc-100/90 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/70 shadow-xs select-none w-full max-w-md mx-auto ${className}`}>
       {/* Hidden native audio element */}
       <audio
         ref={audioRef}
@@ -198,8 +198,8 @@ export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }:
         onPlay={() => setIsPlaying(true)}
       />
 
-      {/* Row 1: Full-Width Slider (Takes the entire width!) */}
-      <div className="w-full flex flex-col gap-0.5">
+      {/* Row 1: Slim Scrubber & Timestamps */}
+      <div className="w-full flex flex-col">
         {/* Scrubber Touch Area */}
         <div
           ref={progressBarRef}
@@ -207,11 +207,11 @@ export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }:
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
-          className="relative w-full h-7 flex items-center cursor-pointer touch-none group"
+          className="relative w-full h-5 flex items-center cursor-pointer touch-none group"
           title="Drag or tap to seek"
         >
           {/* Background Track */}
-          <div className="w-full h-2 rounded-full bg-zinc-200 dark:bg-zinc-700/80 overflow-hidden relative transition-all group-hover:h-2.5">
+          <div className="w-full h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700/80 overflow-hidden relative transition-all group-hover:h-2">
             {/* Filled Progress Track */}
             <div
               className="h-full bg-primary-500 rounded-full transition-all duration-75"
@@ -221,55 +221,55 @@ export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }:
 
           {/* Scrubber Knob */}
           <div
-            className={`absolute top-1/2 w-4 h-4 rounded-full bg-white dark:bg-zinc-100 border-2 border-primary-500 shadow-md transform -translate-y-1/2 -translate-x-1/2 transition-transform pointer-events-none ${
-              isDragging ? 'scale-125 ring-4 ring-primary-500/20' : 'group-hover:scale-110'
+            className={`absolute top-1/2 w-3.5 h-3.5 rounded-full bg-white dark:bg-zinc-100 border-2 border-primary-500 shadow-sm transform -translate-y-1/2 -translate-x-1/2 transition-transform pointer-events-none ${
+              isDragging ? 'scale-125 ring-2 ring-primary-500/30' : 'group-hover:scale-110'
             }`}
             style={{ left: `${progressPercent}%` }}
           />
         </div>
 
         {/* Timestamps Row: Left = Elapsed, Right = Total Duration */}
-        <div className="flex items-center justify-between px-1 text-[11px] font-mono font-medium text-zinc-500 dark:text-zinc-400 -mt-1 select-none">
+        <div className="flex items-center justify-between px-0.5 text-[10px] font-mono font-medium text-zinc-400 dark:text-zinc-500 -mt-0.5 select-none leading-none">
           <span>{formatTime(displayCurrentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
       </div>
 
-      {/* Row 2: Controls Row (Below the slider!) */}
+      {/* Row 2: Compact Controls Row (Below the slider) */}
       <div className="flex items-center justify-between w-full pt-0.5 px-0.5">
         {/* Left: Playback speed pill */}
         <button
           type="button"
           onClick={cyclePlaybackRate}
-          className="px-2 py-1 rounded-lg text-[11px] font-semibold font-mono bg-zinc-200/80 dark:bg-zinc-700/70 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors shrink-0 shadow-xs active:scale-95"
+          className="px-1.5 py-0.5 rounded text-[10px] font-semibold font-mono bg-zinc-200/80 dark:bg-zinc-700/70 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors shrink-0 shadow-2xs active:scale-95"
           title="Change playback speed"
         >
           {playbackRate}x
         </button>
 
         {/* Center: Rewind, Play/Pause, Fast-Forward */}
-        <div className="flex items-center gap-2.5 sm:gap-3.5">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Rewind -10s */}
           <button
             type="button"
             onClick={() => handleSkip(-10)}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 text-zinc-600 dark:text-zinc-300 active:scale-95 transition-all"
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 active:scale-95 transition-all"
             title="Rewind 10 seconds"
           >
-            <RotateCcw size={15} />
+            <RotateCcw size={13} />
           </button>
 
           {/* Play/Pause Button */}
           <button
             type="button"
             onClick={togglePlay}
-            className="w-10 h-10 rounded-full bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center shadow-md hover:shadow-lg transition-transform active:scale-95 shrink-0"
+            className="w-8 h-8 rounded-full bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center shadow-sm hover:shadow transition-transform active:scale-95 shrink-0"
             title={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? (
-              <Pause size={17} fill="currentColor" />
+              <Pause size={14} fill="currentColor" />
             ) : (
-              <Play size={17} fill="currentColor" className="ml-0.5" />
+              <Play size={14} fill="currentColor" className="ml-0.5" />
             )}
           </button>
 
@@ -277,10 +277,10 @@ export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }:
           <button
             type="button"
             onClick={() => handleSkip(10)}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 text-zinc-600 dark:text-zinc-300 active:scale-95 transition-all"
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 active:scale-95 transition-all"
             title="Fast forward 10 seconds"
           >
-            <RotateCw size={15} />
+            <RotateCw size={13} />
           </button>
         </div>
 
@@ -288,10 +288,10 @@ export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }:
         <button
           type="button"
           onClick={toggleMute}
-          className="p-1.5 rounded-lg hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 text-zinc-600 dark:text-zinc-300 active:scale-95 transition-all shrink-0"
+          className="p-1 rounded hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 active:scale-95 transition-all shrink-0"
           title={isMuted ? 'Unmute' : 'Mute'}
         >
-          {isMuted ? <VolumeX size={16} className="text-red-500" /> : <Volume2 size={16} />}
+          {isMuted ? <VolumeX size={14} className="text-red-500" /> : <Volume2 size={14} />}
         </button>
       </div>
     </div>
