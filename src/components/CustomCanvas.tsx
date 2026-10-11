@@ -738,8 +738,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     if (!orig) return;
 
     if (orig.strokes.length > 0) {
+      const origMap = new Map(orig.strokes.map(s => [s.id, s]));
       setStrokes(prev => prev.map(s => {
-        const origStroke = orig.strokes.find(os => os.id === s.id);
+        const origStroke = origMap.get(s.id);
         if (origStroke) {
           return { ...origStroke, x: (origStroke.x || 0) + deltaX, y: (origStroke.y || 0) + deltaY };
         }
@@ -747,12 +748,48 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       }));
     }
     
-    if (orig.texts.length > 0) setTexts(prev => prev.map(t => orig.texts.find(ot => ot.id === t.id) ? { ...t, x: orig.texts.find(ot => ot.id === t.id).x + deltaX, y: orig.texts.find(ot => ot.id === t.id).y + deltaY } : t));
-    if (orig.images.length > 0) setImages(prev => prev.map(i => orig.images.find(oi => oi.id === i.id) ? { ...i, x: orig.images.find(oi => oi.id === i.id).x + deltaX, y: orig.images.find(oi => oi.id === i.id).y + deltaY } : i));
-    if (orig.videos.length > 0) setVideos(prev => prev.map(v => orig.videos.find(ov => ov.id === v.id) ? { ...v, x: orig.videos.find(ov => ov.id === v.id).x + deltaX, y: orig.videos.find(ov => ov.id === v.id).y + deltaY } : v));
-    if (orig.files.length > 0) setFiles(prev => prev.map(f => orig.files.find(of => of.id === f.id) ? { ...f, x: orig.files.find(of => of.id === f.id).x + deltaX, y: orig.files.find(of => of.id === f.id).y + deltaY } : f));
-    if (orig.audios.length > 0) setAudios(prev => prev.map(a => orig.audios.find(oa => oa.id === a.id) ? { ...a, x: orig.audios.find(oa => oa.id === a.id).x + deltaX, y: orig.audios.find(oa => oa.id === a.id).y + deltaY } : a));
-    if (orig.shapes.length > 0) setShapes(prev => prev.map(s => orig.shapes.find(os => os.id === s.id) ? { ...s, x: orig.shapes.find(os => os.id === s.id).x + deltaX, y: orig.shapes.find(os => os.id === s.id).y + deltaY } : s));
+    if (orig.texts.length > 0) {
+      const origMap = new Map(orig.texts.map(t => [t.id, t]));
+      setTexts(prev => prev.map(t => {
+        const ot = origMap.get(t.id);
+        return ot ? { ...t, x: ot.x + deltaX, y: ot.y + deltaY } : t;
+      }));
+    }
+    if (orig.images.length > 0) {
+      const origMap = new Map(orig.images.map(i => [i.id, i]));
+      setImages(prev => prev.map(i => {
+        const oi = origMap.get(i.id);
+        return oi ? { ...i, x: oi.x + deltaX, y: oi.y + deltaY } : i;
+      }));
+    }
+    if (orig.videos.length > 0) {
+      const origMap = new Map(orig.videos.map(v => [v.id, v]));
+      setVideos(prev => prev.map(v => {
+        const ov = origMap.get(v.id);
+        return ov ? { ...v, x: ov.x + deltaX, y: ov.y + deltaY } : v;
+      }));
+    }
+    if (orig.files.length > 0) {
+      const origMap = new Map(orig.files.map(f => [f.id, f]));
+      setFiles(prev => prev.map(f => {
+        const of = origMap.get(f.id);
+        return of ? { ...f, x: of.x + deltaX, y: of.y + deltaY } : f;
+      }));
+    }
+    if (orig.audios.length > 0) {
+      const origMap = new Map(orig.audios.map(a => [a.id, a]));
+      setAudios(prev => prev.map(a => {
+        const oa = origMap.get(a.id);
+        return oa ? { ...a, x: oa.x + deltaX, y: oa.y + deltaY } : a;
+      }));
+    }
+    if (orig.shapes.length > 0) {
+      const origMap = new Map(orig.shapes.map(s => [s.id, s]));
+      setShapes(prev => prev.map(s => {
+        const os = origMap.get(s.id);
+        return os ? { ...s, x: os.x + deltaX, y: os.y + deltaY } : s;
+      }));
+    }
   }, [setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setShapes]);
 
   const handleDragSelectionEnd = useCallback(() => {
@@ -3287,7 +3324,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           <>
             {/* Dashed Selection Bounding Outline */}
             <div 
-              className="absolute pointer-events-none border-2 border-dashed border-primary-500/80 rounded-lg z-30 transition-all duration-75"
+              className="absolute pointer-events-none border-2 border-dashed border-primary-500/80 rounded-lg z-30 transition-colors"
               style={{ 
                 left: screenX - 6, 
                 top: screenY - 6,
@@ -3421,17 +3458,139 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         onSelectAudioNode={(id) => setMeetingWorkspaceAudioId(id)}
         onExplodeToCanvas={(notesText, summaryText) => {
           setIsMeetingWorkspaceOpen(false);
-          const worldX = (-pan.x + window.innerWidth / 3) / zoom;
-          const worldY = (-pan.y + window.innerHeight / 3) / zoom;
-          if (notesText?.trim()) {
-            const htmlNotes = notesText.split('\n').map(l => `<p>${l || '<br>'}</p>`).join('');
-            setTexts(prev => [...prev, { id: uuidv4(), x: worldX, y: worldY, width: 500, content: htmlNotes }]);
+
+          const hasNotes = Boolean(notesText?.trim());
+          const hasSummary = Boolean(summaryText?.trim());
+          if (!hasNotes && !hasSummary) {
+            toast.error("No notes or summary to send to canvas.");
+            return;
           }
-          if (summaryText?.trim()) {
-            const htmlSummary = summaryText.split('\n').map(l => `<p>${l || '<br>'}</p>`).join('');
-            setTexts(prev => [...prev, { id: uuidv4(), x: worldX + 540, y: worldY, width: 500, content: htmlSummary }]);
+
+          const formatMarkdownToHtml = (raw: string) => {
+            if (!raw) return '<p></p>';
+            const lines = raw.split('\n');
+            const htmlParts: string[] = [];
+            let inList = false;
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) {
+                if (inList) { htmlParts.push('</ul>'); inList = false; }
+                htmlParts.push('<p><br></p>');
+                continue;
+              }
+              if (trimmed.startsWith('### ')) {
+                if (inList) { htmlParts.push('</ul>'); inList = false; }
+                htmlParts.push(`<h3>${trimmed.slice(4)}</h3>`);
+              } else if (trimmed.startsWith('## ')) {
+                if (inList) { htmlParts.push('</ul>'); inList = false; }
+                htmlParts.push(`<h2>${trimmed.slice(3)}</h2>`);
+              } else if (trimmed.startsWith('# ')) {
+                if (inList) { htmlParts.push('</ul>'); inList = false; }
+                htmlParts.push(`<h1>${trimmed.slice(2)}</h1>`);
+              } else if (trimmed.startsWith('- [ ] ') || trimmed.startsWith('- [x] ')) {
+                if (inList) { htmlParts.push('</ul>'); inList = false; }
+                const checked = trimmed.startsWith('- [x] ');
+                const text = trimmed.slice(6);
+                htmlParts.push(`<p>${checked ? '☑ ' : '☐ '} ${text}</p>`);
+              } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                if (!inList) { htmlParts.push('<ul>'); inList = true; }
+                htmlParts.push(`<li>${trimmed.slice(2)}</li>`);
+              } else {
+                if (inList) { htmlParts.push('</ul>'); inList = false; }
+                htmlParts.push(`<p>${trimmed}</p>`);
+              }
+            }
+            if (inList) htmlParts.push('</ul>');
+            return htmlParts.join('');
+          };
+
+          const container = canvasContainerRef.current;
+          const rect = container ? container.getBoundingClientRect() : null;
+          const viewportW = rect?.width || (typeof window !== 'undefined' ? window.innerWidth : 1200);
+          const viewportH = rect?.height || (typeof window !== 'undefined' ? window.innerHeight : 800);
+
+          // Center of the screen canvas area (leaving ~80px for top ribbon)
+          const screenCenterX = viewportW / 2;
+          const screenCenterY = (viewportH + 80) / 2;
+
+          // World coordinates at screen center
+          const worldCenterX = (-pan.x + screenCenterX) / zoom;
+          const worldCenterY = (-pan.y + screenCenterY) / zoom;
+
+          const newTextNodes: TextNode[] = [];
+          let groupCenterX = worldCenterX;
+          let groupCenterY = worldCenterY;
+
+          // Can fit side-by-side if screen width permits
+          const canFitSideBySide = (viewportW >= 1050) && ((1000 * zoom) <= (viewportW - 60));
+
+          if (hasNotes && hasSummary && canFitSideBySide) {
+            const cardWidth = 480;
+            const gap = 36;
+            const totalW = cardWidth * 2 + gap; // 996
+            const startX = worldCenterX - totalW / 2;
+            const startY = worldCenterY - 200;
+
+            const notesNode: TextNode = {
+              id: uuidv4(),
+              x: startX,
+              y: startY,
+              width: cardWidth,
+              content: formatMarkdownToHtml(notesText)
+            };
+
+            const summaryNode: TextNode = {
+              id: uuidv4(),
+              x: startX + cardWidth + gap,
+              y: startY,
+              width: cardWidth,
+              content: formatMarkdownToHtml(summaryText)
+            };
+
+            newTextNodes.push(notesNode, summaryNode);
+            groupCenterX = startX + totalW / 2;
+            groupCenterY = startY + 200;
+          } else if (hasNotes && hasSummary) {
+            // Stack vertically on smaller screens
+            const cardWidth = Math.min(500, Math.max(300, Math.floor((viewportW - 60) / zoom)));
+            const notesY = worldCenterY - 240;
+            const summaryY = worldCenterY + 100;
+            const startX = worldCenterX - cardWidth / 2;
+
+            newTextNodes.push(
+              { id: uuidv4(), x: startX, y: notesY, width: cardWidth, content: formatMarkdownToHtml(notesText) },
+              { id: uuidv4(), x: startX, y: summaryY, width: cardWidth, content: formatMarkdownToHtml(summaryText) }
+            );
+            groupCenterX = startX + cardWidth / 2;
+            groupCenterY = (notesY + summaryY + 200) / 2;
+          } else {
+            // Only one card
+            const textToExplode = hasNotes ? notesText : summaryText;
+            const cardWidth = Math.min(520, Math.max(300, Math.floor((viewportW - 60) / zoom)));
+            const startX = worldCenterX - cardWidth / 2;
+            const startY = worldCenterY - 180;
+
+            newTextNodes.push({
+              id: uuidv4(),
+              x: startX,
+              y: startY,
+              width: cardWidth,
+              content: formatMarkdownToHtml(textToExplode)
+            });
+            groupCenterX = startX + cardWidth / 2;
+            groupCenterY = startY + 180;
           }
-          toast.success("Meeting takeaways exploded onto your canvas!");
+
+          // Center the screen pan on the center of the newly exploded cards
+          const targetPanX = screenCenterX - groupCenterX * zoom;
+          const targetPanY = screenCenterY - groupCenterY * zoom;
+          setPan({ x: targetPanX, y: targetPanY });
+          panRef.current = { x: targetPanX, y: targetPanY };
+
+          setTexts(prev => [...prev, ...newTextNodes]);
+          setSelectedIds(newTextNodes.map(n => n.id));
+          toast.success("Meeting takeaways centered on canvas!");
         }}
         pageTitle={pageTitle}
       />

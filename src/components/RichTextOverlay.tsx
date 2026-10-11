@@ -49,6 +49,11 @@ export function RichTextOverlay({
   // Resizing state
   const [resizingId, setResizingId] = useState<string | null>(null);
   const resizeStartRef = useRef<{ x: number, nodeWidth: number } | null>(null);
+
+  // RAF smoothing refs for jitter-free, lag-free cursor tracking
+  const rafRef = useRef<number | null>(null);
+  const latestMoveRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const latestResizeRef = useRef<number | null>(null);
   
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
     if (e.target !== e.currentTarget) return;
@@ -70,38 +75,67 @@ export function RichTextOverlay({
 
   const handlePointerMove = useCallback((e: PointerEvent) => {
     if (draggingId && dragStartRef.current) {
-      const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
-      const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
-      onDragSelectionMove?.(deltaX, deltaY);
+      latestMoveRef.current = { clientX: e.clientX, clientY: e.clientY };
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          if (latestMoveRef.current && dragStartRef.current) {
+            const deltaX = (latestMoveRef.current.clientX - dragStartRef.current.x) / zoom;
+            const deltaY = (latestMoveRef.current.clientY - dragStartRef.current.y) / zoom;
+            onDragSelectionMove?.(deltaX, deltaY);
+          }
+        });
+      }
     } else if (resizingId && resizeStartRef.current) {
-      const deltaX = (e.clientX - resizeStartRef.current.x) / zoom;
-      setTexts(prev => prev.map(t => {
-        if (t.id === resizingId && resizeStartRef.current) {
-          return {
-            ...t,
-            width: Math.max(100, resizeStartRef.current.nodeWidth + deltaX)
-          };
-        }
-        return t;
-      }));
+      latestResizeRef.current = e.clientX;
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          if (latestResizeRef.current !== null && resizeStartRef.current) {
+            const deltaX = (latestResizeRef.current - resizeStartRef.current.x) / zoom;
+            const newWidth = Math.max(100, resizeStartRef.current.nodeWidth + deltaX);
+            setTexts(prev => prev.map(t => (t.id === resizingId ? { ...t, width: newWidth } : t)));
+          }
+        });
+      }
     }
-  }, [draggingId, resizingId, setTexts, zoom]);
+  }, [draggingId, resizingId, zoom, onDragSelectionMove, setTexts]);
 
   const handlePointerUp = useCallback(() => {
-    if (draggingId) {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (draggingId && latestMoveRef.current && dragStartRef.current) {
+      const deltaX = (latestMoveRef.current.clientX - dragStartRef.current.x) / zoom;
+      const deltaY = (latestMoveRef.current.clientY - dragStartRef.current.y) / zoom;
+      onDragSelectionMove?.(deltaX, deltaY);
       onDragSelectionEnd?.();
+    } else if (draggingId) {
+      onDragSelectionEnd?.();
+    }
+    if (resizingId && latestResizeRef.current !== null && resizeStartRef.current) {
+      const deltaX = (latestResizeRef.current - resizeStartRef.current.x) / zoom;
+      const newWidth = Math.max(100, resizeStartRef.current.nodeWidth + deltaX);
+      setTexts(prev => prev.map(t => (t.id === resizingId ? { ...t, width: newWidth } : t)));
     }
     setDraggingId(null);
     dragStartRef.current = null;
+    latestMoveRef.current = null;
     setResizingId(null);
     resizeStartRef.current = null;
-  }, [draggingId, onDragSelectionEnd]);
+    latestResizeRef.current = null;
+  }, [draggingId, resizingId, zoom, onDragSelectionMove, onDragSelectionEnd, setTexts]);
 
   React.useEffect(() => {
     if (draggingId || resizingId) {
       window.addEventListener('pointermove', handlePointerMove);
       window.addEventListener('pointerup', handlePointerUp);
       return () => {
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
       };
@@ -131,7 +165,9 @@ export function RichTextOverlay({
               }}
               // Stop canvas click from firing when clicking inside the text box container
               onClick={(e) => e.stopPropagation()}
-              className={`absolute pointer-events-auto group bg-transparent transition-all border rounded-b-md ${
+              className={`absolute pointer-events-auto group bg-transparent border rounded-b-md ${
+                (draggingId === node.id || resizingId === node.id) ? 'transition-none' : 'transition-colors'
+              } ${
                 (tool === 'home' && node.content !== '<p></p>') 
                   ? ((isSelected || draggingId === node.id || resizingId === node.id)
                       ? 'border-primary-500 dark:border-primary-400 ring-2 ring-primary-500/20 shadow-sm'
@@ -148,7 +184,7 @@ export function RichTextOverlay({
                 <>
                   {/* Drag Handle (Top Bar) */}
                   <div 
-                    className={`absolute -top-[18px] left-[-1px] right-[-1px] h-[18px] cursor-grab active:cursor-grabbing transition-all z-20 flex items-center justify-between px-1.5 border border-b-0 rounded-t-md select-none ${
+                    className={`absolute -top-[18px] left-[-1px] right-[-1px] h-[18px] cursor-grab active:cursor-grabbing transition-colors z-20 flex items-center justify-between px-1.5 border border-b-0 rounded-t-md select-none ${
                       (isSelected || draggingId === node.id || resizingId === node.id)
                         ? 'opacity-100 bg-primary-500 text-white border-primary-600 shadow-xs'
                         : 'opacity-0 border-transparent bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 group-hover:opacity-100 group-focus-within:opacity-100 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 group-focus-within:border-zinc-300 dark:group-focus-within:border-zinc-700'
