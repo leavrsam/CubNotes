@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
@@ -538,6 +539,33 @@ export const HIGHLIGHT_COLORS = [
   { color: "none", label: "No Color" },
 ];
 
+export const TEXT_PALETTE_COLORS = [
+  // Neutrals & Monochrome
+  { color: "#000000", label: "Black" },
+  { color: "#374151", label: "Dark Gray" },
+  { color: "#6b7280", label: "Gray" },
+  { color: "#9ca3af", label: "Light Gray" },
+  { color: "#ffffff", label: "White" },
+  // Warm colors
+  { color: "#ef4444", label: "Red" },
+  { color: "#f97316", label: "Orange" },
+  { color: "#f59e0b", label: "Amber" },
+  { color: "#eab308", label: "Yellow" },
+  { color: "#84cc16", label: "Lime" },
+  // Cool colors
+  { color: "#10b981", label: "Green" },
+  { color: "#06b6d4", label: "Cyan" },
+  { color: "#3b82f6", label: "Blue" },
+  { color: "#6366f1", label: "Indigo" },
+  { color: "#8b5cf6", label: "Purple" },
+  // Accents & Deep colors
+  { color: "#ec4899", label: "Pink" },
+  { color: "#d946ef", label: "Fuchsia" },
+  { color: "#991b1b", label: "Dark Red" },
+  { color: "#1e40af", label: "Dark Blue" },
+  { color: "#065f46", label: "Dark Green" },
+];
+
 export const executeIndent = (editor: Editor) => {
   if (!editor || editor.isDestroyed) return;
   try {
@@ -681,8 +709,104 @@ export const handleToggleLink = (editor: Editor) => {
 };
 
 // ==========================================
-// Reusable Dropdown Menus
+// Reusable Portal Positioning & Dropdown Menus
 // ==========================================
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
+interface UsePortalDropdownOptions {
+  triggerRef: React.RefObject<HTMLElement | null>;
+  isOpen: boolean;
+  placement?: "bottom" | "top" | "auto";
+  offset?: number;
+  dropdownWidth?: number;
+  dropdownHeight?: number;
+}
+
+export function usePortalDropdown({
+  triggerRef,
+  isOpen,
+  placement = "bottom",
+  offset = 4,
+  dropdownWidth = 200,
+  dropdownHeight = 260,
+}: UsePortalDropdownOptions) {
+  const [coords, setCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    maxHeight?: number;
+    placement: "top" | "bottom";
+  } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current || typeof window === "undefined") return;
+    const rect = triggerRef.current.getBoundingClientRect();
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let effPlacement: "top" | "bottom" = placement === "top" ? "top" : "bottom";
+    if (placement === "auto") {
+      effPlacement = spaceBelow < dropdownHeight && spaceAbove > spaceBelow ? "top" : "bottom";
+    } else if (placement === "bottom") {
+      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+        effPlacement = "top";
+      }
+    } else if (placement === "top") {
+      if (spaceAbove < dropdownHeight && spaceBelow > spaceAbove) {
+        effPlacement = "bottom";
+      }
+    }
+
+    const margin = 8;
+    let left = rect.left;
+    if (left + dropdownWidth > window.innerWidth - margin) {
+      left = Math.max(margin, window.innerWidth - dropdownWidth - margin);
+    }
+    if (left < margin) {
+      left = margin;
+    }
+
+    if (effPlacement === "top") {
+      const maxHeight = Math.max(120, Math.min(360, rect.top - offset - margin));
+      setCoords({
+        bottom: window.innerHeight - rect.top + offset,
+        left,
+        maxHeight,
+        placement: "top",
+      });
+    } else {
+      const maxHeight = Math.max(120, Math.min(360, window.innerHeight - rect.bottom - offset - margin));
+      setCoords({
+        top: rect.bottom + offset,
+        left,
+        maxHeight,
+        placement: "bottom",
+      });
+    }
+  }, [triggerRef, placement, offset, dropdownWidth, dropdownHeight]);
+
+  useIsomorphicLayoutEffect(() => {
+    if (!isOpen) {
+      setCoords(null);
+      return;
+    }
+
+    updatePosition();
+
+    const handleUpdate = () => updatePosition();
+    window.addEventListener("resize", handleUpdate);
+    window.addEventListener("scroll", handleUpdate, true);
+
+    return () => {
+      window.removeEventListener("resize", handleUpdate);
+      window.removeEventListener("scroll", handleUpdate, true);
+    };
+  }, [isOpen, updatePosition]);
+
+  return coords;
+}
 
 export function BubbleDropdown({
   label,
@@ -690,46 +814,92 @@ export function BubbleDropdown({
   options,
   onSelect,
   width = "w-28",
+  dropdownWidth = 140,
+  isOpen,
+  onToggle,
+  onClose,
 }: {
   label: string;
   value: string;
   options: { label: string; value: string }[];
   onSelect: (val: string) => void;
   width?: string;
+  dropdownWidth?: number;
+  isOpen?: boolean;
+  onToggle?: () => void;
+  onClose?: () => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const openState = isOpen !== undefined ? isOpen : internalOpen;
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
 
+  const handleToggle = () => {
+    if (onToggle) onToggle();
+    else setInternalOpen(!internalOpen);
+  };
+
+  const handleClose = () => {
+    if (onClose) onClose();
+    else setInternalOpen(false);
+  };
+
+  const coords = usePortalDropdown({
+    triggerRef,
+    isOpen: openState,
+    placement: "bottom",
+    dropdownWidth,
+  });
+
   useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
+    if (!openState) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      handleClose();
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [openState, onClose]);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative inline-block" ref={triggerRef}>
       <button
         type="button"
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setIsOpen(!isOpen);
+          handleToggle();
         }}
-        className="flex items-center justify-between gap-1 px-1.5 py-1 text-xs rounded bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-colors"
+        className={`flex items-center justify-between gap-1 px-1.5 py-1 text-xs rounded transition-colors ${
+          openState
+            ? 'bg-zinc-700 text-white border-zinc-600'
+            : 'bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
+        } border`}
       >
         <span className="truncate max-w-[4.8rem]">{selected && selected.value ? selected.label : label}</span>
         <ChevronDown size={10} className="opacity-60 flex-shrink-0" />
       </button>
 
-      {isOpen && (
+      {openState && coords && typeof document !== 'undefined' && createPortal(
         <div 
-          className={`absolute top-full mt-1 left-0 ${width} max-h-56 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-md shadow-2xl py-1 z-[10000]`}
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            maxHeight: coords.maxHeight !== undefined ? `${coords.maxHeight}px` : undefined,
+            width: `${dropdownWidth}px`,
+            zIndex: 999999,
+          }}
+          className="overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-md shadow-2xl py-1 text-xs"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -743,7 +913,7 @@ export function BubbleDropdown({
                 e.preventDefault();
                 e.stopPropagation();
                 onSelect(opt.value);
-                setIsOpen(false);
+                handleClose();
               }}
               className={`w-full text-left px-2 py-1 text-xs hover:bg-zinc-800 transition-colors ${
                 value === opt.value ? 'bg-primary-600/30 text-primary-400 font-medium' : 'text-zinc-200'
@@ -752,7 +922,8 @@ export function BubbleDropdown({
               {opt.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -761,44 +932,77 @@ export function BubbleDropdown({
 // Line and Paragraph Spacing Dropdown Component (Word & OneNote style)
 export function LineSpacingDropdown({
   editor,
-  dropdownWidth = "w-56",
+  dropdownWidth = 230,
   placement = "bottom",
+  isOpen,
+  onToggle,
+  onClose,
 }: {
   editor: Editor | null;
-  dropdownWidth?: string;
+  dropdownWidth?: number;
   placement?: "bottom" | "top";
+  isOpen?: boolean;
+  onToggle?: () => void;
+  onClose?: () => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const openState = isOpen !== undefined ? isOpen : internalOpen;
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = () => {
+    if (onToggle) onToggle();
+    else setInternalOpen(!internalOpen);
+  };
+
+  const handleClose = () => {
+    if (onClose) onClose();
+    else setInternalOpen(false);
+  };
+
+  const coords = usePortalDropdown({
+    triggerRef,
+    isOpen: openState,
+    placement,
+    dropdownWidth,
+    dropdownHeight: 340,
+  });
+
   const currentLineHeight = getCurrentLineSpacing(editor);
   const currentParagraphSpacing = getCurrentParagraphSpacing(editor);
-
   const hasSpaceBefore = Boolean(currentParagraphSpacing.spaceBefore && currentParagraphSpacing.spaceBefore !== "0px");
   const hasSpaceAfter = Boolean(currentParagraphSpacing.spaceAfter && currentParagraphSpacing.spaceAfter !== "0px");
 
   useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
+    if (!openState) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      handleClose();
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [openState, onClose]);
 
   return (
-    <div className="relative inline-block" ref={ref}>
+    <div className="relative inline-block" ref={triggerRef}>
       <button
         type="button"
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (editor) setIsOpen(!isOpen);
+          if (editor) handleToggle();
         }}
         disabled={!editor}
         className={`flex items-center gap-0.5 p-1.5 rounded transition-colors ${
-          isOpen ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+          openState
+            ? 'bg-zinc-700 text-white'
+            : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
         } ${!editor ? 'opacity-40 cursor-not-allowed' : ''}`}
         title="Line and Paragraph Spacing"
       >
@@ -808,16 +1012,26 @@ export function LineSpacingDropdown({
         <ChevronDown size={10} className="opacity-60 flex-shrink-0" />
       </button>
 
-      {isOpen && editor && (
+      {openState && editor && coords && typeof document !== 'undefined' && createPortal(
         <div
-          className={`absolute ${placement === "top" ? "bottom-full mb-1" : "top-full mt-1"} left-0 ${dropdownWidth} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-[10000] text-xs font-sans max-h-96 overflow-y-auto`}
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            maxHeight: coords.maxHeight !== undefined ? `${coords.maxHeight}px` : undefined,
+            width: `${dropdownWidth}px`,
+            zIndex: 999999,
+          }}
+          className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl py-1 text-xs font-sans overflow-y-auto"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
           }}
         >
           {/* 1. Line Spacing Section */}
-          <div className="px-3 py-1 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+          <div className="px-3 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
             Line Spacing
           </div>
           {LINE_SPACING_OPTIONS.map((opt) => {
@@ -834,22 +1048,22 @@ export function LineSpacingDropdown({
                   } else {
                     (editor.chain().focus() as any).setLineHeight(opt.value).run();
                   }
-                  setIsOpen(false);
+                  handleClose();
                 }}
-                className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
-                  isSelected ? 'text-primary-600 dark:text-primary-400 font-semibold bg-primary-50/50 dark:bg-primary-900/20' : 'text-zinc-700 dark:text-zinc-200'
+                className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 transition-colors ${
+                  isSelected ? 'text-primary-400 font-semibold bg-primary-900/30' : 'text-zinc-200'
                 }`}
               >
                 <span>{opt.label}</span>
-                {isSelected && <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>}
+                {isSelected && <span className="text-primary-400 font-bold">✓</span>}
               </button>
             );
           })}
 
-          <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+          <div className="my-1 border-t border-zinc-800" />
 
           {/* 2. Paragraph Spacing Presets */}
-          <div className="px-3 py-1 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+          <div className="px-3 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
             Paragraph Spacing
           </div>
           {PARAGRAPH_SPACING_OPTIONS.map((opt) => {
@@ -866,19 +1080,19 @@ export function LineSpacingDropdown({
                   } else {
                     (editor.chain().focus() as any).setParagraphSpacing({ spaceAfter: opt.value }).run();
                   }
-                  setIsOpen(false);
+                  handleClose();
                 }}
-                className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
-                  isSelected ? 'text-primary-600 dark:text-primary-400 font-semibold bg-primary-50/50 dark:bg-primary-900/20' : 'text-zinc-700 dark:text-zinc-200'
+                className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 transition-colors ${
+                  isSelected ? 'text-primary-400 font-semibold bg-primary-900/30' : 'text-zinc-200'
                 }`}
               >
                 <span>{opt.label}</span>
-                {isSelected && <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>}
+                {isSelected && <span className="text-primary-400 font-bold">✓</span>}
               </button>
             );
           })}
 
-          <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+          <div className="my-1 border-t border-zinc-800" />
 
           {/* 3. Quick Space Before / After Toggles */}
           <button
@@ -889,12 +1103,12 @@ export function LineSpacingDropdown({
               (editor.chain().focus() as any).setParagraphSpacing({
                 spaceBefore: hasSpaceBefore ? null : "12px"
               }).run();
-              setIsOpen(false);
+              handleClose();
             }}
-            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-200"
+            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 transition-colors text-zinc-200"
           >
             <span>{hasSpaceBefore ? "Remove Space Before Paragraph" : "Add Space Before Paragraph"}</span>
-            {hasSpaceBefore && <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>}
+            {hasSpaceBefore && <span className="text-primary-400 font-bold">✓</span>}
           </button>
 
           <button
@@ -905,20 +1119,21 @@ export function LineSpacingDropdown({
               (editor.chain().focus() as any).setParagraphSpacing({
                 spaceAfter: hasSpaceAfter ? null : "12px"
               }).run();
-              setIsOpen(false);
+              handleClose();
             }}
-            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-700 dark:text-zinc-200"
+            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-800 transition-colors text-zinc-200"
           >
             <span>{hasSpaceAfter ? "Remove Space After Paragraph" : "Add Space After Paragraph"}</span>
-            {hasSpaceAfter && <span className="text-primary-600 dark:text-primary-400 font-bold">✓</span>}
+            {hasSpaceAfter && <span className="text-primary-400 font-bold">✓</span>}
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 }
 
-// Highlight Color Dropdown Component
+// Highlight Color Dropdown Component (Word & OneNote split button style)
 export function HighlightDropdown({
   editor,
   isOpen,
@@ -933,34 +1148,55 @@ export function HighlightDropdown({
   placement?: "bottom" | "top";
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
   const openState = isOpen !== undefined ? isOpen : internalOpen;
-  const setOpenState = (v: boolean) => {
-    if (onToggle) {
-      onToggle();
-    } else {
-      setInternalOpen(v);
-    }
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = () => {
+    if (onToggle) onToggle();
+    else setInternalOpen(!internalOpen);
   };
+
+  const handleClose = () => {
+    if (onClose) onClose();
+    else setInternalOpen(false);
+  };
+
+  const coords = usePortalDropdown({
+    triggerRef,
+    isOpen: openState,
+    placement,
+    dropdownWidth: 168,
+    dropdownHeight: 180,
+  });
+
+  const activeHighlight = editor?.getAttributes('highlight')?.color;
+  const isHighlightActive = Boolean(editor?.isActive('highlight'));
+  const [lastHighlightColor, setLastHighlightColor] = useState<string>('#fef08a');
+  const currentColorBar = activeHighlight || lastHighlightColor;
 
   useEffect(() => {
     if (!openState) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        if (onClose) onClose();
-        else setInternalOpen(false);
-      }
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      handleClose();
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, [openState, onClose]);
 
-  const activeHighlight = editor?.getAttributes('highlight')?.color;
-
   return (
-    <div className="relative inline-flex items-center" ref={ref}>
-      <div className="flex items-center rounded overflow-hidden">
+    <div className="relative inline-flex items-center" ref={triggerRef}>
+      <div className={`flex items-center rounded overflow-hidden border ${
+        openState ? 'border-zinc-500 bg-zinc-800' : 'border-transparent hover:bg-zinc-800/80'
+      }`}>
+        {/* Left: Marker Icon + Color underline bar */}
         <button
           type="button"
           onMouseDown={(e) => {
@@ -969,46 +1205,61 @@ export function HighlightDropdown({
             if (editor.isActive('highlight')) {
               editor.chain().focus().unsetHighlight().run();
             } else {
-              editor.chain().focus().setHighlight({ color: activeHighlight || '#fef08a' }).run();
+              editor.chain().focus().setHighlight({ color: currentColorBar }).run();
             }
           }}
           disabled={!editor}
-          className={`p-1.5 transition-colors ${
-            editor?.isActive('highlight')
-              ? 'bg-yellow-200/90 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-400'
-              : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+          className={`px-1.5 py-1 flex flex-col items-center justify-center transition-colors ${
+            isHighlightActive
+              ? 'text-yellow-400 font-semibold'
+              : 'text-zinc-300 hover:text-white'
           } ${!editor ? 'opacity-40 cursor-not-allowed' : ''}`}
-          title="Highlight Text"
+          title="Highlight Text (Click to toggle)"
         >
-          <Highlighter size={14} />
+          <Highlighter size={13} />
+          <div 
+            className="w-3.5 h-[3px] mt-0.5 rounded-full shadow-xs" 
+            style={{ backgroundColor: currentColorBar }} 
+          />
         </button>
 
+        {/* Right: Chevron Arrow to open palette */}
         <button
           type="button"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (editor) setOpenState(!openState);
+            if (editor) handleToggle();
           }}
           disabled={!editor}
-          className={`p-1 pl-0.5 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
+          className={`py-1.5 px-1 text-zinc-400 hover:text-white transition-colors ${
             !editor ? 'opacity-40 cursor-not-allowed' : ''
           }`}
           title="Highlight Colors"
         >
-          <ChevronDown size={10} />
+          <ChevronDown size={10} className="opacity-70" />
         </button>
       </div>
 
-      {openState && editor && (
+      {openState && editor && coords && typeof document !== 'undefined' && createPortal(
         <div
-          className={`absolute ${placement === "top" ? "bottom-full mb-1" : "top-full mt-1"} left-0 w-44 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl p-2 z-[10000] text-xs font-sans`}
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            maxHeight: coords.maxHeight !== undefined ? `${coords.maxHeight}px` : undefined,
+            width: '168px',
+            zIndex: 999999,
+          }}
+          className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-2.5 text-white font-sans text-xs"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
           }}
         >
-          <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5 px-1">
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 px-0.5">
             Highlight Color
           </div>
           <div className="grid grid-cols-4 gap-1.5 mb-2">
@@ -1020,13 +1271,17 @@ export function HighlightDropdown({
                   e.preventDefault();
                   e.stopPropagation();
                   editor.chain().focus().setHighlight({ color: c.color }).run();
-                  if (onClose) onClose();
-                  else setInternalOpen(false);
+                  setLastHighlightColor(c.color);
+                  handleClose();
                 }}
-                className="w-7 h-7 rounded border border-zinc-300 dark:border-zinc-700 hover:scale-110 active:scale-95 transition-transform flex items-center justify-center shadow-xs"
+                className="w-7 h-7 rounded border border-zinc-700 hover:scale-110 active:scale-95 transition-transform flex items-center justify-center shadow-xs"
                 style={{ backgroundColor: c.color }}
                 title={c.label}
-              />
+              >
+                {activeHighlight === c.color && (
+                  <span className="text-black text-xs font-bold">✓</span>
+                )}
+              </button>
             ))}
           </div>
 
@@ -1036,15 +1291,211 @@ export function HighlightDropdown({
               e.preventDefault();
               e.stopPropagation();
               editor.chain().focus().unsetHighlight().run();
-              if (onClose) onClose();
-              else setInternalOpen(false);
+              handleClose();
             }}
-            className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
+            className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded transition-colors"
           >
-            <span className="w-4 h-4 rounded border border-dashed border-zinc-400 flex items-center justify-center text-[10px] text-red-500">✕</span>
+            <span className="w-4 h-4 rounded border border-dashed border-zinc-500 flex items-center justify-center text-[10px] text-red-400">✕</span>
             <span>No Color</span>
           </button>
-        </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// Font Color Dropdown Component (Word & OneNote split button style)
+export function TextColorDropdown({
+  editor,
+  isOpen,
+  onToggle,
+  onClose,
+  placement = "bottom",
+}: {
+  editor: Editor | null;
+  isOpen?: boolean;
+  onToggle?: () => void;
+  onClose?: () => void;
+  placement?: "bottom" | "top";
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const openState = isOpen !== undefined ? isOpen : internalOpen;
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = () => {
+    if (onToggle) onToggle();
+    else setInternalOpen(!internalOpen);
+  };
+
+  const handleClose = () => {
+    if (onClose) onClose();
+    else setInternalOpen(false);
+  };
+
+  const coords = usePortalDropdown({
+    triggerRef,
+    isOpen: openState,
+    placement,
+    dropdownWidth: 196,
+    dropdownHeight: 250,
+  });
+
+  const activeTextColor = editor?.getAttributes('textStyle')?.color || null;
+  const [lastTextColor, setLastTextColor] = useState<string>('#ef4444');
+  const displayColor = activeTextColor || lastTextColor;
+
+  useEffect(() => {
+    if (!openState) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      handleClose();
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [openState, onClose]);
+
+  return (
+    <div className="relative inline-flex items-center" ref={triggerRef}>
+      <div className={`flex items-center rounded overflow-hidden border ${
+        openState ? 'border-zinc-500 bg-zinc-800' : 'border-transparent hover:bg-zinc-800/80'
+      }`}>
+        {/* Left: Letter 'A' + color underline bar */}
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            if (!editor) return;
+            editor.chain().focus().setColor(displayColor).run();
+          }}
+          disabled={!editor}
+          className={`px-1.5 py-1 flex flex-col items-center justify-center transition-colors ${
+            activeTextColor
+              ? 'text-white font-semibold'
+              : 'text-zinc-300 hover:text-white'
+          } ${!editor ? 'opacity-40 cursor-not-allowed' : ''}`}
+          title="Font Color (Click to apply)"
+        >
+          <span className="font-serif text-xs font-bold leading-none">A</span>
+          <div 
+            className="w-3.5 h-[3px] mt-0.5 rounded-full shadow-xs" 
+            style={{ backgroundColor: displayColor }} 
+          />
+        </button>
+
+        {/* Right: Chevron Arrow to open palette */}
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (editor) handleToggle();
+          }}
+          disabled={!editor}
+          className={`py-1.5 px-1 text-zinc-400 hover:text-white transition-colors ${
+            !editor ? 'opacity-40 cursor-not-allowed' : ''
+          }`}
+          title="Font Colors"
+        >
+          <ChevronDown size={10} className="opacity-70" />
+        </button>
+      </div>
+
+      {openState && editor && coords && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            maxHeight: coords.maxHeight !== undefined ? `${coords.maxHeight}px` : undefined,
+            width: '196px',
+            zIndex: 999999,
+          }}
+          className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-2.5 text-white font-sans text-xs"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 px-0.5">
+            Font Color
+          </div>
+
+          {/* Automatic (Default/Inherit) */}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              editor.chain().focus().unsetColor().run();
+              handleClose();
+            }}
+            className="w-full flex items-center gap-2 px-2 py-1 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded transition-colors mb-2"
+          >
+            <div className="w-3.5 h-3.5 rounded-sm border border-zinc-500 bg-white flex items-center justify-center text-[9px] text-zinc-900 font-bold">A</div>
+            <span>Automatic</span>
+          </button>
+
+          {/* Color Palette Grid */}
+          <div className="grid grid-cols-5 gap-1.5 mb-2">
+            {TEXT_PALETTE_COLORS.map((c) => (
+              <button
+                key={c.color}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  editor.chain().focus().setColor(c.color).run();
+                  setLastTextColor(c.color);
+                  handleClose();
+                }}
+                className={`w-6 h-6 rounded-sm border transition-transform hover:scale-115 active:scale-95 flex items-center justify-center shadow-xs ${
+                  activeTextColor?.toLowerCase() === c.color.toLowerCase()
+                    ? 'border-white ring-2 ring-white/50 scale-105'
+                    : 'border-zinc-700 hover:border-zinc-400'
+                }`}
+                style={{ backgroundColor: c.color }}
+                title={c.label}
+              >
+                {activeTextColor?.toLowerCase() === c.color.toLowerCase() && (
+                  <span className={`text-[10px] font-bold ${['#ffffff', '#fef08a', '#eab308', '#84cc16', '#bae6fd', '#bbf7d0'].includes(c.color.toLowerCase()) ? 'text-black' : 'text-white'}`}>✓</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="border-t border-zinc-800 my-1.5" />
+
+          {/* Custom Color Native Trigger */}
+          <label className="w-full flex items-center justify-between px-2 py-1 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded cursor-pointer transition-colors relative">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full border border-zinc-500 bg-gradient-to-tr from-rose-500 via-amber-400 to-indigo-500 shadow-xs" />
+              <span>More Colors...</span>
+            </div>
+            <input
+              type="color"
+              value={activeTextColor || '#ef4444'}
+              onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                const newColor = e.target.value;
+                editor.chain().focus().setColor(newColor).run();
+                setLastTextColor(newColor);
+                handleClose();
+              }}
+              className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
+            />
+          </label>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1067,7 +1518,7 @@ interface TipTapEditorProps {
 
 export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor, onEditorUpdate, onBlurText }: TipTapEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [openBubbleHighlight, setOpenBubbleHighlight] = useState(false);
+  const [activeBubbleDropdown, setActiveBubbleDropdown] = useState<string | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -1169,7 +1620,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
             if (!editor || editor.isDestroyed) return false;
             return !editor.state.selection.empty;
           }}
-          className="flex items-center bg-zinc-900/95 text-white rounded-xl shadow-2xl border border-zinc-700/80 px-2 py-1.5 z-[9999] backdrop-blur-md gap-1 max-w-[calc(100vw-32px)] overflow-x-auto no-scrollbar"
+          className="flex items-center bg-zinc-900/95 text-white rounded-xl shadow-2xl border border-zinc-700/80 px-2 py-1.5 z-[9999] backdrop-blur-md gap-1 max-w-[calc(100vw-32px)] overflow-x-auto md:overflow-visible no-scrollbar"
         >
           {/* Styles Dropdown (Normal, H1, H2, H3, Quote, Code) */}
           <BubbleDropdown
@@ -1177,6 +1628,10 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
             value={getCurrentStyle(editor)}
             options={STYLE_OPTIONS}
             width="w-32"
+            dropdownWidth={130}
+            isOpen={activeBubbleDropdown === 'style'}
+            onToggle={() => setActiveBubbleDropdown(activeBubbleDropdown === 'style' ? null : 'style')}
+            onClose={() => setActiveBubbleDropdown(null)}
             onSelect={(val) => applyStyle(editor, val)}
           />
 
@@ -1186,6 +1641,10 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
             value={editor.getAttributes('textStyle').fontFamily || ""}
             options={FONT_OPTIONS}
             width="w-36"
+            dropdownWidth={160}
+            isOpen={activeBubbleDropdown === 'font'}
+            onToggle={() => setActiveBubbleDropdown(activeBubbleDropdown === 'font' ? null : 'font')}
+            onClose={() => setActiveBubbleDropdown(null)}
             onSelect={(val) => {
               if (val === "") {
                 editor.chain().focus().unsetFontFamily().run();
@@ -1201,6 +1660,10 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
             value={editor.getAttributes('textStyle').fontSize || ""}
             options={SIZE_OPTIONS}
             width="w-20"
+            dropdownWidth={90}
+            isOpen={activeBubbleDropdown === 'size'}
+            onToggle={() => setActiveBubbleDropdown(activeBubbleDropdown === 'size' ? null : 'size')}
+            onClose={() => setActiveBubbleDropdown(null)}
             onSelect={(val) => {
               if (val === "") {
                 (editor.chain().focus() as any).unsetFontSize().run();
@@ -1324,39 +1787,19 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
           <HighlightDropdown 
             editor={editor}
             placement="bottom"
-            isOpen={openBubbleHighlight}
-            onToggle={() => setOpenBubbleHighlight(!openBubbleHighlight)}
-            onClose={() => setOpenBubbleHighlight(false)}
+            isOpen={activeBubbleDropdown === 'highlight'}
+            onToggle={() => setActiveBubbleDropdown(activeBubbleDropdown === 'highlight' ? null : 'highlight')}
+            onClose={() => setActiveBubbleDropdown(null)}
           />
 
-          {/* Quick Color Dots */}
-          <div className="flex items-center gap-1 px-1">
-            {['#ffffff', '#000000', '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'].map(color => (
-              <button
-                key={color}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  editor.chain().focus().setColor(color).run();
-                }}
-                className={`w-3.5 h-3.5 rounded-full border transition-transform hover:scale-125 ${
-                  editor.getAttributes('textStyle')?.color === color ? 'border-white scale-110 ring-1 ring-white/50' : 'border-zinc-600'
-                }`}
-                style={{ backgroundColor: color }}
-                title={color}
-              />
-            ))}
-            <input
-              type="color"
-              className="w-4 h-4 p-0 border-0 rounded cursor-pointer bg-transparent"
-              value={editor.getAttributes('textStyle')?.color || '#ffffff'}
-              onPointerDown={(e) => e.stopPropagation()}
-              onInput={(e) => {
-                editor.chain().focus().setColor((e.target as HTMLInputElement).value).run();
-              }}
-              title="More Colors"
-            />
-          </div>
+          {/* Font Color Dropdown (Word & OneNote style) */}
+          <TextColorDropdown 
+            editor={editor}
+            placement="bottom"
+            isOpen={activeBubbleDropdown === 'textColor'}
+            onToggle={() => setActiveBubbleDropdown(activeBubbleDropdown === 'textColor' ? null : 'textColor')}
+            onClose={() => setActiveBubbleDropdown(null)}
+          />
 
           <div className="w-px h-5 bg-zinc-700/80 self-center mx-0.5" />
 
@@ -1422,6 +1865,9 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
           <LineSpacingDropdown 
             editor={editor}
             placement="bottom"
+            isOpen={activeBubbleDropdown === 'spacing'}
+            onToggle={() => setActiveBubbleDropdown(activeBubbleDropdown === 'spacing' ? null : 'spacing')}
+            onClose={() => setActiveBubbleDropdown(null)}
           />
 
           <div className="w-px h-5 bg-zinc-700/80 self-center mx-0.5" />

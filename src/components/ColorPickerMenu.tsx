@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { HexColorPicker, HexColorInput } from "react-colorful";
 
 export type ColorPickerType = 'text' | 'drawing' | 'page';
@@ -48,8 +49,44 @@ const PAGE_COLORS = [
 
 export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }: ColorPickerMenuProps) {
   const [isMoreColorsMode, setIsMoreColorsMode] = useState(false);
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
 
-  if (!isOpen) return null;
+  const updatePosition = useCallback(() => {
+    if (!anchorRef.current || typeof window === 'undefined') return;
+    const parent = anchorRef.current.parentElement;
+    if (!parent) return;
+    const rect = parent.getBoundingClientRect();
+    const menuWidth = 220;
+    const menuHeight = 320;
+
+    let left = rect.left;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - menuWidth - 8);
+    }
+    if (left < 8) left = 8;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < menuHeight && rect.top > menuHeight) {
+      setCoords({ bottom: window.innerHeight - rect.top + 4, left });
+    } else {
+      setCoords({ top: rect.bottom + 4, left });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setCoords(null);
+      return;
+    }
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen, updatePosition]);
 
   const handleMoreColors = () => {
     setIsMoreColorsMode(true);
@@ -62,12 +99,22 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={handleClose} />
-      <div 
-        className="absolute top-full left-0 mt-1 bg-[#2c2c2c] border border-[#444] rounded shadow-xl z-50 p-3 min-w-[200px] flex flex-col gap-3 font-sans text-sm text-zinc-200" 
-        onClick={e => e.stopPropagation()}
-        onMouseDown={e => e.preventDefault()}
-      >
+      <span ref={anchorRef} className="hidden" />
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <>
+          <div className="fixed inset-0 z-[999998]" onClick={handleClose} />
+          <div 
+            style={{
+              position: 'fixed',
+              top: coords.top !== undefined ? `${coords.top}px` : undefined,
+              bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+              left: `${coords.left}px`,
+              zIndex: 999999,
+            }}
+            className="bg-[#2c2c2c] border border-[#444] rounded shadow-2xl p-3 min-w-[200px] flex flex-col gap-3 font-sans text-sm text-zinc-200" 
+            onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.preventDefault()}
+          >
         
         {isMoreColorsMode ? (
           <div className="flex flex-col gap-3">
@@ -219,6 +266,9 @@ export function ColorPickerMenu({ isOpen, onClose, activeColor, onChange, type }
           </>
         )}
       </div>
+        </>,
+        document.body
+      )}
     </>
   );
 }
