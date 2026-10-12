@@ -5,7 +5,7 @@ import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor, LineSpacingDropdown, executeIndent, executeOutdent } from "./TipTapEditor";
 import type { Editor } from "@tiptap/react";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -485,6 +485,9 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [mobileActiveEditor, setMobileActiveEditor] = useState<Editor | null>(null);
+  const [editorUpdateTick, setEditorUpdateTick] = useState(0);
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
+  const [activeTray, setActiveTray] = useState<'none' | 'insert' | 'format'>('none');
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -509,22 +512,31 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
     const handleFocusOut = () => {
       setTimeout(() => {
-        if (!isEditable(document.activeElement)) {
+        const active = document.activeElement;
+        const isStillInToolbar = Boolean(active?.closest('[data-mobile-toolbar="true"]'));
+        if (!isEditable(active) && !isStillInToolbar) {
           setIsKeyboardOpen(false);
           setKeyboardOffset(0);
         }
-      }, 80);
+      }, 150);
     };
 
     const updateViewport = () => {
       if (!window.visualViewport) return;
-      const isFocused = isEditable(document.activeElement);
+      const active = document.activeElement;
+      const isFocused = isEditable(active) || Boolean(active?.closest('[data-mobile-toolbar="true"]'));
       const offset = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
-      // Software keyboard is only open if an editable element is actively focused and viewport is significantly compressed
-      const isKbd = isFocused && offset > 60;
+      const isKbd = isFocused && offset > 50;
       
-      setIsKeyboardOpen(isKbd);
-      setKeyboardOffset(isKbd ? Math.max(0, offset) : 0);
+      if (isKbd) {
+        setIsKeyboardOpen(true);
+        setKeyboardOffset(Math.max(0, offset));
+      } else if (isFocused) {
+        setKeyboardOffset(Math.max(0, offset));
+      } else {
+        setIsKeyboardOpen(false);
+        setKeyboardOffset(0);
+      }
     };
 
     window.addEventListener("focusin", handleFocusIn);
@@ -878,6 +890,12 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     return <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading notes...</div>;
   }
 
+  const executeFormat = (action: () => void) => {
+    if (!mobileActiveEditor) return;
+    action();
+    setEditorUpdateTick(t => t + 1);
+  };
+
   return (
     <div 
       className={`fixed inset-0 w-full h-[100dvh] flex flex-col overflow-hidden select-none ${
@@ -1102,8 +1120,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                 {block.type === 'text' && (
                   <div 
                     id={`block-${block.id}`}
-                    className={`w-full min-h-[50px] relative rounded-xl transition-all duration-200 ${
-                      isSelected && !isRearranging ? 'ring-1 ring-primary-500/40 bg-zinc-50/50 dark:bg-zinc-900/30' : ''
+                    className={`w-[calc(100%+24px)] -mx-3 px-3.5 py-2 min-h-[50px] relative rounded-xl transition-all duration-200 ${
+                      isSelected && !isRearranging ? 'ring-1 ring-primary-500/50 bg-zinc-50/50 dark:bg-zinc-900/30' : ''
                     } ${isRearranging ? 'pointer-events-none' : ''}`}
                     style={{
                       minHeight: strokeExtent.hasStrokes ? Math.max(50, strokeExtent.maxY + 24) : undefined,
@@ -1134,6 +1152,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                         setMobileActiveEditor(editor);
                         if (editor) setIsKeyboardOpen(true);
                       }}
+                      onEditorUpdate={() => setEditorUpdateTick(t => t + 1)}
                       onBlurText={() => {
                         setTimeout(() => {
                           const active = document.activeElement;
@@ -1141,14 +1160,15 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                             active.tagName === 'INPUT' || 
                             active.tagName === 'TEXTAREA' || 
                             (active as HTMLElement).isContentEditable ||
-                            Boolean(active.closest('.ProseMirror'))
+                            Boolean(active.closest('.ProseMirror')) ||
+                            Boolean(active.closest('[data-mobile-toolbar="true"]'))
                           );
                           if (!isStillEditing) {
                             setIsKeyboardOpen(false);
                             setKeyboardOffset(0);
                             setMobileActiveEditor(null);
                           }
-                        }, 120);
+                        }, 150);
                       }}
                     />
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
@@ -1359,162 +1379,448 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         </div>
       )}
 
-      {/* Mobile Keyboard Formatting Toolbar (Word / OneNote Mobile Style) */}
-      {isKeyboardOpen && mobileActiveEditor && (
+      {/* Mobile Keyboard Formatting Toolbar (Google Keep + Samsung Notes Hybrid Style) */}
+      {(isKeyboardOpen || mobileActiveEditor) && (
         <div 
-          className="fixed left-0 right-0 z-[1500] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-200/80 dark:border-zinc-800/80 px-2 py-1 shadow-lg flex items-center justify-between"
+          data-mobile-toolbar="true"
+          className="fixed left-0 right-0 z-[1500] pointer-events-auto transition-all duration-200"
           style={{ bottom: keyboardOffset ? `${keyboardOffset}px` : 'env(safe-area-inset-bottom, 0px)' }}
+          onPointerDown={(e) => e.preventDefault()}
           onMouseDown={(e) => e.preventDefault()}
         >
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-            {/* Bold */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleBold().run()}
-              className={`p-1.5 rounded transition-colors ${mobileActiveEditor.isActive('bold') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white font-bold' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Bold"
+          {/* 1. Toggle-able Insert Drawer (Google Keep / Samsung Notes style) */}
+          {activeTray === 'insert' && isToolbarExpanded && (
+            <div 
+              className="mx-2 mb-1.5 p-2 rounded-2xl bg-zinc-900/95 text-white backdrop-blur-2xl border border-zinc-700/80 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150"
             >
-              <Bold size={17} />
-            </button>
+              <div className="flex items-center justify-between px-1 mb-2">
+                <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Insert Into Note</span>
+                <button 
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => setActiveTray('none')}
+                  className="text-zinc-400 hover:text-white p-1 rounded-full text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {/* Photo / Image */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setActiveTray('none');
+                    imageInputRef.current?.click();
+                  }}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
+                >
+                  <ImageIcon size={20} className="text-blue-400 mb-1" />
+                  <span className="text-[11px] font-medium leading-none">Photo</span>
+                </button>
 
-            {/* Italic */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleItalic().run()}
-              className={`p-1.5 rounded transition-colors ${mobileActiveEditor.isActive('italic') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white italic' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Italic"
+                {/* Voice / Audio Note */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setActiveTray('none');
+                    onToggleMeeting();
+                  }}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
+                >
+                  <Mic size={20} className="text-red-400 mb-1" />
+                  <span className="text-[11px] font-medium leading-none">Voice</span>
+                </button>
+
+                {/* Drawing / Sketch */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setActiveTray('none');
+                    if (activeBlockId) {
+                      const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
+                      openDrawOverlay(activeBlockId, activeBlock?.type || 'block', activeBlock?.y);
+                    } else {
+                      startNewSketchBlock();
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
+                >
+                  <PenTool size={20} className="text-amber-400 mb-1" />
+                  <span className="text-[11px] font-medium leading-none">Drawing</span>
+                </button>
+
+                {/* Checklist */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setActiveTray('none');
+                    if (mobileActiveEditor) {
+                      executeFormat(() => (mobileActiveEditor.chain().focus() as any)?.toggleTaskList().run());
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
+                >
+                  <CheckSquare size={20} className="text-emerald-400 mb-1" />
+                  <span className="text-[11px] font-medium leading-none">Checklist</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Toggle-able Text Formatting Drawer (Samsung Notes / Word style) */}
+          {activeTray === 'format' && isToolbarExpanded && mobileActiveEditor && (
+            <div 
+              className="mx-2 mb-1.5 p-2.5 rounded-2xl bg-zinc-900/95 text-white backdrop-blur-2xl border border-zinc-700/80 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150 max-h-56 overflow-y-auto"
             >
-              <Italic size={17} />
-            </button>
+              <div className="flex items-center justify-between px-1 mb-2">
+                <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Text Formatting</span>
+                <button 
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => setActiveTray('none')}
+                  className="text-zinc-400 hover:text-white p-1 rounded-full text-xs"
+                >
+                  ✕
+                </button>
+              </div>
 
-            {/* Underline */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleUnderline().run()}
-              className={`p-1.5 rounded transition-colors ${mobileActiveEditor.isActive('underline') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Underline"
+              {/* Styles: Normal, H1, H2, H3, Quote */}
+              <div className="flex items-center gap-1.5 mb-2.5 overflow-x-auto no-scrollbar py-0.5">
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().setParagraph().run())}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    !mobileActiveEditor.isActive('heading') && !mobileActiveEditor.isActive('blockquote')
+                      ? 'bg-primary-600 text-white border-primary-500'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Normal
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleHeading({ level: 1 }).run())}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                    mobileActiveEditor.isActive('heading', { level: 1 })
+                      ? 'bg-primary-600 text-white border-primary-500'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  H1
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleHeading({ level: 2 }).run())}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                    mobileActiveEditor.isActive('heading', { level: 2 })
+                      ? 'bg-primary-600 text-white border-primary-500'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  H2
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleHeading({ level: 3 }).run())}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                    mobileActiveEditor.isActive('heading', { level: 3 })
+                      ? 'bg-primary-600 text-white border-primary-500'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  H3
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleBlockquote().run())}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    mobileActiveEditor.isActive('blockquote')
+                      ? 'bg-primary-600 text-white border-primary-500'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  Quote
+                </button>
+              </div>
+
+              {/* Formatting Actions Row */}
+              <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
+                {/* Line & Paragraph Spacing Dropdown */}
+                <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400">Spacing:</span>
+                  <LineSpacingDropdown editor={mobileActiveEditor} placement="top" dropdownWidth={240} />
+                </div>
+
+                <div className="w-px h-5 bg-zinc-700 mx-1" />
+
+                {/* Indent / Outdent */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => executeOutdent(mobileActiveEditor))}
+                    className="p-1.5 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                    title="Outdent"
+                  >
+                    <OutdentIcon size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => executeIndent(mobileActiveEditor))}
+                    className="p-1.5 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                    title="Indent"
+                  >
+                    <IndentIcon size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. Main Keyboard Toolbar (Height ~48px, comfortable tap targets) */}
+          {isToolbarExpanded ? (
+            <div 
+              className="h-[48px] bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/80 px-2 shadow-lg flex items-center justify-between text-white"
             >
-              <UnderlineIcon size={17} />
-            </button>
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+                {/* Option Button 1: Insert Drawer Toggle */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => setActiveTray(prev => prev === 'insert' ? 'none' : 'insert')}
+                  className={`h-9 px-2.5 rounded-lg flex items-center gap-1 font-semibold text-xs transition-all active:scale-95 ${
+                    activeTray === 'insert'
+                      ? 'bg-primary-600 text-white shadow-xs'
+                      : 'bg-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-750'
+                  }`}
+                  title="Insert options"
+                >
+                  <Plus size={18} className={activeTray === 'insert' ? 'rotate-45 transition-transform' : 'transition-transform'} />
+                  <span className="hidden sm:inline">Insert</span>
+                </button>
 
-            {/* Strikethrough */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleStrike().run()}
-              className={`p-1.5 rounded transition-colors ${mobileActiveEditor.isActive('strike') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Strikethrough"
-            >
-              <Strikethrough size={17} />
-            </button>
+                {/* Option Button 2: Text Format Drawer Toggle */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => setActiveTray(prev => prev === 'format' ? 'none' : 'format')}
+                  className={`h-9 px-2.5 rounded-lg flex items-center gap-1 font-semibold text-xs transition-all active:scale-95 ${
+                    activeTray === 'format'
+                      ? 'bg-primary-600 text-white shadow-xs'
+                      : 'bg-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-750'
+                  }`}
+                  title="Text formatting"
+                >
+                  <Type size={18} />
+                  <span className="hidden sm:inline">Format</span>
+                </button>
 
-            {/* Highlighter */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                if (mobileActiveEditor.isActive('highlight')) {
-                  mobileActiveEditor.chain().focus().unsetHighlight().run();
-                } else {
-                  mobileActiveEditor.chain().focus().setHighlight({ color: '#fef08a' }).run();
-                }
-              }}
-              className={`p-1.5 rounded transition-colors ${mobileActiveEditor.isActive('highlight') ? 'bg-yellow-200 dark:bg-yellow-900/60 text-yellow-800 dark:text-yellow-400' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Highlight"
-            >
-              <Highlighter size={17} />
-            </button>
+                <div className="w-px h-6 bg-zinc-700/80 mx-1 flex-shrink-0" />
 
-            <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+                {/* Quick Action: Checklist */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => (mobileActiveEditor.chain().focus() as any)?.toggleTaskList().run())}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      (mobileActiveEditor as any)?.isActive('taskList')
+                        ? 'bg-primary-600/30 text-primary-400 font-bold border border-primary-500/50'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Checklist"
+                  >
+                    <CheckSquare size={19} />
+                  </button>
+                )}
 
-            {/* Headings */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleHeading({ level: 1 }).run()}
-              className={`px-2 py-1 text-xs font-bold rounded transition-colors ${mobileActiveEditor.isActive('heading', { level: 1 }) ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Heading 1"
-            >
-              H1
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`px-2 py-1 text-xs font-bold rounded transition-colors ${mobileActiveEditor.isActive('heading', { level: 2 }) ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Heading 2"
-            >
-              H2
-            </button>
+                {/* Quick Action: Bold */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleBold().run())}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      mobileActiveEditor.isActive('bold')
+                        ? 'bg-zinc-700 text-white font-bold border border-zinc-600'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Bold"
+                  >
+                    <Bold size={19} />
+                  </button>
+                )}
 
-            <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+                {/* Quick Action: Italic */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleItalic().run())}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      mobileActiveEditor.isActive('italic')
+                        ? 'bg-zinc-700 text-white font-bold border border-zinc-600'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Italic"
+                  >
+                    <Italic size={19} />
+                  </button>
+                )}
 
-            {/* Lists */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleBulletList().run()}
-              className={`p-1.5 rounded transition-colors ${mobileActiveEditor.isActive('bulletList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Bullet List"
-            >
-              <List size={17} />
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => mobileActiveEditor.chain().focus().toggleOrderedList().run()}
-              className={`p-1.5 rounded transition-colors ${mobileActiveEditor.isActive('orderedList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Numbered List"
-            >
-              <ListOrdered size={17} />
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => (mobileActiveEditor.chain().focus() as any)?.toggleTaskList().run()}
-              className={`p-1.5 rounded transition-colors ${(mobileActiveEditor as any)?.isActive('taskList') ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400'}`}
-              title="Checklist"
-            >
-              <CheckSquare size={17} />
-            </button>
+                {/* Quick Action: Underline */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleUnderline().run())}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      mobileActiveEditor.isActive('underline')
+                        ? 'bg-zinc-700 text-white font-bold border border-zinc-600'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Underline"
+                  >
+                    <UnderlineIcon size={19} />
+                  </button>
+                )}
 
-            <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+                {/* Quick Action: Strikethrough */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleStrike().run())}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      mobileActiveEditor.isActive('strike')
+                        ? 'bg-zinc-700 text-white font-bold border border-zinc-600'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Strikethrough"
+                  >
+                    <Strikethrough size={19} />
+                  </button>
+                )}
 
-            {/* Indent / Outdent */}
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => executeOutdent(mobileActiveEditor)}
-              className="p-1.5 rounded text-zinc-600 dark:text-zinc-400"
-              title="Outdent"
-            >
-              <OutdentIcon size={17} />
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => executeIndent(mobileActiveEditor)}
-              className="p-1.5 rounded text-zinc-600 dark:text-zinc-400"
-              title="Indent"
-            >
-              <IndentIcon size={17} />
-            </button>
+                {/* Quick Action: Highlight */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => {
+                      if (mobileActiveEditor.isActive('highlight')) {
+                        mobileActiveEditor.chain().focus().unsetHighlight().run();
+                      } else {
+                        mobileActiveEditor.chain().focus().setHighlight({ color: '#fef08a' }).run();
+                      }
+                    })}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      mobileActiveEditor.isActive('highlight')
+                        ? 'bg-yellow-500/25 text-yellow-300 border border-yellow-500/40'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Highlight"
+                  >
+                    <Highlighter size={19} />
+                  </button>
+                )}
 
-            <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+                {/* Quick Action: Bullet List */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleBulletList().run())}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      mobileActiveEditor.isActive('bulletList')
+                        ? 'bg-zinc-700 text-white font-bold border border-zinc-600'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Bullet List"
+                  >
+                    <List size={19} />
+                  </button>
+                )}
 
-            {/* Line Spacing */}
-            <LineSpacingDropdown 
-              editor={mobileActiveEditor}
-              placement="top"
-            />
-          </div>
+                {/* Quick Action: Numbered List */}
+                {mobileActiveEditor && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => executeFormat(() => mobileActiveEditor.chain().focus().toggleOrderedList().run())}
+                    className={`h-9 min-w-[36px] px-2 rounded-lg flex items-center justify-center transition-all active:scale-95 ${
+                      mobileActiveEditor.isActive('orderedList')
+                        ? 'bg-zinc-700 text-white font-bold border border-zinc-600'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                    title="Numbered List"
+                  >
+                    <ListOrdered size={19} />
+                  </button>
+                )}
+              </div>
 
-          {/* Dismiss Keyboard Button */}
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              if (typeof document !== 'undefined' && document.activeElement) {
-                (document.activeElement as HTMLElement)?.blur?.();
-              }
-              setIsKeyboardOpen(false);
-              setKeyboardOffset(0);
-            }}
-            className="p-1.5 ml-1 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 rounded-lg flex-shrink-0"
-            title="Dismiss Keyboard"
-          >
-            <ChevronDown size={20} />
-          </button>
+              {/* Right side controls: Toggle Toolbar & Dismiss Keyboard */}
+              <div className="flex items-center gap-1 pl-1 border-l border-zinc-800">
+                {/* Toggle on/off button */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setIsToolbarExpanded(false);
+                    setActiveTray('none');
+                  }}
+                  className="h-9 w-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                  title="Minimize Toolbar"
+                >
+                  <Minimize2 size={16} />
+                </button>
+
+                {/* Dismiss Keyboard */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (typeof document !== 'undefined' && document.activeElement) {
+                      (document.activeElement as HTMLElement)?.blur?.();
+                    }
+                    setIsKeyboardOpen(false);
+                    setKeyboardOffset(0);
+                    setActiveTray('none');
+                  }}
+                  className="h-9 w-9 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                  title="Dismiss Keyboard"
+                >
+                  <ChevronDown size={20} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Collapsed Toolbar Pill (User toggled it off, easily tap to restore!) */
+            <div className="flex justify-end p-2 pointer-events-auto">
+              <button
+                type="button"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => setIsToolbarExpanded(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/95 text-white border border-zinc-700 shadow-xl backdrop-blur-xl text-xs font-semibold active:scale-95 transition-all"
+                title="Expand Toolbar"
+              >
+                <Type size={14} className="text-primary-400" />
+                <span>Format</span>
+                <ChevronUp size={14} className="opacity-70" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
