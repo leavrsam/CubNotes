@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "src/**",
     "src-tauri/**",
+    "android/**",
+    "supabase/**",
+    "test-crash.js",
   ]),
 ]);
 
