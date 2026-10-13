@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { formatGeminiErrorMessage } from '@/lib/geminiRetry';
 
 import { DREWS_PITCH_AUDIO_ID, DREWS_PITCH_SUMMARY, DREWS_PITCH_TRANSCRIPT } from '@/lib/drewsPitchData';
 
@@ -242,9 +243,7 @@ Return ONLY valid JSON matching this schema:
     console.error('Transcription error:', error);
     const errMsg = String(error?.message || error);
     const isTransient = errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
-    const friendlyError = isTransient
-      ? "Google Gemini is currently experiencing high demand. Please try again in a few moments."
-      : (error.message || 'Failed to process audio recording.');
+    const friendlyError = formatGeminiErrorMessage(error, 'Failed to process audio recording.');
 
     return NextResponse.json({ 
       success: false,

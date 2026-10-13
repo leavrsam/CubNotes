@@ -621,17 +621,29 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       if (useMeetingNotes) {
         const textParts = texts.map(t => t.content.replace(/<[^>]*>?/gm, '')).filter(Boolean);
         const audioParts = (audios || []).map(a => `${a.title || 'Meeting'}: ${a.summary || ''} ${a.transcript || ''}`).filter(Boolean);
-        notesContent = [...textParts, ...audioParts].join('\n\n');
+        notesContent = [...textParts, ...audioParts].join('\n\n').trim();
+
+        if (!notesContent) {
+          toast.error("No notes or meeting recordings found on this page to build a flowchart from.", { id: toastId });
+          setIsGeneratingFlowchart(false);
+          return;
+        }
       }
+
+      const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
 
       const res = await fetch('/api/generate-flowchart', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(customKey ? { 'x-gemini-api-key': customKey } : {})
+        },
         body: JSON.stringify({
           prompt: customPrompt || aiFlowchartPrompt,
           notes: notesContent,
           startX: Math.round(centerX),
-          startY: Math.round(centerY)
+          startY: Math.round(centerY),
+          apiKey: customKey || undefined
         })
       });
 
@@ -650,7 +662,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         setAiFlowchartPrompt("");
       }
     } catch (err: any) {
-      toast.error(err.message || "Flowchart generation failed", { id: toastId });
+      const rawMsg = err?.message || String(err);
+      let cleanMsg = rawMsg;
+      if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
+        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+      } else if (rawMsg.trim().startsWith('{') && rawMsg.includes('"message"')) {
+        try {
+          const parsed = JSON.parse(rawMsg);
+          cleanMsg = parsed?.error?.message || parsed?.message || rawMsg;
+        } catch {}
+      }
+      toast.error(cleanMsg || "Flowchart generation failed", { id: toastId });
     } finally {
       setIsGeneratingFlowchart(false);
     }
@@ -1536,14 +1558,23 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         return;
       }
 
+      const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
+
       const res = await fetch('/api/organize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(promptData)
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(customKey ? { 'x-gemini-api-key': customKey } : {})
+        },
+        body: JSON.stringify({
+          ...promptData,
+          apiKey: customKey || undefined
+        })
       });
 
-      if (!res.ok) throw new Error("Failed to organize");
-      const { organizedHtml } = await res.json();
+      const resData = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(resData?.error || "Failed to organize");
+      const organizedHtml = resData?.organizedHtml || "";
 
       // Replace selected texts and audios with one big text node
       const bounds = getSelectionBounds();
@@ -1577,8 +1608,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       }).catch(err => console.error("Failed to sync organized text embedding", err));
 
       toast.success("Chaos organized!", { id: toastId });
-    } catch (err) {
-      toast.error("Failed to organize chaos.", { id: toastId });
+    } catch (err: any) {
+      const rawMsg = err?.message || String(err);
+      let cleanMsg = rawMsg;
+      if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
+        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+      }
+      toast.error(cleanMsg || "Failed to organize chaos.", { id: toastId });
     }
   };
 

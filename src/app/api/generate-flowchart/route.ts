@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { v4 as uuidv4 } from 'uuid';
 import { ShapeNode, ConnectorNode, FlowchartShapeType, AnchorPosition } from '@/components/CustomCanvas';
+import { callGeminiWithRetry, formatGeminiErrorMessage, isTransientGeminiError } from '@/lib/geminiRetry';
+
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -17,9 +20,14 @@ export async function POST(req: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
+    // Clean and bound notes content to prevent token/memory timeouts
+    const boundedNotes = typeof notes === 'string' && notes.length > 50000 
+      ? notes.slice(0, 50000) + "\n\n[...notes truncated for flowchart processing...]" 
+      : notes;
+
     const userContent = [
       prompt ? `User Prompt / Description: ${prompt}` : "",
-      notes ? `Meeting Notes / Document Context:\n${notes}` : ""
+      boundedNotes ? `Meeting Notes / Document Context:\n${boundedNotes}` : ""
     ].filter(Boolean).join('\n\n');
 
     const systemPrompt = `
@@ -72,13 +80,16 @@ Output MUST be strictly valid JSON matching this schema:
 DO NOT include markdown wrappers or backticks. Return ONLY raw JSON.
 `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [
-        systemPrompt,
-        userContent || "Generate a standard product development workflow from idea to deployment."
-      ],
-    });
+    const response = await callGeminiWithRetry(
+      () => ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: [
+          systemPrompt,
+          userContent || "Generate a standard product development workflow from idea to deployment."
+        ],
+      }),
+      { maxAttempts: 4, initialDelayMs: 1500, label: 'generate-flowchart' }
+    );
 
     let rawText = response.text || "";
     // Clean potential markdown fencing
@@ -173,6 +184,8 @@ DO NOT include markdown wrappers or backticks. Return ONLY raw JSON.
 
   } catch (error: any) {
     console.error("Generate Flowchart Error:", error);
-    return NextResponse.json({ error: error.message || "Failed to generate flowchart" }, { status: 500 });
+    const friendlyMessage = formatGeminiErrorMessage(error, "Failed to generate flowchart");
+    const isTransient = isTransientGeminiError(error);
+    return NextResponse.json({ error: friendlyMessage }, { status: isTransient ? 503 : 500 });
   }
 }

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { callGeminiWithRetry, formatGeminiErrorMessage, isTransientGeminiError } from '@/lib/geminiRetry';
+
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -57,13 +60,16 @@ INSTRUCTIONS:
       text: `User Question: ${question}\n\nAnswer:`
     });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: chatMessages,
-      config: {
-        temperature: 0.2,
-      }
-    });
+    const response = await callGeminiWithRetry(
+      () => ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: chatMessages,
+        config: {
+          temperature: 0.2,
+        }
+      }),
+      { maxAttempts: 4, initialDelayMs: 1500, label: 'meeting-chat' }
+    );
 
     const answer = response.text || "I was unable to find an answer in the meeting transcript.";
 
@@ -73,6 +79,8 @@ INSTRUCTIONS:
     });
   } catch (error: any) {
     console.error("Error in /api/meeting-chat:", error);
-    return NextResponse.json({ error: error.message || "Failed to process question" }, { status: 500 });
+    const friendlyMessage = formatGeminiErrorMessage(error, "Failed to process question");
+    const isTransient = isTransientGeminiError(error);
+    return NextResponse.json({ error: friendlyMessage }, { status: isTransient ? 503 : 500 });
   }
 }

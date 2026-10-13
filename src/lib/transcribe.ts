@@ -1,4 +1,5 @@
 import { DREWS_PITCH_AUDIO_ID, DREWS_PITCH_SUMMARY, DREWS_PITCH_TRANSCRIPT } from './drewsPitchData';
+import { formatGeminiErrorMessage } from './geminiRetry';
 
 export interface TranscribeParams {
   audioBlob?: Blob;
@@ -359,7 +360,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
       throw new Error("Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.");
     }
 
-    throw new Error(`AI Processing failed: ${message}`);
+    throw new Error(formatGeminiErrorMessage(message, "AI Processing failed. Please try again."));
   }
 
   throw new Error('No transcription result returned.');

@@ -168,7 +168,12 @@ export function MeetingWorkspace({
       toast.success("Notes enriched with transcript details!", { id: toastId });
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || "Failed to enhance notes", { id: toastId });
+      const rawMsg = err?.message || String(err);
+      let cleanMsg = rawMsg;
+      if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
+        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+      }
+      toast.error(cleanMsg || "Failed to enhance notes", { id: toastId });
     } finally {
       setIsEnhancing(false);
     }
@@ -216,7 +221,12 @@ export function MeetingWorkspace({
       }
     } catch (err: any) {
       console.error(err);
-      const errHistory = [...newHistory, { role: 'assistant' as const, text: `Error: ${err.message || "Unable to answer question."}` }];
+      const rawMsg = err?.message || String(err);
+      let cleanMsg = rawMsg;
+      if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
+        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+      }
+      const errHistory = [...newHistory, { role: 'assistant' as const, text: `Error: ${cleanMsg || "Unable to answer question."}` }];
       setChatHistory(errHistory);
     } finally {
       setIsAsking(false);

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { callGeminiWithRetry, formatGeminiErrorMessage, isTransientGeminiError } from '@/lib/geminiRetry';
+
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -42,13 +45,16 @@ ${transcript}
 
 Return the enriched notes directly in clean Markdown format:`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        temperature: 0.2,
-      }
-    });
+    const response = await callGeminiWithRetry(
+      () => ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          temperature: 0.2,
+        }
+      }),
+      { maxAttempts: 4, initialDelayMs: 1500, label: 'enhance-notes' }
+    );
 
     const enhancedNotes = response.text || "";
 
@@ -58,6 +64,9 @@ Return the enriched notes directly in clean Markdown format:`;
     });
   } catch (error: any) {
     console.error("Error in /api/enhance-notes:", error);
-    return NextResponse.json({ error: error.message || "Failed to enhance notes" }, { status: 500 });
+    const friendlyMessage = formatGeminiErrorMessage(error, "Failed to enhance notes");
+    const isTransient = isTransientGeminiError(error);
+    return NextResponse.json({ error: friendlyMessage }, { status: isTransient ? 503 : 500 });
   }
 }
+

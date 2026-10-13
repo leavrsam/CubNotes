@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { callGeminiWithRetry, formatGeminiErrorMessage, isTransientGeminiError } from '@/lib/geminiRetry';
+
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -40,10 +43,13 @@ DO NOT wrap the HTML in markdown code blocks (e.g. \`\`\`html). Just output the 
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: contents,
-    });
+    const response = await callGeminiWithRetry(
+      () => ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: contents,
+      }),
+      { maxAttempts: 4, initialDelayMs: 1500, label: 'organize' }
+    );
 
     let html = response.text || "";
     // Clean up if Gemini accidentally includes markdown wrappers
@@ -53,6 +59,8 @@ DO NOT wrap the HTML in markdown code blocks (e.g. \`\`\`html). Just output the 
 
   } catch (error: any) {
     console.error("Organize Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const friendlyMessage = formatGeminiErrorMessage(error, "Failed to organize chaos");
+    const isTransient = isTransientGeminiError(error);
+    return NextResponse.json({ error: friendlyMessage }, { status: isTransient ? 503 : 500 });
   }
 }
