@@ -2,7 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 import debounce from 'lodash/debounce';
-import { getCachedNotebooks, setCachedNotebooks, setCachedPageState } from '@/lib/offlineStore';
+import { 
+  getCachedNotebooks, 
+  setCachedNotebooks, 
+  setCachedPageState, 
+  getCachedTrash, 
+  setCachedTrash, 
+  removeCachedPage 
+} from '@/lib/offlineStore';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 
@@ -13,6 +20,7 @@ export interface Page {
   date: string | null;
   is_journal_entry: boolean;
   created_at: string;
+  deleted_at?: string | null;
   document_state?: any;
 }
 
@@ -21,6 +29,7 @@ export interface Section {
   notebook_id: string;
   title: string;
   sort_order: number;
+  deleted_at?: string | null;
   pages: Page[];
 }
 
@@ -29,11 +38,25 @@ export interface Notebook {
   user_id: string;
   title: string;
   is_journal: boolean;
+  deleted_at?: string | null;
   sections: Section[];
+}
+
+export interface TrashItem {
+  id: string;
+  type: 'notebook' | 'section' | 'page';
+  title: string;
+  deletedAt: string; // ISO date string
+  notebookId?: string;
+  sectionId?: string;
+  notebookTitle?: string;
+  sectionTitle?: string;
+  itemData: Notebook | Section | Page;
 }
 
 export function useNotebooks() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
+  const [trash, setTrash] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -80,7 +103,7 @@ export function useNotebooks() {
       const [nbRes, secRes, pRes] = await Promise.all([
         supabase.from('notebooks').select('*').order('created_at', { ascending: true }),
         supabase.from('sections').select('*').order('sort_order', { ascending: true }),
-        supabase.from('pages').select('id, section_id, title, date, is_journal_entry, created_at').order('created_at', { ascending: false }),
+        supabase.from('pages').select('id, section_id, title, date, is_journal_entry, created_at, deleted_at').order('created_at', { ascending: false }),
       ]);
 
       if (nbRes.error || secRes.error || pRes.error) {
@@ -92,22 +115,22 @@ export function useNotebooks() {
         return;
       }
 
-      // Merge server rows with in-flight optimistic creations and deletions
-      let pages = (pRes.data as Page[]).filter(p => !inFlightDeletedIdsRef.current.has(p.id));
+      // Merge server rows with in-flight optimistic creations and deletions, excluding soft-deleted items
+      let pages = (pRes.data as Page[]).filter(p => !inFlightDeletedIdsRef.current.has(p.id) && !p.deleted_at);
       for (const [id, page] of inFlightNewPagesRef.current.entries()) {
         if (!pages.some(p => p.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
           pages.unshift(page);
         }
       }
 
-      let sectionsRaw = (secRes.data as any[]).filter(s => !inFlightDeletedIdsRef.current.has(s.id));
+      let sectionsRaw = (secRes.data as any[]).filter(s => !inFlightDeletedIdsRef.current.has(s.id) && !s.deleted_at);
       for (const [id, sec] of inFlightNewSectionsRef.current.entries()) {
         if (!sectionsRaw.some(s => s.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
           sectionsRaw.push(sec);
         }
       }
 
-      let notebooksRaw = (nbRes.data as any[]).filter(nb => !inFlightDeletedIdsRef.current.has(nb.id));
+      let notebooksRaw = (nbRes.data as any[]).filter(nb => !inFlightDeletedIdsRef.current.has(nb.id) && !nb.deleted_at);
       for (const [id, nb] of inFlightNewNotebooksRef.current.entries()) {
         if (!notebooksRaw.some(n => n.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
           notebooksRaw.push(nb);
@@ -210,7 +233,19 @@ export function useNotebooks() {
       }
     });
 
-    // 2. Fetch fresh data from network
+    // 2. Load Trash and purge items older than 30 days
+    getCachedTrash().then((cachedTrash) => {
+      if (cachedTrash && Array.isArray(cachedTrash)) {
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const valid = cachedTrash.filter((t: TrashItem) => new Date(t.deletedAt).getTime() > thirtyDaysAgo);
+        setTrash(valid);
+        if (valid.length !== cachedTrash.length) {
+          setCachedTrash(valid).catch(e => console.warn(e));
+        }
+      }
+    });
+
+    // 3. Fetch fresh data from network
     fetchNotebooks();
 
     // Setup realtime listeners
@@ -340,6 +375,8 @@ export function useNotebooks() {
   const deleteNotebook = async (id: string) => {
     inFlightDeletedIdsRef.current.add(id);
 
+    const notebookToDelete = notebooks.find(nb => nb.id === id);
+
     // Instant local state update (0ms latency)
     setNotebooks(prev => {
       const updated = prev.filter(nb => nb.id !== id);
@@ -347,17 +384,34 @@ export function useNotebooks() {
       return updated;
     });
 
+    if (notebookToDelete) {
+      const newTrashItem: TrashItem = {
+        id: notebookToDelete.id,
+        type: 'notebook',
+        title: notebookToDelete.title,
+        deletedAt: new Date().toISOString(),
+        itemData: notebookToDelete,
+      };
+
+      setTrash(prev => {
+        const updated = [newTrashItem, ...prev.filter(t => t.id !== id)];
+        setCachedTrash(updated).catch(e => console.warn(e));
+        return updated;
+      });
+    }
+
     if (typeof navigator === 'undefined' || navigator.onLine) {
       (async () => {
         try {
-          const { error } = await supabase.from('notebooks').delete().eq('id', id);
+          const { error } = await supabase
+            .from('notebooks')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', id);
           if (error) {
-            console.error("Error deleting notebook from Supabase:", error);
-            fetchNotebooks();
+            console.warn("Supabase notebook soft-delete update:", error.message);
           }
         } catch (err) {
           console.error("Error in deleteNotebook:", err);
-          fetchNotebooks();
         } finally {
           inFlightDeletedIdsRef.current.delete(id);
         }
@@ -444,6 +498,18 @@ export function useNotebooks() {
   const deleteSection = async (id: string) => {
     inFlightDeletedIdsRef.current.add(id);
 
+    let sectionToDelete: Section | null = null;
+    let parentNb: Notebook | null = null;
+
+    for (const nb of notebooks) {
+      const sec = (nb.sections || []).find(s => s.id === id);
+      if (sec) {
+        sectionToDelete = sec;
+        parentNb = nb;
+        break;
+      }
+    }
+
     // Instant local update (0ms latency)
     setNotebooks(prev => {
       const updated = prev.map(nb => ({
@@ -454,17 +520,36 @@ export function useNotebooks() {
       return updated;
     });
 
+    if (sectionToDelete) {
+      const newTrashItem: TrashItem = {
+        id: sectionToDelete.id,
+        type: 'section',
+        title: sectionToDelete.title,
+        deletedAt: new Date().toISOString(),
+        notebookId: sectionToDelete.notebook_id,
+        notebookTitle: parentNb?.title,
+        itemData: sectionToDelete,
+      };
+
+      setTrash(prev => {
+        const updated = [newTrashItem, ...prev.filter(t => t.id !== id)];
+        setCachedTrash(updated).catch(e => console.warn(e));
+        return updated;
+      });
+    }
+
     if (typeof navigator === 'undefined' || navigator.onLine) {
       (async () => {
         try {
-          const { error } = await supabase.from('sections').delete().eq('id', id);
+          const { error } = await supabase
+            .from('sections')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', id);
           if (error) {
-            console.error("Error deleting section from Supabase:", error);
-            fetchNotebooks();
+            console.warn("Supabase section soft-delete update:", error.message);
           }
         } catch (err) {
           console.error("Error in deleteSection:", err);
-          fetchNotebooks();
         } finally {
           inFlightDeletedIdsRef.current.delete(id);
         }
@@ -602,6 +687,23 @@ export function useNotebooks() {
   const deletePage = async (id: string) => {
     inFlightDeletedIdsRef.current.add(id);
 
+    let pageToDelete: Page | null = null;
+    let parentNb: Notebook | null = null;
+    let parentSec: Section | null = null;
+
+    for (const nb of notebooks) {
+      for (const sec of nb.sections || []) {
+        const p = (sec.pages || []).find(page => page.id === id);
+        if (p) {
+          pageToDelete = p;
+          parentSec = sec;
+          parentNb = nb;
+          break;
+        }
+      }
+      if (pageToDelete) break;
+    }
+
     // Instant local UI update (0ms latency)
     setNotebooks(prev => {
       const updated = prev.map(nb => ({
@@ -615,17 +717,38 @@ export function useNotebooks() {
       return updated;
     });
 
+    if (pageToDelete) {
+      const newTrashItem: TrashItem = {
+        id: pageToDelete.id,
+        type: 'page',
+        title: pageToDelete.title,
+        deletedAt: new Date().toISOString(),
+        sectionId: pageToDelete.section_id,
+        notebookId: parentNb?.id,
+        notebookTitle: parentNb?.title,
+        sectionTitle: parentSec?.title,
+        itemData: pageToDelete,
+      };
+
+      setTrash(prev => {
+        const updated = [newTrashItem, ...prev.filter(t => t.id !== id)];
+        setCachedTrash(updated).catch(e => console.warn(e));
+        return updated;
+      });
+    }
+
     if (typeof navigator === 'undefined' || navigator.onLine) {
       (async () => {
         try {
-          const { error } = await supabase.from('pages').delete().eq('id', id);
+          const { error } = await supabase
+            .from('pages')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', id);
           if (error) {
-            console.error("Error deleting page from Supabase:", error);
-            fetchNotebooks();
+            console.warn("Supabase page soft-delete update:", error.message);
           }
         } catch (err) {
           console.error("Error in deletePage:", err);
-          fetchNotebooks();
         } finally {
           inFlightDeletedIdsRef.current.delete(id);
         }
@@ -633,6 +756,306 @@ export function useNotebooks() {
     } else {
       inFlightDeletedIdsRef.current.delete(id);
     }
+  };
+
+  const restoreItem = async (trashId: string) => {
+    const item = trash.find(t => t.id === trashId);
+    if (!item) return false;
+
+    // Remove from trash
+    setTrash(prev => {
+      const updated = prev.filter(t => t.id !== trashId);
+      setCachedTrash(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    if (item.type === 'notebook') {
+      const nb = { ...(item.itemData as Notebook), deleted_at: null };
+      setNotebooks(prev => {
+        const updated = [...prev, nb];
+        setCachedNotebooks(updated).catch(e => console.warn(e));
+        return updated;
+      });
+
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        (async () => {
+          try {
+            await supabase.from('notebooks').upsert({
+              id: nb.id,
+              user_id: nb.user_id || userId || 'local-user',
+              title: nb.title,
+              is_journal: nb.is_journal,
+              deleted_at: null
+            });
+            for (const sec of nb.sections || []) {
+              await supabase.from('sections').upsert({
+                id: sec.id,
+                notebook_id: nb.id,
+                title: sec.title,
+                sort_order: sec.sort_order || 0,
+                deleted_at: null
+              });
+              for (const page of sec.pages || []) {
+                await supabase.from('pages').upsert({
+                  id: page.id,
+                  section_id: sec.id,
+                  title: page.title,
+                  date: page.date,
+                  is_journal_entry: page.is_journal_entry,
+                  deleted_at: null
+                });
+              }
+            }
+          } catch (e) {
+            console.warn("Error restoring notebook to Supabase:", e);
+          }
+        })();
+      }
+      return true;
+    }
+
+    if (item.type === 'section') {
+      const sec = { ...(item.itemData as Section), deleted_at: null };
+      const targetNbId = item.notebookId;
+
+      setNotebooks(prev => {
+        const nbExists = prev.some(nb => nb.id === targetNbId);
+        const actualNbId = nbExists ? targetNbId : prev[0]?.id;
+        if (!actualNbId) return prev;
+
+        const updated = prev.map(nb => {
+          if (nb.id === actualNbId) {
+            return {
+              ...nb,
+              sections: [...(nb.sections || []), { ...sec, notebook_id: actualNbId }]
+            };
+          }
+          return nb;
+        });
+        setCachedNotebooks(updated).catch(e => console.warn(e));
+        return updated;
+      });
+
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        (async () => {
+          try {
+            await supabase.from('sections').upsert({
+              id: sec.id,
+              notebook_id: sec.notebook_id,
+              title: sec.title,
+              sort_order: sec.sort_order || 0,
+              deleted_at: null
+            });
+            for (const page of sec.pages || []) {
+              await supabase.from('pages').upsert({
+                id: page.id,
+                section_id: sec.id,
+                title: page.title,
+                date: page.date,
+                is_journal_entry: page.is_journal_entry,
+                deleted_at: null
+              });
+            }
+          } catch (e) {
+            console.warn("Error restoring section to Supabase:", e);
+          }
+        })();
+      }
+      return true;
+    }
+
+    if (item.type === 'page') {
+      const page = { ...(item.itemData as Page), deleted_at: null };
+      const targetSecId = item.sectionId;
+
+      setNotebooks(prev => {
+        let actualSecId = targetSecId;
+        let secExists = false;
+        for (const nb of prev) {
+          if (nb.sections?.some(s => s.id === actualSecId)) {
+            secExists = true;
+            break;
+          }
+        }
+
+        if (!secExists) {
+          actualSecId = prev[0]?.sections?.[0]?.id;
+        }
+        if (!actualSecId) return prev;
+
+        const updated = prev.map(nb => ({
+          ...nb,
+          sections: (nb.sections || []).map(s => {
+            if (s.id === actualSecId) {
+              return {
+                ...s,
+                pages: [{ ...page, section_id: actualSecId! }, ...(s.pages || [])]
+              };
+            }
+            return s;
+          })
+        }));
+        setCachedNotebooks(updated).catch(e => console.warn(e));
+        return updated;
+      });
+
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        (async () => {
+          try {
+            await supabase.from('pages').upsert({
+              id: page.id,
+              section_id: page.section_id,
+              title: page.title,
+              date: page.date,
+              is_journal_entry: page.is_journal_entry,
+              deleted_at: null
+            });
+          } catch (e) {
+            console.warn("Error restoring page to Supabase:", e);
+          }
+        })();
+      }
+      return true;
+    }
+
+    return false;
+  };
+
+  const permanentDeleteItem = async (trashId: string) => {
+    const item = trash.find(t => t.id === trashId);
+    if (!item) return;
+
+    setTrash(prev => {
+      const updated = prev.filter(t => t.id !== trashId);
+      setCachedTrash(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      try {
+        if (item.type === 'notebook') {
+          await supabase.from('notebooks').delete().eq('id', item.id);
+        } else if (item.type === 'section') {
+          await supabase.from('sections').delete().eq('id', item.id);
+        } else if (item.type === 'page') {
+          await supabase.from('pages').delete().eq('id', item.id);
+          removeCachedPage(item.id).catch(e => console.warn(e));
+        }
+      } catch (err) {
+        console.error("Error permanently deleting item:", err);
+      }
+    }
+  };
+
+  const emptyTrash = async () => {
+    const itemsToDelete = [...trash];
+    setTrash([]);
+    setCachedTrash([]).catch(e => console.warn(e));
+
+    for (const item of itemsToDelete) {
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        try {
+          if (item.type === 'notebook') {
+            await supabase.from('notebooks').delete().eq('id', item.id);
+          } else if (item.type === 'section') {
+            await supabase.from('sections').delete().eq('id', item.id);
+          } else if (item.type === 'page') {
+            await supabase.from('pages').delete().eq('id', item.id);
+            removeCachedPage(item.id).catch(e => console.warn(e));
+          }
+        } catch (e) {
+          console.warn("Error in emptyTrash delete:", e);
+        }
+      }
+    }
+  };
+
+  const resurrectOrphanedPages = async (
+    orphanedPages: { id: string; title: string; documentState: any }[],
+    targetNotebookTitle: string = "CDO"
+  ) => {
+    let currentUserId = userId;
+    if (!currentUserId) {
+      const { data: userData } = await supabase.auth.getUser();
+      currentUserId = userData?.user?.id || null;
+      if (currentUserId) setUserId(currentUserId);
+    }
+
+    const nbId = uuidv4();
+    const secId = uuidv4();
+    const nowIso = new Date().toISOString();
+
+    const recoveredPages: Page[] = orphanedPages.map(op => ({
+      id: op.id,
+      section_id: secId,
+      title: op.title || "Recovered Note",
+      date: null,
+      is_journal_entry: false,
+      created_at: nowIso,
+      document_state: op.documentState || {}
+    }));
+
+    const recoveredSection: Section = {
+      id: secId,
+      notebook_id: nbId,
+      title: "Recovered Notes",
+      sort_order: 0,
+      pages: recoveredPages
+    };
+
+    const recoveredNotebook: Notebook = {
+      id: nbId,
+      user_id: currentUserId || 'local-user',
+      title: targetNotebookTitle,
+      is_journal: false,
+      sections: [recoveredSection]
+    };
+
+    // 1. Instant local update
+    setNotebooks(prev => {
+      const updated = [recoveredNotebook, ...prev];
+      setCachedNotebooks(updated).catch(e => console.warn(e));
+      return updated;
+    });
+
+    // 2. Cache document states
+    for (const op of orphanedPages) {
+      if (op.documentState) {
+        setCachedPageState(op.id, op.documentState, false).catch(e => console.warn(e));
+      }
+    }
+
+    // 3. Sync to Supabase
+    if (currentUserId && (typeof navigator === 'undefined' || navigator.onLine)) {
+      try {
+        await supabase.from('notebooks').insert({
+          id: nbId,
+          user_id: currentUserId,
+          title: targetNotebookTitle,
+          is_journal: false
+        });
+
+        await supabase.from('sections').insert({
+          id: secId,
+          notebook_id: nbId,
+          title: "Recovered Notes",
+          sort_order: 0
+        });
+
+        for (const p of recoveredPages) {
+          await supabase.from('pages').insert({
+            id: p.id,
+            section_id: secId,
+            title: p.title,
+            document_state: p.document_state || {}
+          });
+        }
+      } catch (err) {
+        console.error("Error syncing resurrected notebook to Supabase:", err);
+      }
+    }
+
+    return { notebook: recoveredNotebook, firstPageId: recoveredPages[0]?.id };
   };
 
   const movePage = async (pageId: string, targetSectionId: string) => {
@@ -723,6 +1146,7 @@ export function useNotebooks() {
     notebooks, loading, isOffline, userId,
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
-    addPage, updatePage, deletePage, movePage
+    addPage, updatePage, deletePage, movePage,
+    trash, restoreItem, permanentDeleteItem, emptyTrash, resurrectOrphanedPages
   };
 }

@@ -195,3 +195,74 @@ export async function removeSyncAction(id: string): Promise<void> {
     }
   });
 }
+
+// --- Trash & Data Recovery Utilities ---
+
+export async function getAllCachedPages(): Promise<CachedPageRecord[]> {
+  const db = await openDB();
+  if (!db) return [];
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('pages', 'readonly');
+      const store = tx.objectStore('pages');
+      const req = store.getAll();
+      req.onsuccess = () => resolve((req.result || []) as CachedPageRecord[]);
+      req.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+export async function removeCachedPage(pageId: string): Promise<void> {
+  const db = await openDB();
+  if (!db) return;
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('pages', 'readwrite');
+      const store = tx.objectStore('pages');
+      store.delete(pageId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export async function getCachedTrash(): Promise<any[] | null> {
+  const db = await openDB();
+  if (!db) return null;
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('notebooks', 'readonly');
+      const store = tx.objectStore('notebooks');
+      const req = store.get('trash');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+export async function setCachedTrash(trash: any[]): Promise<void> {
+  const db = await openDB();
+  if (!db) return;
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('notebooks', 'readwrite');
+      const store = tx.objectStore('notebooks');
+      store.put(trash, 'trash');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+

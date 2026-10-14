@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
+import { DeleteConfirmModal } from "./DeleteConfirmModal";
 
 interface SidebarProps {
   notebooks: Notebook[];
@@ -20,6 +21,8 @@ interface SidebarProps {
   onDeletePage: (id: string) => void;
   onClose?: () => void;
   onOpenSettings?: () => void;
+  onOpenTrash?: () => void;
+  trashCount?: number;
   onOpenCommandPalette?: () => void;
   onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
   user?: any;
@@ -37,6 +40,43 @@ export function Sidebar(props: SidebarProps) {
   const [searchScope, setSearchScope] = useState<'global' | 'local'>('global');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  // Confirmation state for deleting notebooks, folders, or notes
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: 'notebook' | 'folder' | 'page';
+    id: string;
+    name: string;
+    details?: string;
+  } | null>(null);
+
+  const handlePromptDeleteNotebook = (nb: Notebook) => {
+    const folderCount = (nb.sections || []).length;
+    const noteCount = (nb.sections || []).reduce((acc: number, s: any) => acc + (s.pages || []).length, 0);
+    setConfirmDelete({
+      type: 'notebook',
+      id: nb.id,
+      name: nb.title,
+      details: folderCount > 0 || noteCount > 0 ? `Contains ${folderCount} folder(s) and ${noteCount} note(s).` : undefined
+    });
+  };
+
+  const handlePromptDeleteSection = (sec: Section) => {
+    const noteCount = (sec.pages || []).length;
+    setConfirmDelete({
+      type: 'folder',
+      id: sec.id,
+      name: sec.title,
+      details: noteCount > 0 ? `Contains ${noteCount} note(s).` : undefined
+    });
+  };
+
+  const handlePromptDeletePage = (p: Page) => {
+    setConfirmDelete({
+      type: 'page',
+      id: p.id,
+      name: p.title || 'Untitled Note'
+    });
+  };
 
   const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
@@ -161,13 +201,25 @@ export function Sidebar(props: SidebarProps) {
             onSelectPage={onSelectPage}
             onAddSection={() => onAddSection(nb.id)}
             onUpdate={(title: string) => onUpdateNotebook(nb.id, title)}
-            onDelete={() => onDeleteNotebook(nb.id)}
+            onDelete={() => handlePromptDeleteNotebook(nb)}
             onToggleJournalMode={onToggleJournalMode}
             onUpdateSection={onUpdateSection}
-            onDeleteSection={onDeleteSection}
+            onDeleteSection={(secId: string) => {
+              const sec = (nb.sections || []).find((s: any) => s.id === secId);
+              if (sec) handlePromptDeleteSection(sec);
+              else onDeleteSection(secId);
+            }}
             onAddPage={onAddPage}
             onUpdatePage={onUpdatePage}
-            onDeletePage={onDeletePage}
+            onDeletePage={(pageId: string) => {
+              let foundPage: any = null;
+              for (const sec of nb.sections || []) {
+                foundPage = (sec.pages || []).find((p: any) => p.id === pageId);
+                if (foundPage) break;
+              }
+              if (foundPage) handlePromptDeletePage(foundPage);
+              else onDeletePage(pageId);
+            }}
           />
         ))}
         {notebooks.length === 0 && (
@@ -177,25 +229,61 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
       
-      {/* Settings Footer */}
-      <div className="p-4 border-t border-zinc-800 flex items-center justify-between mt-auto">
+      {/* Settings & Trash Footer */}
+      <div className="p-3 border-t border-zinc-800 space-y-1 mt-auto">
+        {props.onOpenTrash && (
+          <button 
+            onClick={props.onOpenTrash}
+            className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left"
+            title="Trash & Archive (30-day retention)"
+          >
+            <div className="flex items-center gap-2.5">
+              <Trash2 size={15} className="text-zinc-400" />
+              <span>Trash</span>
+            </div>
+            {props.trashCount != null && props.trashCount > 0 && (
+              <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-full text-[10px] font-semibold">
+                {props.trashCount}
+              </span>
+            )}
+          </button>
+        )}
+
         <button 
           onClick={onOpenSettings}
           className="flex items-center gap-3 text-sm text-zinc-400 hover:text-zinc-100 transition-colors w-full p-2 rounded-md hover:bg-zinc-800/50 text-left"
         >
           {user?.user_metadata?.avatar_url ? (
-             <img src={user.user_metadata.avatar_url} alt="Avatar" className="w-8 h-8 rounded-full object-cover bg-zinc-800" />
+             <img src={user.user_metadata.avatar_url} alt="Avatar" className="w-7 h-7 rounded-full object-cover bg-zinc-800" />
           ) : (
-             <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
-                <Settings size={18} />
+             <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+                <Settings size={16} />
              </div>
           )}
           <div className="flex flex-col flex-1 overflow-hidden">
-             <span className="font-medium text-zinc-200 truncate">{user?.user_metadata?.full_name || "Settings"}</span>
-             {user?.user_metadata?.full_name && <span className="text-xs text-zinc-500 truncate">Settings</span>}
+             <span className="font-medium text-xs text-zinc-200 truncate">{user?.user_metadata?.full_name || "Settings"}</span>
+             {user?.user_metadata?.full_name && <span className="text-[10px] text-zinc-500 truncate">Settings</span>}
           </div>
         </button>
       </div>
+
+      {confirmDelete && (
+        <DeleteConfirmModal
+          isOpen={true}
+          onClose={() => setConfirmDelete(null)}
+          onConfirm={() => {
+            const target = confirmDelete;
+            setConfirmDelete(null);
+            if (target.type === 'notebook') onDeleteNotebook(target.id);
+            else if (target.type === 'folder') onDeleteSection(target.id);
+            else if (target.type === 'page') onDeletePage(target.id);
+          }}
+          itemType={confirmDelete.type}
+          itemName={confirmDelete.name}
+          details={confirmDelete.details}
+          isPermanent={false}
+        />
+      )}
     </aside>
   );
 }

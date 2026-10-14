@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 import { useMinimapSettings } from "@/hooks/useMinimapSettings";
 import { Notebook } from "@/hooks/useNotebooks";
+import { DeleteConfirmModal } from "./DeleteConfirmModal";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -20,6 +21,8 @@ interface SettingsModalProps {
   activeNotebookTitle?: string;
   onUpdatePageTitle?: (title: string) => void;
   onDeletePage?: (id: string) => Promise<void>;
+  onOpenTrash?: () => void;
+  onOpenRecovery?: () => void;
 }
 
 export function SettingsModal({ 
@@ -34,7 +37,9 @@ export function SettingsModal({
   onToggleJournalMode,
   activeNotebookTitle,
   onUpdatePageTitle,
-  onDeletePage
+  onDeletePage,
+  onOpenTrash,
+  onOpenRecovery
 }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccent();
@@ -45,6 +50,7 @@ export function SettingsModal({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [isConfirmingDeletePage, setIsConfirmingDeletePage] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -686,12 +692,8 @@ export function SettingsModal({
                       {onDeletePage && activePageId && (
                         <div className="pt-2">
                           <button
-                            onClick={async () => {
-                              if (window.confirm(`Delete "${activePageTitle}"?`)) {
-                                await onDeletePage(activePageId);
-                                onClose();
-                              }
-                            }}
+                            type="button"
+                            onClick={() => setIsConfirmingDeletePage(true)}
                             className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200/80 dark:border-red-900/40 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
                           >
                             <Trash2 size={14} />
@@ -776,6 +778,44 @@ export function SettingsModal({
                   <div className="text-lg font-medium text-zinc-900 dark:text-zinc-100">{userEmail || "Loading..."}</div>
                 </div>
                 
+                {/* Trash & Data Recovery Options */}
+                {(onOpenTrash || onOpenRecovery) && (
+                  <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                    <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Trash & Data Recovery</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      CubNotes retains deleted items for 30 days before permanent purging.
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {onOpenTrash && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onOpenTrash();
+                          }}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-colors"
+                        >
+                          <Trash2 size={14} />
+                          <span>View Trash (30 Days)</span>
+                        </button>
+                      )}
+                      {onOpenRecovery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onOpenRecovery();
+                          }}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-950/70 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-900/50 rounded-xl text-xs font-semibold transition-colors"
+                        >
+                          <Sparkles size={14} />
+                          <span>Emergency Deep Scan</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
                   <h3 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">Danger Zone</h3>
                   <button
@@ -801,6 +841,23 @@ export function SettingsModal({
           </div>
         </div>
       </div>
+
+      {isConfirmingDeletePage && activePageId && (
+        <DeleteConfirmModal
+          isOpen={true}
+          onClose={() => setIsConfirmingDeletePage(false)}
+          onConfirm={async () => {
+            setIsConfirmingDeletePage(false);
+            if (onDeletePage) {
+              await onDeletePage(activePageId);
+              onClose();
+            }
+          }}
+          itemType="page"
+          itemName={activePageTitle || "this Note"}
+          isPermanent={false}
+        />
+      )}
     </div>
   );
 }

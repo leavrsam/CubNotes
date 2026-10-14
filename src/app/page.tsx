@@ -24,6 +24,8 @@ import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
 import { CommandPalette } from "@/components/CommandPalette";
+import { TrashModal } from "@/components/TrashModal";
+import { EmergencyRecoveryModal } from "@/components/EmergencyRecoveryModal";
 import { uploadMediaFile } from "@/lib/storage";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
@@ -33,13 +35,16 @@ export default function Home() {
     notebooks, loading, isOffline, 
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
-    addPage, updatePage, deletePage, movePage
+    addPage, updatePage, deletePage, movePage,
+    trash, restoreItem, permanentDeleteItem, emptyTrash, resurrectOrphanedPages
   } = useNotebooks();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [userEmail, setUserEmail] = useState<string>("");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
   
   // Meeting Recording State
   const [isDesktopRecording, setIsDesktopRecording] = useState(false);
@@ -653,6 +658,8 @@ export default function Home() {
               setIsSidebarOpen(false);
               handleOpenSettings();
             }}
+            onOpenTrash={() => setIsTrashOpen(true)}
+            trashCount={trash.length}
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             user={currentUser}
           />
@@ -776,6 +783,8 @@ export default function Home() {
               onMovePage={movePage}
               onMoveSection={moveSection}
               onOpenSettings={handleOpenSettings}
+              onOpenTrash={() => setIsTrashOpen(true)}
+              trashCount={trash.length}
             />
           ) : (
             <div className="w-full h-full flex flex-col relative">
@@ -818,6 +827,31 @@ export default function Home() {
         onDeletePage={async (id) => {
           setSelectedPageId(null);
           await deletePage(id);
+        }}
+        onOpenTrash={() => setIsTrashOpen(true)}
+        onOpenRecovery={() => setIsRecoveryOpen(true)}
+      />
+
+      <TrashModal 
+        isOpen={isTrashOpen} 
+        onClose={() => setIsTrashOpen(false)}
+        trash={trash}
+        onRestore={restoreItem}
+        onPermanentDelete={permanentDeleteItem}
+        onEmptyTrash={emptyTrash}
+        onOpenEmergencyRecovery={() => {
+          setIsTrashOpen(false);
+          setIsRecoveryOpen(true);
+        }}
+      />
+
+      <EmergencyRecoveryModal
+        isOpen={isRecoveryOpen}
+        onClose={() => setIsRecoveryOpen(false)}
+        activeNotebooks={notebooks}
+        onResurrectPages={resurrectOrphanedPages}
+        onSelectPage={(pageId) => {
+          setSelectedPageId(pageId);
         }}
       />
 

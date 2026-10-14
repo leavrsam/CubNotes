@@ -23,6 +23,7 @@ import {
   Edit2
 } from "lucide-react";
 import { SwipeableRow, SwipeDirection } from "./SwipeableRow";
+import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import toast from "react-hot-toast";
 
 interface MobileNavigationProps {
@@ -45,6 +46,8 @@ interface MobileNavigationProps {
   onMovePage?: (pageId: string, targetSectionId: string) => Promise<void>;
   onMoveSection?: (sectionId: string, targetNotebookId: string) => Promise<void>;
   onOpenSettings?: () => void;
+  onOpenTrash?: () => void;
+  trashCount?: number;
 }
 
 export function MobileNavigation({
@@ -66,7 +69,9 @@ export function MobileNavigation({
   onToggleJournalMode,
   onMovePage,
   onMoveSection,
-  onOpenSettings
+  onOpenSettings,
+  onOpenTrash,
+  trashCount
 }: MobileNavigationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -75,6 +80,14 @@ export function MobileNavigation({
 
   // Drilldown to specific notebook
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
+
+  // Deletion confirmation modal state
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: 'notebook' | 'folder' | 'page';
+    id: string;
+    name: string;
+    details?: string;
+  } | null>(null);
 
   // Modals
   const [isNewNotebookModalOpen, setIsNewNotebookModalOpen] = useState(false);
@@ -337,51 +350,65 @@ export function MobileNavigation({
     }
   };
 
-  const handleDeleteNote = async (page: Page) => {
-    if (!onDeletePage) return;
-    if (confirm(`Delete "${page.title || 'Untitled Note'}"?`)) {
-      setOpenSwipe(null);
+  const handleDeleteNote = (page: Page) => {
+    setOpenSwipe(null);
+    setConfirmDelete({
+      type: 'page',
+      id: page.id,
+      name: page.title || 'Untitled Note'
+    });
+  };
+
+  const handleDeleteFolder = (section: Section) => {
+    setOpenSwipe(null);
+    const count = (section.pages || []).length;
+    setConfirmDelete({
+      type: 'folder',
+      id: section.id,
+      name: section.title,
+      details: count > 0 ? `Contains ${count} note(s).` : undefined
+    });
+  };
+
+  const handleDeleteNotebook = (notebook: Notebook) => {
+    setOpenSwipe(null);
+    const folderCount = (notebook.sections || []).length;
+    const noteCount = (notebook.sections || []).reduce((acc, s) => acc + (s.pages || []).length, 0);
+    setConfirmDelete({
+      type: 'notebook',
+      id: notebook.id,
+      name: notebook.title,
+      details: folderCount > 0 || noteCount > 0 ? `Contains ${folderCount} folder(s) and ${noteCount} note(s).` : undefined
+    });
+  };
+
+  const executeConfirmDelete = async () => {
+    if (!confirmDelete) return;
+    const { type, id } = confirmDelete;
+    setConfirmDelete(null);
+
+    if (type === 'page' && onDeletePage) {
       setPinnedPageIds(prev => {
-        const next = prev.filter(id => id !== page.id);
+        const next = prev.filter(pid => pid !== id);
         try { localStorage.setItem('cubnotes_pinned_pages', JSON.stringify(next)); } catch {}
         return next;
       });
-      await onDeletePage(page.id);
-      toast.success("Note deleted");
-    }
-  };
-
-  const handleDeleteFolder = async (section: Section) => {
-    if (!onDeleteSection) return;
-    if (confirm(`Delete folder "${section.title}" and its ${section.pages.length} note(s)?`)) {
-      setOpenSwipe(null);
+      await onDeletePage(id);
+      toast.success("Note moved to Trash");
+    } else if (type === 'folder' && onDeleteSection) {
       setPinnedSectionIds(prev => {
-        const next = prev.filter(id => id !== section.id);
+        const next = prev.filter(sid => sid !== id);
         try { localStorage.setItem('cubnotes_pinned_sections', JSON.stringify(next)); } catch {}
         return next;
       });
-      await onDeleteSection(section.id);
-      toast.success("Folder deleted");
-    }
-  };
-
-  const handleDeleteNotebook = async (notebook: Notebook) => {
-    if (!onDeleteNotebook) return;
-    const folderCount = (notebook.sections || []).length;
-    const noteCount = (notebook.sections || []).reduce((acc, s) => acc + (s.pages || []).length, 0);
-
-    let confirmMsg = `Delete notebook "${notebook.title}"?`;
-    if (folderCount > 0 || noteCount > 0) {
-      confirmMsg = `Delete notebook "${notebook.title}" and its ${folderCount} folder(s) containing ${noteCount} note(s)? This action cannot be undone.`;
-    }
-
-    if (window.confirm(confirmMsg)) {
-      setOpenSwipe(null);
-      if (selectedNotebookId === notebook.id) {
+      await onDeleteSection(id);
+      toast.success("Folder moved to Trash");
+    } else if (type === 'notebook' && onDeleteNotebook) {
+      if (selectedNotebookId === id) {
         setSelectedNotebookId(null);
       }
-      await onDeleteNotebook(notebook.id);
-      toast.success("Notebook deleted");
+      await onDeleteNotebook(id);
+      toast.success("Notebook moved to Trash");
     }
   };
 
@@ -499,7 +526,7 @@ export function MobileNavigation({
             </button>
 
             <button 
-              onClick={() => handleCreateNote(sectionId)}
+              onClick={() => handleCreateNote(sectionId || undefined)}
               className="w-8 h-8 rounded-full flex items-center justify-center bg-primary-600 hover:bg-primary-700 text-white shadow-sm active:scale-95 transition-transform"
               title="Add Note"
             >
@@ -545,7 +572,7 @@ export function MobileNavigation({
               <FileText size={42} className="opacity-30 mb-2" />
               <p className="text-sm font-medium">No notes found</p>
               <button 
-                onClick={() => handleCreateNote(sectionId)}
+                onClick={() => handleCreateNote(sectionId || undefined)}
                 className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-xs font-semibold shadow-sm active:scale-95 transition-transform"
               >
                 + Create Note
@@ -662,7 +689,7 @@ export function MobileNavigation({
           </span>
 
           <button 
-            onClick={() => handleCreateNote(sectionId)}
+            onClick={() => handleCreateNote(sectionId || undefined)}
             className="flex items-center gap-1 text-primary-600 dark:text-primary-400 font-semibold text-sm active:scale-95 transition-transform"
           >
             <Edit3 size={17} />
@@ -889,6 +916,21 @@ export function MobileNavigation({
               <Plus size={14} />
               <span>Notebook</span>
             </button>
+
+            {onOpenTrash && (
+              <button 
+                onClick={onOpenTrash}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors relative"
+                title="Trash"
+              >
+                <Trash2 size={18} />
+                {trashCount != null && trashCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {trashCount > 9 ? '9+' : trashCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             {onOpenSettings && (
               <button 
@@ -1496,6 +1538,18 @@ export function MobileNavigation({
             </div>
           </form>
         </div>
+      )}
+
+      {confirmDelete && (
+        <DeleteConfirmModal
+          isOpen={true}
+          onClose={() => setConfirmDelete(null)}
+          onConfirm={executeConfirmDelete}
+          itemType={confirmDelete.type}
+          itemName={confirmDelete.name}
+          details={confirmDelete.details}
+          isPermanent={false}
+        />
       )}
     </>
   );

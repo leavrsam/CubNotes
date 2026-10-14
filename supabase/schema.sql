@@ -215,3 +215,9 @@ CREATE POLICY "Authenticated users can delete recordings"
 ON storage.objects FOR DELETE
 USING (bucket_id = 'recordings' AND auth.role() = 'authenticated');
 
+-- 30-Day Trash & Soft-Delete Support
+ALTER TABLE notebooks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
+
