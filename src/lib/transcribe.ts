@@ -301,11 +301,12 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
   }
 
   // 3. Next.js API Route (/api/transcribe) Fallback
-  // CRITICAL: When safeAudioUrl is available, NEVER include large audioBase64 in the request body!
-  // Vercel serverless functions have a 4.5 MB request payload limit. Sending large base64 causes HTTP 413.
-  // When safeAudioUrl is sent, payload is < 1 KB, and the server downloads and streams audio directly.
   try {
-    const payloadBase64 = safeAudioUrl ? undefined : (audioBase64 && audioBase64.length < 3.5 * 1024 * 1024 ? audioBase64 : undefined);
+    // CRITICAL: If audioBase64 is available and under 3.5 MB (Vercel payload limit is 4.5 MB),
+    // send audioBase64 directly! This avoids the serverless function having to download the audio
+    // from Supabase Storage over the network, cutting latency by 10+ seconds and preventing HTTP 504 Gateway Timeouts.
+    const isBase64SafeSize = Boolean(audioBase64 && audioBase64.length < 3.5 * 1024 * 1024);
+    const payloadBase64 = isBase64SafeSize ? audioBase64 : undefined;
 
     if (!safeAudioUrl && !payloadBase64) {
       // Audio is too large to send directly through Vercel serverless payload limit without cloud storage
@@ -322,7 +323,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
       },
       body: JSON.stringify({
         audioBase64: payloadBase64,
-        audioUrl: safeAudioUrl,
+        audioUrl: payloadBase64 ? undefined : safeAudioUrl,
         mimeType: cleanMimeType,
         isJournal: Boolean(params.isJournal),
         liveTranscript: params.liveTranscript,
@@ -355,6 +356,9 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
     }
     if (message.includes('413') || message.includes('Payload Too Large')) {
       throw new Error("Recording is too large to send directly. Please ensure audio storage is connected or enter your Gemini API key in Settings.");
+    }
+    if (message.includes('504') || message.includes('Gateway Timeout')) {
+      throw new Error("The recording took longer than expected to process on the server (HTTP 504 Gateway Timeout). Please add your Google Gemini API key in CubNotes Settings > AI to transcribe recordings directly without server limits.");
     }
     if (message.includes('503') || message.includes('high demand') || message.includes('UNAVAILABLE')) {
       throw new Error("Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.");

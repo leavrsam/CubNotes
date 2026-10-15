@@ -925,8 +925,61 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     setSelectedIds(ids);
   }, [findIntersectingIds]);
 
+  // Audio Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const recorderRef = useRef<WebAudioRecorder | null>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const activeRecordingNodeIdRef = useRef<string | null>(null);
+  const isStoppingRecordingRef = useRef(false);
+
+  const discardRecording = useCallback(() => {
+    try {
+      if (recorderRef.current) {
+        recorderRef.current.discard();
+        recorderRef.current = null;
+      }
+      liveSpeechRecognizer.stop();
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      setIsRecording(false);
+      setIsPaused(false);
+      setRecordingDuration(0);
+      activeRecordingNodeIdRef.current = null;
+      isStoppingRecordingRef.current = false;
+      toast("Recording discarded.", { icon: "🗑️" });
+    } catch (err) {
+      console.warn("Error discarding recording:", err);
+    }
+  }, []);
+
+  const handleDeleteAudioNode = useCallback((id: string) => {
+    const audioToDelete = (audios || []).find(a => a.id === id);
+    if (audioToDelete?.isLiveRecording || id === activeRecordingNodeIdRef.current) {
+      discardRecording();
+    }
+    setAudios(prev => (prev || []).filter(a => a.id !== id));
+    if (meetingWorkspaceAudioId === id) {
+      setIsMeetingWorkspaceOpen(false);
+      setMeetingWorkspaceAudioId(null);
+    }
+  }, [audios, discardRecording, meetingWorkspaceAudioId, setAudios]);
+
   const handleDeleteSelection = useCallback(() => {
     if (selectedIds.length === 0) return;
+
+    // If an active recording card is deleted, cancel and discard it
+    const isRecordingSelected = (audios || []).some(
+      a => selectedIds.includes(a.id) && (a.isLiveRecording || a.id === activeRecordingNodeIdRef.current)
+    );
+    if (isRecordingSelected) {
+      discardRecording();
+    }
+
     setStrokes(prev => prev.filter(s => !selectedIds.includes(s.id)));
     setTexts(prev => prev.filter(t => !selectedIds.includes(t.id)));
     if (setImages) setImages(prev => prev.filter(i => !selectedIds.includes(i.id)));
@@ -936,7 +989,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     setShapes(prev => prev.filter(s => !selectedIds.includes(s.id)));
     setConnectors(prev => prev.filter(c => !selectedIds.includes(c.fromShapeId || '') && !selectedIds.includes(c.toShapeId || '')));
     setSelectedIds([]);
-  }, [selectedIds, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setShapes, setConnectors, setSelectedIds]);
+  }, [selectedIds, audios, discardRecording, setStrokes, setTexts, setImages, setVideos, setFiles, setAudios, setShapes, setConnectors, setSelectedIds]);
 
   const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
   const toolbarDragRef = useRef<{ x: number; y: number } | null>(null);
@@ -981,13 +1034,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
-  // Audio Recording State
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const recorderRef = useRef<WebAudioRecorder | null>(null);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
 
   const { showMinimap, setShowMinimap } = useMinimapSettings();
 
@@ -1072,7 +1119,6 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  const activeRecordingNodeIdRef = useRef<string | null>(null);
 
   // Recording Logic
   const startRecording = async () => {
@@ -1235,30 +1281,38 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const stopRecording = async () => {
-    if (!recorderRef.current || !isRecording) return;
+    if (!recorderRef.current || isStoppingRecordingRef.current) return;
+    isStoppingRecordingRef.current = true;
     
     setIsRecording(false);
     setIsPaused(false);
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
     }
 
     const liveTranscript = liveSpeechRecognizer.stop();
     const nodeId = activeRecordingNodeIdRef.current || uuidv4();
+    activeRecordingNodeIdRef.current = null;
+
     try {
       const result = await recorderRef.current.stop();
       await uploadAndTranscribeRecording(result, nodeId, liveTranscript);
     } catch (err: any) {
       console.error("Error stopping recording:", err);
       toast.error(err?.message || "Recording stopped unexpectedly.");
-      setAudios(prev => prev.map(a => a.id === nodeId ? { 
+      setAudios(prev => (prev || []).map(a => a.id === nodeId ? { 
         ...a, 
         isLiveRecording: false, 
         isTranscribing: false,
         summary: `### Recording Error\n\n${err?.message || 'Recording stopped unexpectedly.'}`
       } : a));
     } finally {
-      recorderRef.current = null;
+      if (recorderRef.current) {
+        recorderRef.current.discard();
+        recorderRef.current = null;
+      }
+      isStoppingRecordingRef.current = false;
     }
   };
 
@@ -3331,6 +3385,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           onPauseRecording={pauseRecording}
           onResumeRecording={resumeRecording}
           onStopRecording={stopRecording}
+          onDeleteAudioNode={handleDeleteAudioNode}
           onOpenMeetingWorkspace={(audioId) => handleOpenMeetingWorkspace(audioId)}
           onToggleCollapseAll={toggleCollapseAllAudios}
         />

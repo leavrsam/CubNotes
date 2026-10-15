@@ -65,6 +65,7 @@ interface AudioOverlayProps {
   onPauseRecording?: () => void;
   onResumeRecording?: () => void;
   onStopRecording?: () => void;
+  onDeleteAudioNode?: (id: string) => void;
   onOpenMeetingWorkspace?: (id: string) => void;
   onToggleCollapseAll?: (collapsed?: boolean) => void;
 }
@@ -405,26 +406,25 @@ function AudioNodeCard({
       ) : (
         <div className="w-full flex flex-col bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/50 dark:border-zinc-700/50 overflow-hidden">
           {/* Header / Audio Player / Recording Status */}
-          <div className="bg-white/95 dark:bg-zinc-900/95 pt-4 pb-3 px-3.5 sm:px-4 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
-            <div className="flex justify-between items-center mb-1">
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
-                  className="p-1 -ml-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors shrink-0"
-                  title="Collapse card"
-                >
-                  <ChevronDown size={17} />
-                </button>
-                <input 
-                  type="text"
-                  value={node.title || "Meeting Notes"}
-                  onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-                  className={`text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-colors w-full tracking-tight`}
-                  placeholder="Recording Name..."
-                />
-              </div>
-              <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+          <div className="bg-white/95 dark:bg-zinc-900/95 pt-3.5 pb-2.5 px-3.5 sm:px-4 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
+            {/* Row 1: Full-width Title Input */}
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <button
+                type="button"
+                onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
+                className="p-1 -ml-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors shrink-0"
+                title="Collapse card"
+              >
+                <ChevronDown size={17} />
+              </button>
+              <input 
+                type="text"
+                value={node.title || "Meeting Notes"}
+                onChange={(e) => updateAudioTitle(node.id, e.target.value)}
+                className="text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-0.5 rounded-lg transition-colors flex-1 min-w-0 tracking-tight"
+                placeholder="Recording Name..."
+              />
+              <div className="flex items-center gap-1 shrink-0 ml-1">
                 {onToggleCollapseAll && (
                   <button
                     type="button"
@@ -446,6 +446,23 @@ function AudioNodeCard({
                 >
                   <Minimize2 size={15} />
                 </button>
+              </div>
+            </div>
+
+            {/* Row 2: Timestamp & The 4 Action Buttons below Title */}
+            <div className="flex items-center justify-between gap-2 px-0.5 mb-2.5 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Clock size={11} className="text-zinc-400 shrink-0" />
+                <span className="truncate">{format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}</span>
+                {node.isAudioSavedPermanently && (
+                  <span className="ml-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800/50 shrink-0">
+                    Saved Permanently
+                  </span>
+                )}
+              </div>
+
+              {/* The 4 Buttons below the title */}
+              <div className="flex items-center gap-1 shrink-0">
                 {onOpenMeetingWorkspace && (
                   <button
                     onClick={() => onOpenMeetingWorkspace(node.id)}
@@ -456,41 +473,31 @@ function AudioNodeCard({
                     <span>Meeting View</span>
                   </button>
                 )}
-              {node.url && (
+                {node.url && (
+                  <button 
+                    onClick={handleDownloadAudio}
+                    className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    title="Download Audio File"
+                  >
+                    <Download size={14} />
+                  </button>
+                )}
                 <button 
-                  onClick={handleDownloadAudio}
-                  className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  title="Download Audio File"
+                  onClick={handleExportNotes}
+                  className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  title="Export Notes & Transcript (.md)"
                 >
-                  <Download size={15} />
+                  <FileDown size={14} />
                 </button>
-              )}
-              <button 
-                onClick={handleExportNotes}
-                className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                title="Export Notes & Transcript (.md)"
-              >
-                <FileDown size={15} />
-              </button>
-              <button 
-                onClick={() => deleteAudioNode(node.id)}
-                className={`text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1`}
-                title="Delete Recording"
-              >
-                <Trash2 size={16} />
-              </button>
+                <button 
+                  onClick={() => deleteAudioNode(node.id)}
+                  className="text-zinc-400 hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40"
+                  title="Delete Recording"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-0.5 mb-3 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-            <Clock size={11} className="text-zinc-400" />
-            <span>{format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}</span>
-            {node.isAudioSavedPermanently && (
-              <span className="ml-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800/50">
-                Saved Permanently
-              </span>
-            )}
-          </div>
           
           {node.isLiveRecording ? (
             <div className="flex flex-col gap-2">
@@ -851,6 +858,7 @@ export function AudioOverlay({
   onPauseRecording,
   onResumeRecording,
   onStopRecording,
+  onDeleteAudioNode,
   onOpenMeetingWorkspace,
   onToggleCollapseAll
 }: AudioOverlayProps) {
@@ -864,8 +872,12 @@ export function AudioOverlay({
   const resizeStartRef = useRef<{ x: number, nodeWidth: number } | null>(null);
 
   const deleteAudioNode = useCallback((id: string) => {
-    setAudios(prev => prev.filter(a => a.id !== id));
-  }, [setAudios]);
+    if (onDeleteAudioNode) {
+      onDeleteAudioNode(id);
+    } else {
+      setAudios(prev => prev.filter(a => a.id !== id));
+    }
+  }, [onDeleteAudioNode, setAudios]);
 
   const updateAudioTitle = useCallback((id: string, newTitle: string) => {
     setAudios(prev => prev.map(a => a.id === id ? { ...a, title: newTitle } : a));

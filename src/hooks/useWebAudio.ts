@@ -109,12 +109,23 @@ export function useWebAudio() {
     }
   }, []);
 
+  const discardRecording = useCallback(() => {
+    liveSpeechRecognizer.stop();
+    if (recorderRef.current) {
+      recorderRef.current.discard();
+      recorderRef.current = null;
+    }
+    setIsRecording(false);
+    setIsPaused(false);
+  }, []);
+
   return { 
     isRecording, 
     isPaused,
     startRecording, 
     pauseRecording,
     resumeRecording,
-    stopRecording 
+    stopRecording,
+    discardRecording
   };
 }

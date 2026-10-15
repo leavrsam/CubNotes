@@ -315,75 +315,79 @@ export function MobileAudioCard({
         <div className="w-full flex flex-col">
           {/* Header / Audio Player / Recording Status */}
           <div className="bg-white/95 dark:bg-zinc-900/95 pt-3 pb-2.5 px-2.5 sm:px-4 sm:pt-4 sm:pb-3 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
-            <div className="flex justify-between items-center mb-1">
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
-                  className="p-1 -ml-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md transition-colors shrink-0"
-                  title="Collapse card"
-                >
-                  <ChevronDown size={17} />
-                </button>
-                <input 
-                  type="text"
-                  value={node.title || "Meeting Recording"}
-                  onChange={(e) => updateAudioTitle(node.id, e.target.value)}
-                  className="text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-colors w-full tracking-tight"
-                  placeholder="Recording Name..."
-                />
-              </div>
-              <div className="flex items-center gap-1 ml-2">
-                <button
-                  type="button"
-                  onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
-                  className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
-                  title="Collapse card"
-                >
-                  <Minimize2 size={15} />
-                </button>
-              {node.url && (
-                <button 
-                  onClick={handleDownloadAudio}
-                  className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
-                  title="Download Audio File"
-                >
-                  <Download size={15} />
-                </button>
-              )}
-              <button 
-                onClick={handleExportNotes}
-                className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
-                title="Export Notes & Transcript (.md)"
+            {/* Row 1: Full-width Title Input */}
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <button
+                type="button"
+                onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
+                className="p-1 -ml-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md transition-colors shrink-0"
+                title="Collapse card"
               >
-                <FileDown size={15} />
+                <ChevronDown size={17} />
               </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); onAnnotate?.(node.id); }}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
-                title="Annotate Audio"
+              <input 
+                type="text"
+                value={node.title || "Meeting Recording"}
+                onChange={(e) => updateAudioTitle(node.id, e.target.value)}
+                className="text-lg font-bold text-zinc-900 dark:text-white bg-transparent border-none outline-none hover:bg-black/5 dark:hover:bg-white/5 px-2 py-0.5 rounded-lg transition-colors flex-1 min-w-0 tracking-tight"
+                placeholder="Recording Name..."
+              />
+              <button
+                type="button"
+                onClick={() => updateAudioField(node.id, 'isCollapsed', true)}
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 shrink-0 ml-1"
+                title="Collapse card"
               >
-                <Edit3 size={15} />
-              </button>
-              <button 
-                onClick={() => deleteAudioNode(node.id)}
-                className="text-zinc-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex-shrink-0"
-                title="Delete Recording"
-              >
-                <Trash2 size={15} />
+                <Minimize2 size={15} />
               </button>
             </div>
-          </div>
 
-          <div className="flex items-center gap-1.5 px-0.5 mb-2 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-            <Clock size={11} className="text-zinc-400" />
-            <span>{format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}</span>
-            {node.isAudioSavedPermanently && (
-              <span className="ml-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800/50">
-                Saved Permanently
-              </span>
-            )}
-          </div>
+            {/* Row 2: Timestamp & Action Buttons below Title */}
+            <div className="flex items-center justify-between gap-2 px-0.5 mb-2 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Clock size={11} className="text-zinc-400 shrink-0" />
+                <span className="truncate">{format(new Date(node.audioCreatedAt || node.recordingStartedAt || Date.now()), "h:mm a")}</span>
+                {node.isAudioSavedPermanently && (
+                  <span className="ml-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800/50 shrink-0">
+                    Saved Permanently
+                  </span>
+                )}
+              </div>
+
+              {/* Action buttons below the title */}
+              <div className="flex items-center gap-1 shrink-0">
+                {node.url && (
+                  <button 
+                    onClick={handleDownloadAudio}
+                    className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    title="Download Audio File"
+                  >
+                    <Download size={14} />
+                  </button>
+                )}
+                <button 
+                  onClick={handleExportNotes}
+                  className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  title="Export Notes & Transcript (.md)"
+                >
+                  <FileDown size={14} />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onAnnotate?.(node.id); }}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  title="Annotate Audio"
+                >
+                  <Edit3 size={14} />
+                </button>
+                <button 
+                  onClick={() => deleteAudioNode(node.id)}
+                  className="text-zinc-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40"
+                  title="Delete Recording"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
 
           {node.isLiveRecording ? (
             <div className="flex flex-col gap-2">
