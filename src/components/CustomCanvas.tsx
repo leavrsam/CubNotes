@@ -325,7 +325,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     images, setImages, files, setFiles, videos, setVideos,
     shapes, setShapes, connectors, setConnectors,
     undo, redo, canUndo, canRedo,
-    pageVersions, fetchVersions, restoreVersion
+    pageVersions, fetchVersions, restoreVersion, saveManualSnapshot
   } = useCanvasData(pageId);
 
   const streakCount = useMemo(() => {
@@ -3025,13 +3025,33 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                   </button>
                   
                   {isVersionsMenuOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
-                      <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-                        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Version History</span>
+                    <div className="absolute top-full left-0 mt-1 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+                      <div className="p-2.5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/70 dark:bg-zinc-800/50">
+                        <div>
+                          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 uppercase tracking-wider block">Version History</span>
+                          <span className="text-[10px] text-zinc-400">Up to 2 months saved</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const ok = await saveManualSnapshot();
+                            if (ok) {
+                              toast.success("Snapshot created!");
+                            } else {
+                              toast.info("No canvas changes to snapshot.");
+                            }
+                          }}
+                          className="text-[11px] font-medium px-2 py-1 rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 transition-opacity flex items-center gap-1 shadow-sm"
+                          title="Create a snapshot checkpoint right now"
+                        >
+                          + Snapshot
+                        </button>
                       </div>
                       <div className="p-1 flex flex-col">
                         {pageVersions.length === 0 ? (
-                          <div className="px-3 py-4 text-xs text-zinc-500 text-center">No versions found.</div>
+                          <div className="px-3 py-6 text-xs text-zinc-400 text-center">
+                            No snapshots yet.<br/>
+                            <span className="text-[10px]">Snapshots save automatically as you work, or click &quot;+ Snapshot&quot; above.</span>
+                          </div>
                         ) : (
                           pageVersions.map((version) => (
                             <button
@@ -3041,12 +3061,17 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                                 setIsVersionsMenuOpen(false);
                                 toast.success("Restored previous version. (You can Undo if this was a mistake)");
                               }}
-                              className="text-left px-3 py-2 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded flex flex-col gap-1 transition-colors"
+                              className="text-left px-3 py-2 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded flex flex-col gap-0.5 transition-colors group"
                             >
-                              <span className="font-medium text-zinc-800 dark:text-zinc-200">{format(new Date(version.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
+                              <span className="font-medium text-zinc-800 dark:text-zinc-200 group-hover:text-primary transition-colors">
+                                {format(new Date(version.created_at), "MMM d, yyyy 'at' h:mm a")}
+                              </span>
                             </button>
                           ))
                         )}
+                      </div>
+                      <div className="p-2 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 text-[10px] text-zinc-400 text-center">
+                        Tiered: 10 today · 5/day this week · 1/day up to 60 days
                       </div>
                     </div>
                   )}

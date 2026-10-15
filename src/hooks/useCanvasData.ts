@@ -31,6 +31,8 @@ export function useCanvasData(pageId: string) {
   const futureRef = useRef<DocumentState[]>([]);
   const lastSavedStateRef = useRef<DocumentState | null>(null);
   const isUndoingRef = useRef(false);
+  const lastSnapshotHashRef = useRef<string>("");
+  const lastSnapshotTimeRef = useRef<number>(0);
 
   // Load state: Instant local cache first, then sync with DB
   useEffect(() => {
@@ -50,6 +52,8 @@ export function useCanvasData(pageId: string) {
           setShapes(cached.shapes || []);
           setConnectors(cached.connectors || []);
           lastSavedStateRef.current = cached;
+          lastSnapshotHashRef.current = JSON.stringify(cached);
+          lastSnapshotTimeRef.current = Date.now();
           setLoading(false);
         }
       } catch (cacheErr) {
@@ -83,6 +87,8 @@ export function useCanvasData(pageId: string) {
           setShapes(state.shapes || []);
           setConnectors(state.connectors || []);
           lastSavedStateRef.current = state;
+          lastSnapshotHashRef.current = JSON.stringify(state);
+          lastSnapshotTimeRef.current = Date.now();
           // Update local cache with fresh state
           setCachedPageState(pageId, state, false);
         }
@@ -220,7 +226,7 @@ export function useCanvasData(pageId: string) {
     return () => window.removeEventListener('online', handleReconnected);
   }, [supabase]);
 
-  // Save version snapshot to DB (less frequently)
+  // Save version snapshot to DB (tiered retention, debounced)
   const saveVersionToSupabase = useCallback(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     debounce(async (
@@ -242,43 +248,86 @@ export function useCanvasData(pageId: string) {
       ) {
         return;
       }
+
+      const stateHash = JSON.stringify(state);
+      if (stateHash === lastSnapshotHashRef.current) {
+        return;
+      }
+
+      // Rate limit automatic snapshots to at most once every 3 minutes
+      if (Date.now() - lastSnapshotTimeRef.current < 180000 && lastSnapshotHashRef.current !== "") {
+        return;
+      }
       
       try {
-        await supabase
+        const { error } = await supabase
           .from('page_versions')
           .insert({ page_id: pageId, document_state: state });
 
-        // Auto-prune old versions to keep only the latest 10 versions per note (prevents DB size bloat)
-        const { data: oldVersions } = await supabase
-          .from('page_versions')
-          .select('id')
-          .eq('page_id', pageId)
-          .order('created_at', { ascending: false })
-          .range(10, 50);
-
-        if (oldVersions && oldVersions.length > 0) {
-          const idsToDelete = oldVersions.map(v => v.id);
-          await supabase.from('page_versions').delete().in('id', idsToDelete);
+        if (!error) {
+          lastSnapshotHashRef.current = stateHash;
+          lastSnapshotTimeRef.current = Date.now();
+          await prunePageVersions(supabase, pageId);
         }
       } catch (e) {
-        // Silently fail if table doesn't exist yet
         console.warn("Could not save page version:", e);
       }
-    }, 300000), // Save version after 5 minutes of inactivity (saves DB storage)
+    }, 300000, { maxWait: 900000 }), // Save version after 5 minutes of quiet time, or at most 15 min during active editing
     [pageId, supabase]
   );
 
+  // Manual checkpoint snapshot
+  const saveManualSnapshot = useCallback(async (): Promise<boolean> => {
+    const state: DocumentState = { 
+      strokes, texts, audios, images, files, videos, shapes, connectors 
+    };
+
+    if (
+      strokes.length === 0 && texts.length === 0 && images.length === 0 && 
+      files.length === 0 && videos.length === 0 && audios.length === 0 &&
+      shapes.length === 0 && connectors.length === 0
+    ) {
+      return false;
+    }
+
+    const stateHash = JSON.stringify(state);
+    try {
+      const { error } = await supabase
+        .from('page_versions')
+        .insert({ page_id: pageId, document_state: state });
+
+      if (!error) {
+        lastSnapshotHashRef.current = stateHash;
+        lastSnapshotTimeRef.current = Date.now();
+        await prunePageVersions(supabase, pageId);
+        await fetchVersions();
+        return true;
+      }
+    } catch (e) {
+      console.warn("Manual snapshot error:", e);
+    }
+    return false;
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageId, supabase, fetchVersions]);
+
+  // Continuous autosave (debounced 1500ms) and version snapshot scheduling
   useEffect(() => {
     if (!loading) {
       saveToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
       saveVersionToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
     }
-    
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading, saveToSupabase, saveVersionToSupabase]);
+
+  // Flush live autosave when leaving page or unmounting
+  useEffect(() => {
     return () => {
       saveToSupabase.flush();
-      saveVersionToSupabase.flush();
+      if (Date.now() - lastSnapshotTimeRef.current >= 300000) {
+        saveVersionToSupabase.flush();
+      } else {
+        saveVersionToSupabase.cancel();
+      }
     };
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading, saveToSupabase, saveVersionToSupabase]);
+  }, [pageId, saveToSupabase, saveVersionToSupabase]);
 
   // Fetch Page Versions
   const [pageVersions, setPageVersions] = useState<any[]>([]);
@@ -389,6 +438,96 @@ export function useCanvasData(pageId: string) {
     canRedo: future.length > 0,
     pageVersions,
     fetchVersions,
-    restoreVersion
+    restoreVersion,
+    saveManualSnapshot
   };
 }
+
+/**
+ * Tiered Retention Policy for Page Version Snapshots:
+ * - Same day (Today): Up to 10 snapshots
+ * - Last 7 days (Days 1 - 7): Up to 5 snapshots per calendar day
+ * - Month 1 to Month 2 (Days 8 - 60): Up to 1 snapshot per calendar day
+ * - Older than 2 months (> 60 days): Purged completely
+ */
+export async function prunePageVersions(supabase: any, pageId: string) {
+  try {
+    const { data: versions, error } = await supabase
+      .from('page_versions')
+      .select('id, created_at')
+      .eq('page_id', pageId)
+      .order('created_at', { ascending: false });
+
+    if (error || !versions || versions.length === 0) return;
+
+    const now = new Date();
+    const nowMs = now.getTime();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const SIXTY_DAYS_MS = 60 * ONE_DAY_MS;
+
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const idsToDelete: string[] = [];
+    let todayCount = 0;
+    const recentDaysMap = new Map<string, number>(); // YYYY-MM-DD -> count (days 1-7, max 5)
+    const olderDaysMap = new Map<string, number>();  // YYYY-MM-DD -> count (days 8-60, max 1)
+
+    for (const v of versions) {
+      const vDate = new Date(v.created_at);
+      const vTime = vDate.getTime();
+      const diffMs = nowMs - vTime;
+
+      // 1. Purge snapshots older than 2 months (> 60 days)
+      if (diffMs > SIXTY_DAYS_MS) {
+        idsToDelete.push(v.id);
+        continue;
+      }
+
+      const dayKey = `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}-${String(vDate.getDate()).padStart(2, '0')}`;
+
+      // 2. Same day (today): Up to 10 snapshots
+      if (dayKey === todayKey) {
+        todayCount++;
+        if (todayCount > 10) {
+          idsToDelete.push(v.id);
+        }
+        continue;
+      }
+
+      // Age in calendar days
+      const diffDays = Math.max(1, Math.floor(diffMs / ONE_DAY_MS));
+
+      // 3. Last 7 days (days 1 to 7): Up to 5 snapshots per day
+      if (diffDays <= 7) {
+        const count = recentDaysMap.get(dayKey) || 0;
+        if (count >= 5) {
+          idsToDelete.push(v.id);
+        } else {
+          recentDaysMap.set(dayKey, count + 1);
+        }
+        continue;
+      }
+
+      // 4. Month 1 to Month 2 (days 8 to 60): Up to 1 snapshot per day
+      if (diffDays <= 60) {
+        const count = olderDaysMap.get(dayKey) || 0;
+        if (count >= 1) {
+          idsToDelete.push(v.id);
+        } else {
+          olderDaysMap.set(dayKey, count + 1);
+        }
+        continue;
+      }
+    }
+
+    if (idsToDelete.length > 0) {
+      for (let i = 0; i < idsToDelete.length; i += 50) {
+        const chunk = idsToDelete.slice(i, i + 50);
+        await supabase.from('page_versions').delete().in('id', chunk);
+      }
+    }
+  } catch (err) {
+    console.warn("Could not prune old page versions:", err);
+  }
+}
+
