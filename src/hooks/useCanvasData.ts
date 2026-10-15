@@ -247,11 +247,24 @@ export function useCanvasData(pageId: string) {
         await supabase
           .from('page_versions')
           .insert({ page_id: pageId, document_state: state });
+
+        // Auto-prune old versions to keep only the latest 10 versions per note (prevents DB size bloat)
+        const { data: oldVersions } = await supabase
+          .from('page_versions')
+          .select('id')
+          .eq('page_id', pageId)
+          .order('created_at', { ascending: false })
+          .range(10, 50);
+
+        if (oldVersions && oldVersions.length > 0) {
+          const idsToDelete = oldVersions.map(v => v.id);
+          await supabase.from('page_versions').delete().in('id', idsToDelete);
+        }
       } catch (e) {
         // Silently fail if table doesn't exist yet
         console.warn("Could not save page version:", e);
       }
-    }, 60000), // Save version after 1 minute of inactivity
+    }, 300000), // Save version after 5 minutes of inactivity (saves DB storage)
     [pageId, supabase]
   );
 
