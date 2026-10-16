@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command } from "lucide-react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 
@@ -25,6 +25,7 @@ interface SidebarProps {
   trashCount?: number;
   onOpenCommandPalette?: () => void;
   onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
+  onShareItem?: (type: 'notebook' | 'section' | 'page', id: string, title: string) => void;
   user?: any;
 }
 
@@ -220,6 +221,9 @@ export function Sidebar(props: SidebarProps) {
               if (foundPage) handlePromptDeletePage(foundPage);
               else onDeletePage(pageId);
             }}
+            onShare={() => props.onShareItem?.('notebook', nb.id, nb.title)}
+            onShareSection={(sec: any) => props.onShareItem?.('section', sec.id, sec.title)}
+            onSharePage={(page: any) => props.onShareItem?.('page', page.id, page.title)}
           />
         ))}
         {notebooks.length === 0 && (
@@ -351,9 +355,9 @@ function EditableItem({
 }
 
 function ItemActions({ 
-  onEdit, onDelete, onAdd, addTitle, onToggleJournal, isJournal, onOpenColorPicker 
+  onEdit, onDelete, onAdd, addTitle, onToggleJournal, isJournal, onOpenColorPicker, onShare 
 }: { 
-  onEdit: () => void, onDelete: () => void, onAdd?: () => void, addTitle?: string, onToggleJournal?: () => void, isJournal?: boolean, onOpenColorPicker?: () => void 
+  onEdit: () => void, onDelete: () => void, onAdd?: () => void, addTitle?: string, onToggleJournal?: () => void, isJournal?: boolean, onOpenColorPicker?: () => void, onShare?: () => void 
 }) {
   return (
     <div className="flex md:hidden md:group-hover:flex items-center absolute right-2 bg-zinc-800 rounded shadow-lg border border-zinc-700">
@@ -375,6 +379,15 @@ function ItemActions({
           <Palette size={14} />
         </button>
       )}
+      {onShare && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); onShare(); }} 
+          className="p-1 hover:bg-zinc-700 hover:text-primary-400 text-zinc-400" 
+          title="Share & Collaborate"
+        >
+          <Share2 size={13} />
+        </button>
+      )}
       {onAdd && (
         <button onClick={(e) => { e.stopPropagation(); onAdd(); }} className={`p-1 hover:bg-zinc-700 hover:text-white ${!onToggleJournal && !onOpenColorPicker ? 'rounded-l' : ''} text-zinc-400`} title={addTitle}>
           <Plus size={14} />
@@ -394,7 +407,7 @@ function NotebookItem({
   notebook, selectedPageId, onSelectPage,
   onAddSection, onUpdate, onDelete, onToggleJournalMode,
   onUpdateSection, onDeleteSection,
-  onAddPage, onUpdatePage, onDeletePage
+  onAddPage, onUpdatePage, onDeletePage, onShare, onShareSection, onSharePage
 }: any) {
   const [expanded, setExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -440,6 +453,11 @@ function NotebookItem({
                 Journal
               </span>
             )}
+            {notebook.isShared && (
+              <span title="Shared notebook" className="inline-flex items-center">
+                <Users size={12} className="text-primary-400 shrink-0" />
+              </span>
+            )}
           </span>
           <ItemActions 
             onEdit={() => setIsEditing(true)} 
@@ -448,6 +466,7 @@ function NotebookItem({
             addTitle="Add Section"
             onToggleJournal={() => onToggleJournalMode?.(notebook.id, !notebook.is_journal)}
             isJournal={notebook.is_journal}
+            onShare={onShare}
           />
         </div>
       </EditableItem>
@@ -465,6 +484,8 @@ function NotebookItem({
               onDelete={() => onDeleteSection(sec.id)}
               onUpdatePage={onUpdatePage}
               onDeletePage={onDeletePage}
+              onShare={onShareSection ? () => onShareSection(sec) : undefined}
+              onSharePage={onSharePage}
             />
           ))}
           <button 
@@ -493,7 +514,7 @@ export const SECTION_COLORS = [
 function SectionItem({
   section, selectedPageId, onSelectPage,
   onAddPage, onUpdate, onDelete,
-  onUpdatePage, onDeletePage
+  onUpdatePage, onDeletePage, onShare, onSharePage
 }: any) {
   const [expanded, setExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -562,9 +583,14 @@ function SectionItem({
               if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
               setIsEditing(true);
             }}
-            className="truncate flex-1 text-left text-zinc-300 select-none"
+            className="truncate flex-1 text-left text-zinc-300 select-none flex items-center gap-1.5"
           >
             {section.title}
+            {section.isShared && (
+              <span title="Shared folder" className="inline-flex items-center">
+                <Users size={12} className="text-primary-400 shrink-0" />
+              </span>
+            )}
           </span>
           <ItemActions 
             onEdit={() => setIsEditing(true)} 
@@ -572,6 +598,7 @@ function SectionItem({
             onAdd={() => { setExpanded(true); onAddPage(); }} 
             addTitle="Add Page" 
             onOpenColorPicker={() => setShowColorPicker(prev => !prev)}
+            onShare={onShare}
           />
 
           {showColorPicker && (
@@ -604,6 +631,7 @@ function SectionItem({
               onSelect={() => onSelectPage(page.id)}
               onUpdate={(title: string) => onUpdatePage(page.id, title)}
               onDelete={() => onDeletePage(page.id)}
+              onShare={onSharePage ? () => onSharePage(page) : undefined}
               sectionColor={sectionColor}
             />
           ))}
@@ -619,7 +647,7 @@ function SectionItem({
   );
 }
 
-function PageItem({ page, selected, onSelect, onUpdate, onDelete, sectionColor }: any) {
+function PageItem({ page, selected, onSelect, onUpdate, onDelete, onShare, sectionColor }: any) {
   const [isEditing, setIsEditing] = useState(false);
 
   return (
@@ -650,15 +678,24 @@ function PageItem({ page, selected, onSelect, onUpdate, onDelete, sectionColor }
               if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
               setIsEditing(true);
             }}
-            className="truncate w-full text-left select-none"
+            className="truncate w-full text-left select-none flex items-center gap-1.5"
           >
             {page.title}
+            {page.isShared && (
+              <span title="Shared page" className="inline-flex items-center">
+                <Users size={11} className="text-primary-400 shrink-0" />
+              </span>
+            )}
           </span>
           {page.is_journal_entry && (
             <span className="text-[10px] text-zinc-500">{page.date}</span>
           )}
         </div>
-        <ItemActions onEdit={() => setIsEditing(true)} onDelete={onDelete} />
+        <ItemActions 
+          onEdit={() => setIsEditing(true)} 
+          onDelete={onDelete} 
+          onShare={onShare}
+        />
       </div>
     </EditableItem>
   );

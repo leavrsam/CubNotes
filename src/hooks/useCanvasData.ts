@@ -31,8 +31,24 @@ export function useCanvasData(pageId: string) {
   const futureRef = useRef<DocumentState[]>([]);
   const lastSavedStateRef = useRef<DocumentState | null>(null);
   const isUndoingRef = useRef(false);
+  const isRemoteUpdateRef = useRef(false);
   const lastSnapshotHashRef = useRef<string>("");
   const lastSnapshotTimeRef = useRef<number>(0);
+  const currentStateRef = useRef<DocumentState>({
+    strokes: [],
+    texts: [],
+    audios: [],
+    images: [],
+    files: [],
+    videos: [],
+    shapes: [],
+    connectors: []
+  });
+
+  useEffect(() => {
+    currentStateRef.current = { strokes, texts, audios, images, files, videos, shapes, connectors };
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
+
 
   // Load state: Instant local cache first, then sync with DB
   useEffect(() => {
@@ -276,6 +292,21 @@ export function useCanvasData(pageId: string) {
     [pageId, supabase]
   );
 
+  // Fetch Page Versions
+  const [pageVersions, setPageVersions] = useState<any[]>([]);
+  
+  const fetchVersions = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('page_versions')
+      .select('id, created_at, document_state')
+      .eq('page_id', pageId)
+      .order('created_at', { ascending: false });
+      
+    if (!error && data) {
+      setPageVersions(data);
+    }
+  }, [pageId, supabase]);
+
   // Manual checkpoint snapshot
   const saveManualSnapshot = useCallback(async (): Promise<boolean> => {
     const state: DocumentState = { 
@@ -312,10 +343,62 @@ export function useCanvasData(pageId: string) {
   // Continuous autosave (debounced 1500ms) and version snapshot scheduling
   useEffect(() => {
     if (!loading) {
+      if (isRemoteUpdateRef.current) {
+        isRemoteUpdateRef.current = false;
+        return;
+      }
       saveToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
       saveVersionToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
     }
   }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading, saveToSupabase, saveVersionToSupabase]);
+
+  // Realtime subscription for collaborative updates on the current page
+  useEffect(() => {
+    if (!pageId) return;
+
+    const channel = supabase
+      .channel(`canvas-realtime-${pageId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'pages',
+          filter: `id=eq.${pageId}`,
+        },
+        (payload: any) => {
+          if (!payload.new || !payload.new.document_state) return;
+
+          const remoteState = payload.new.document_state as DocumentState;
+          const remoteJson = JSON.stringify(remoteState);
+          const currentJson = JSON.stringify(currentStateRef.current);
+          const lastSavedJson = JSON.stringify(lastSavedStateRef.current);
+
+          // If the update came from our own save or is identical to our current state, skip
+          if (remoteJson === currentJson || remoteJson === lastSavedJson) {
+            return;
+          }
+
+          // Apply remote state
+          isRemoteUpdateRef.current = true;
+          lastSavedStateRef.current = remoteState;
+          setStrokes(remoteState.strokes || []);
+          setTexts(remoteState.texts || []);
+          setAudios(remoteState.audios || []);
+          setImages(remoteState.images || []);
+          setFiles(remoteState.files || []);
+          setVideos(remoteState.videos || []);
+          setShapes(remoteState.shapes || []);
+          setConnectors(remoteState.connectors || []);
+          setCachedPageState(pageId, remoteState, false);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [pageId, supabase]);
 
   // Flush live autosave when leaving page or unmounting
   useEffect(() => {
@@ -329,20 +412,7 @@ export function useCanvasData(pageId: string) {
     };
   }, [pageId, saveToSupabase, saveVersionToSupabase]);
 
-  // Fetch Page Versions
-  const [pageVersions, setPageVersions] = useState<any[]>([]);
-  
-  const fetchVersions = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('page_versions')
-      .select('id, created_at, document_state')
-      .eq('page_id', pageId)
-      .order('created_at', { ascending: false });
-      
-    if (!error && data) {
-      setPageVersions(data);
-    }
-  }, [pageId, supabase]);
+
 
   const restoreVersion = useCallback((versionState: DocumentState) => {
     // Push current state to past before restoring, so we can undo the restore

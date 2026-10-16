@@ -19,13 +19,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff } from "lucide-react";
+import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
 import { CommandPalette } from "@/components/CommandPalette";
 import { TrashModal } from "@/components/TrashModal";
 import { EmergencyRecoveryModal } from "@/components/EmergencyRecoveryModal";
+import { ShareModal } from "@/components/ShareModal";
 import { uploadMediaFile } from "@/lib/storage";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
@@ -45,6 +46,21 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
+  const [shareModalState, setShareModalState] = useState<{
+    isOpen: boolean;
+    resourceType: 'notebook' | 'section' | 'page';
+    resourceId: string;
+    resourceTitle: string;
+  } | null>(null);
+
+  const handleOpenShare = (resourceType: 'notebook' | 'section' | 'page', resourceId: string, resourceTitle: string) => {
+    setShareModalState({
+      isOpen: true,
+      resourceType,
+      resourceId,
+      resourceTitle,
+    });
+  };
   
   // Meeting Recording State
   const [isDesktopRecording, setIsDesktopRecording] = useState(false);
@@ -350,10 +366,26 @@ export default function Home() {
   useEffect(() => {
     if (hasAutoSelected.current) return;
     if (!selectedPageId && notebooks.length > 0) {
-      const lastSelectedId = localStorage.getItem('lastSelectedPageId');
       let targetPageId: string | null = null;
-      
-      if (lastSelectedId) {
+
+      // 1. Check if URL specifies a target pageId or notebookId (e.g. from an invite link)
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPageId = urlParams.get('pageId') || urlParams.get('page');
+        if (urlPageId) {
+          const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === urlPageId)));
+          if (exists) targetPageId = urlPageId;
+        } else if (urlParams.get('notebookId')) {
+          const urlNbId = urlParams.get('notebookId');
+          const targetNb = notebooks.find(nb => nb.id === urlNbId);
+          if (targetNb && targetNb.sections[0]?.pages[0]) {
+            targetPageId = targetNb.sections[0].pages[0].id;
+          }
+        }
+      }
+
+      const lastSelectedId = localStorage.getItem('lastSelectedPageId');
+      if (!targetPageId && lastSelectedId) {
         // Verify it still exists in the loaded notebooks
         const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === lastSelectedId)));
         if (exists) {
@@ -387,7 +419,7 @@ export default function Home() {
     const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     
     const processAudio = async (
-      audioData: { base64?: string; blob?: Blob; mimeType?: string; fileExt?: string; liveTranscript?: string },
+      audioData: { base64?: string; blob?: Blob; mimeType?: string; fileExt?: string; liveTranscript?: string; durationMs?: number },
       targetAudioId: string
     ) => {
       let audioUrl = "";
@@ -661,6 +693,7 @@ export default function Home() {
             onOpenTrash={() => setIsTrashOpen(true)}
             trashCount={trash.length}
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            onShareItem={handleOpenShare}
             user={currentUser}
           />
         </div>
@@ -711,6 +744,14 @@ export default function Home() {
               onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
               headerControls={
                 <>
+                  <button
+                    onClick={() => handleOpenShare('page', selectedPageId, activePageTitle)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary-600/10 hover:bg-primary-600/20 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"
+                    title="Share & Collaborate"
+                  >
+                    <Share2 size={14} />
+                    <span>Share</span>
+                  </button>
                   <button
                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                     className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
@@ -785,6 +826,7 @@ export default function Home() {
               onOpenSettings={handleOpenSettings}
               onOpenTrash={() => setIsTrashOpen(true)}
               trashCount={trash.length}
+              onShareItem={handleOpenShare}
             />
           ) : (
             <div className="w-full h-full flex flex-col relative">
@@ -799,6 +841,7 @@ export default function Home() {
                 isProcessing={isProcessing}
                 onToggleMeeting={handleToggleMeeting}
                 onOpenSettings={handleOpenSettings}
+                onOpenShare={() => handleOpenShare('page', selectedPageId, activePageTitle)}
                 isJournal={isActiveJournal}
               />
             </div>
@@ -911,6 +954,17 @@ export default function Home() {
         onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
         onOpenSettings={handleOpenSettings}
       />
+
+      {shareModalState?.isOpen && (
+        <ShareModal
+          isOpen={shareModalState.isOpen}
+          onClose={() => setShareModalState(null)}
+          resourceType={shareModalState.resourceType}
+          resourceId={shareModalState.resourceId}
+          resourceTitle={shareModalState.resourceTitle}
+          currentUserEmail={userEmail}
+        />
+      )}
     </main>
   );
 }

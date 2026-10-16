@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { acceptCollaborationInvite } from '@/lib/collaborations';
 import { 
   Mail, 
   Lock, 
@@ -14,13 +15,20 @@ import {
   Loader2, 
   BookOpen,
   ArrowLeft,
-  MailCheck
+  MailCheck,
+  Users
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
-export default function LoginPage() {
-  const [mode, setMode] = useState<AuthMode>('signin');
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const urlInviteToken = searchParams?.get('invite') || '';
+  const initialMode = searchParams?.get('mode') === 'signup' ? 'signup' : 'signin';
+  const shouldSwitch = searchParams?.get('switch') === 'true';
+
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -35,6 +43,20 @@ export default function LoginPage() {
 
   const router = useRouter();
   const [supabase] = useState(() => createClient());
+
+  // Store invite token in localStorage so it persists through email confirmations
+  useEffect(() => {
+    if (urlInviteToken && typeof window !== 'undefined') {
+      localStorage.setItem('pending_invite_token', urlInviteToken);
+    }
+  }, [urlInviteToken]);
+
+  // If user navigated here with ?switch=true, log them out first so they can sign in with another account
+  useEffect(() => {
+    if (shouldSwitch) {
+      supabase.auth.signOut();
+    }
+  }, [shouldSwitch, supabase]);
 
   // Handle countdown for resend button
   useEffect(() => {
@@ -98,16 +120,39 @@ export default function LoginPage() {
         message: 'Too many requests. Please wait a couple minutes before trying again, or check your email for a previous confirmation link.'
       };
     }
-    if (lower.includes('email not confirmed')) {
-      return { 
-        message: 'Please check your email inbox to confirm your account before signing in.'
-      };
-    }
-    if (lower.includes('password should be at least')) {
-      return { message: 'Password must be at least 6 characters.' };
+    return { message: errMsg };
+  };
+
+  const checkAndAcceptPendingInvite = async () => {
+    const pendingToken = urlInviteToken || (typeof window !== 'undefined' ? localStorage.getItem('pending_invite_token') : null);
+    if (!pendingToken) {
+      router.push('/');
+      router.refresh();
+      return;
     }
 
-    return { message: errMsg };
+    try {
+      const res = await acceptCollaborationInvite(pendingToken);
+      if (typeof window !== 'undefined') localStorage.removeItem('pending_invite_token');
+
+      if (res.success) {
+        toast.success(`Welcome! You are now collaborating on "${res.title || 'the note'}"`);
+        if (res.page_id) {
+          router.push(`/?pageId=${res.page_id}`);
+        } else if (res.notebook_id) {
+          router.push(`/?notebookId=${res.notebook_id}`);
+        } else {
+          router.push('/');
+        }
+        router.refresh();
+        return;
+      }
+    } catch (e) {
+      console.warn('Could not auto-accept invite upon login:', e);
+    }
+
+    router.push('/');
+    router.refresh();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,8 +175,7 @@ export default function LoginPage() {
           setError(translateSupabaseError(signInError.message, 'signin'));
           setLoading(false);
         } else {
-          router.push('/');
-          router.refresh();
+          await checkAndAcceptPendingInvite();
         }
       } else if (mode === 'signup') {
         const { data, error: signUpError } = await supabase.auth.signUp({
@@ -144,8 +188,7 @@ export default function LoginPage() {
           setLoading(false);
         } else if (data?.session) {
           // Email confirmation was disabled — logged in immediately!
-          router.push('/');
-          router.refresh();
+          await checkAndAcceptPendingInvite();
         } else {
           // Email confirmation is required
           setConfirmationSentTo(trimmedEmail);
@@ -171,32 +214,36 @@ export default function LoginPage() {
   };
 
   const handleResendConfirmation = async () => {
-    if (resendCooldown > 0 || !confirmationSentTo) return;
+    if (!confirmationSentTo || resendCooldown > 0) return;
     setLoading(true);
+    setError(null);
+
     try {
       const { error: resendError } = await supabase.auth.resend({
         type: 'signup',
         email: confirmationSentTo,
       });
+
       if (resendError) {
         setError(translateSupabaseError(resendError.message, 'signup'));
       } else {
+        setSuccessMessage('A new confirmation email has been sent! Please check your inbox and spam folder.');
         setResendCooldown(60);
-        setSuccessMessage('New confirmation email sent!');
       }
     } catch (err: any) {
-      setError({ message: 'Unable to resend email right now. Please wait a moment.' });
+      setError({ message: err?.message || 'Could not resend email. Please try again later.' });
     } finally {
       setLoading(false);
     }
   };
 
-  // --- SCREEN 1: CONFIRMATION EMAIL SENT SCREEN ---
+  const hasInvite = Boolean(urlInviteToken || (typeof window !== 'undefined' && localStorage.getItem('pending_invite_token')));
+
+  // --- SCREEN 1: CONFIRMATION LINK SENT ---
   if (confirmationSentTo) {
     return (
-      <div className="flex w-full min-h-screen items-center justify-center bg-zinc-950 p-4 select-none">
-        <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/90 backdrop-blur-xl p-8 shadow-2xl text-center space-y-5 animate-in fade-in zoom-in-95 duration-200">
-          
+      <div className="flex w-full min-h-screen items-center justify-center bg-zinc-950 p-4">
+        <div className="w-full max-w-[420px] rounded-2xl border border-zinc-800/90 bg-zinc-900/90 backdrop-blur-xl p-7 sm:p-8 shadow-2xl space-y-6 text-center">
           <div className="w-16 h-16 rounded-2xl bg-primary-950/60 border border-primary-500/30 text-primary-400 flex items-center justify-center mx-auto shadow-lg">
             <MailCheck size={32} />
           </div>
@@ -272,6 +319,16 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {/* Invite Notification Banner */}
+        {hasInvite && (
+          <div className="flex items-center gap-2.5 p-3 rounded-xl bg-primary-950/60 border border-primary-500/40 text-xs text-primary-300 animate-in fade-in">
+            <Users size={16} className="text-primary-400 shrink-0" />
+            <span>
+              You have a pending collaboration invite! Sign in or create an account to start collaborating.
+            </span>
+          </div>
+        )}
+
         {/* Segmented Pill Tabs (Sign In vs Create Account) */}
         {mode !== 'forgot' && (
           <div className="grid grid-cols-2 p-1 bg-zinc-950/80 border border-zinc-800 rounded-xl">
@@ -318,134 +375,112 @@ export default function LoginPage() {
           
           {/* Email Field */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-zinc-300">
-              Email Address
+            <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
+              <span>Email Address</span>
             </label>
-            <div className="relative flex items-center">
-              <Mail size={16} className="absolute left-3.5 text-zinc-500 pointer-events-none" />
+            <div className="relative">
+              <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
               <input
                 type="email"
-                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/90 pl-10 pr-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 transition-all"
+                placeholder="name@company.com"
+                autoComplete="email"
                 required
+                className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all"
               />
             </div>
           </div>
 
-          {/* Password Field (Only for Sign In & Sign Up) */}
+          {/* Password Field */}
           {mode !== 'forgot' && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-zinc-300">
-                  Password
-                </label>
+                <label className="text-xs font-semibold text-zinc-300">Password</label>
                 {mode === 'signin' && (
                   <button
                     type="button"
                     onClick={() => switchMode('forgot')}
-                    className="text-xs font-semibold text-primary-400 hover:text-primary-300 transition-colors"
+                    className="text-xs text-primary-400 hover:text-primary-300 hover:underline transition-colors"
                   >
                     Forgot password?
                   </button>
                 )}
               </div>
-              
-              <div className="relative flex items-center">
-                <Lock size={16} className="absolute left-3.5 text-zinc-500 pointer-events-none" />
+              <div className="relative">
+                <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
-                  className="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/90 pl-10 pr-10 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 transition-all"
+                  placeholder={mode === 'signup' ? 'At least 6 characters' : 'Enter your password'}
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   required
+                  className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-10 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 text-zinc-500 hover:text-zinc-300 transition-colors p-1"
-                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-
-              {mode === 'signup' && (
-                <p className="text-[11px] text-zinc-500">
-                  Must be at least 6 characters long.
-                </p>
-              )}
             </div>
           )}
 
-          {/* Error Message Box */}
+          {/* Error Message Box with Action Pill */}
           {error && (
-            <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-xs text-red-300 space-y-1.5 animate-in fade-in duration-150">
-              <div className="flex items-start gap-2">
-                <AlertCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{error.message}</span>
+            <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-xs text-red-300 space-y-2 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="text-red-400 flex-shrink-0" />
+                <span>{error.message}</span>
               </div>
-              {error.action === 'switch_to_signin' && (
+              {error.action && (
                 <button
                   type="button"
-                  onClick={() => switchMode('signin')}
-                  className="text-primary-400 font-semibold underline pl-6 hover:text-primary-300 block text-left"
+                  onClick={() => switchMode(error.action === 'switch_to_signup' ? 'signup' : 'signin')}
+                  className="inline-flex items-center gap-1 font-semibold text-primary-400 hover:text-primary-300 underline"
                 >
-                  Switch to Sign In
-                </button>
-              )}
-              {error.action === 'switch_to_signup' && (
-                <button
-                  type="button"
-                  onClick={() => switchMode('signup')}
-                  className="text-primary-400 font-semibold underline pl-6 hover:text-primary-300 block text-left"
-                >
-                  Create Account instead
+                  {error.action === 'switch_to_signup' ? 'Click here to create an account' : 'Click here to sign in'}
+                  <ArrowRight size={12} />
                 </button>
               )}
             </div>
           )}
 
-          {/* Success Message Box */}
+          {/* Success Message */}
           {successMessage && (
-            <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center gap-2 animate-in fade-in duration-150">
+            <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center gap-2 animate-in fade-in">
               <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
               <span>{successMessage}</span>
             </div>
           )}
 
-          {/* Single Primary Action Button */}
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white font-semibold text-sm shadow-md active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <>
-                  <span>
-                    {mode === 'signin' && 'Sign In'}
-                    {mode === 'signup' && 'Create Account'}
-                    {mode === 'forgot' && 'Send Reset Link'}
-                  </span>
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
-          </div>
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 px-4 rounded-xl bg-primary-600 hover:bg-primary-500 active:scale-[0.99] text-white font-semibold text-sm shadow-lg shadow-primary-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 size={18} className="animate-spin text-white" />
+            ) : (
+              <>
+                <span>
+                  {mode === 'signin' && (hasInvite ? 'Sign In & Accept Invite' : 'Sign In')}
+                  {mode === 'signup' && (hasInvite ? 'Create Account & Join Note' : 'Create Free Account')}
+                  {mode === 'forgot' && 'Send Reset Instructions'}
+                </span>
+                <ArrowRight size={16} />
+              </>
+            )}
+          </button>
         </form>
 
-        {/* Footer Mode Switcher */}
-        <div className="pt-2 text-center border-t border-zinc-800/80">
+        {/* Footer Note */}
+        <div className="text-center pt-2 border-t border-zinc-800/80">
           {mode === 'signin' ? (
             <p className="text-xs text-zinc-400">
               Don&apos;t have an account?{' '}
@@ -484,5 +519,17 @@ export default function LoginPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex w-full min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
+        <Loader2 size={28} className="animate-spin text-primary-500" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

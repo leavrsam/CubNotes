@@ -22,6 +22,7 @@ export interface Page {
   created_at: string;
   deleted_at?: string | null;
   document_state?: any;
+  isShared?: boolean;
 }
 
 export interface Section {
@@ -31,6 +32,7 @@ export interface Section {
   sort_order: number;
   deleted_at?: string | null;
   pages: Page[];
+  isShared?: boolean;
 }
 
 export interface Notebook {
@@ -40,6 +42,8 @@ export interface Notebook {
   is_journal: boolean;
   deleted_at?: string | null;
   sections: Section[];
+  isShared?: boolean;
+  isOwner?: boolean;
 }
 
 export interface TrashItem {
@@ -115,6 +119,26 @@ export function useNotebooks() {
         return;
       }
 
+      // Fetch collaborations safely (gracefully handle if table not yet created)
+      const sharedPageIds = new Set<string>();
+      const sharedSectionIds = new Set<string>();
+      const sharedNotebookIds = new Set<string>();
+
+      try {
+        const { data: collabData } = await supabase
+          .from('collaborations')
+          .select('id, resource_type, resource_id');
+        if (collabData && Array.isArray(collabData)) {
+          for (const c of collabData) {
+            if (c.resource_type === 'page') sharedPageIds.add(c.resource_id);
+            else if (c.resource_type === 'section') sharedSectionIds.add(c.resource_id);
+            else if (c.resource_type === 'notebook') sharedNotebookIds.add(c.resource_id);
+          }
+        }
+      } catch {
+        // Safe fallback if table doesn't exist yet
+      }
+
       // Merge server rows with in-flight optimistic creations and deletions, excluding soft-deleted items
       let pages = (pRes.data as Page[]).filter(p => !inFlightDeletedIdsRef.current.has(p.id) && !p.deleted_at);
       for (const [id, page] of inFlightNewPagesRef.current.entries()) {
@@ -137,15 +161,28 @@ export function useNotebooks() {
         }
       }
 
-      const sections = sectionsRaw.map(sec => ({
-        ...sec,
-        pages: pages.filter(p => p.section_id === sec.id),
-      })) as Section[];
+      const sections = sectionsRaw.map(sec => {
+        const secPages = pages.filter(p => p.section_id === sec.id).map(p => ({
+          ...p,
+          isShared: sharedPageIds.has(p.id) || sharedSectionIds.has(sec.id) || sharedNotebookIds.has(sec.notebook_id),
+        }));
+        return {
+          ...sec,
+          isShared: sharedSectionIds.has(sec.id) || sharedNotebookIds.has(sec.notebook_id) || secPages.some(p => p.isShared),
+          pages: secPages,
+        };
+      }) as Section[];
 
-      const notebooksData = notebooksRaw.map(nb => ({
-        ...nb,
-        sections: sections.filter(s => s.notebook_id === nb.id),
-      })) as Notebook[];
+      const notebooksData = notebooksRaw.map(nb => {
+        const nbSections = sections.filter(s => s.notebook_id === nb.id);
+        const isNbShared = sharedNotebookIds.has(nb.id) || nbSections.some(s => s.isShared);
+        return {
+          ...nb,
+          isShared: isNbShared,
+          isOwner: nb.user_id === userData.user.id,
+          sections: nbSections,
+        };
+      }) as Notebook[];
 
       // Journal Auto-Generation Logic
       const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -252,6 +289,7 @@ export function useNotebooks() {
     const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notebooks' }, fetchNotebooks)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sections' }, fetchNotebooks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'collaborations' }, fetchNotebooks)
       .subscribe();
 
     return () => {

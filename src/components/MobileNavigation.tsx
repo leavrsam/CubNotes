@@ -20,7 +20,8 @@ import {
   Check,
   Pin,
   PinOff,
-  Edit2
+  Edit2,
+  Users
 } from "lucide-react";
 import { SwipeableRow, SwipeDirection } from "./SwipeableRow";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
@@ -48,6 +49,7 @@ interface MobileNavigationProps {
   onOpenSettings?: () => void;
   onOpenTrash?: () => void;
   trashCount?: number;
+  onShareItem?: (type: 'notebook' | 'section' | 'page', id: string, title: string) => void;
 }
 
 export function MobileNavigation({
@@ -71,7 +73,8 @@ export function MobileNavigation({
   onMoveSection,
   onOpenSettings,
   onOpenTrash,
-  trashCount
+  trashCount,
+  onShareItem
 }: MobileNavigationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -296,6 +299,11 @@ export function MobileNavigation({
 
   // Cross-platform Share (iOS, Android, Web)
   const handleShareNote = async (page: Page) => {
+    if (onShareItem) {
+      onShareItem('page', page.id, page.title || 'Untitled Note');
+      return;
+    }
+
     const title = page.title || 'Untitled Note';
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/?page=${page.id}` : '';
     const shareData = {
@@ -324,6 +332,11 @@ export function MobileNavigation({
   };
 
   const handleShareFolder = async (section: Section) => {
+    if (onShareItem) {
+      onShareItem('section', section.id, section.title || 'Folder');
+      return;
+    }
+
     const title = section.title || 'Folder';
     const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
     const shareData = {
@@ -347,6 +360,38 @@ export function MobileNavigation({
       toast.success("Folder info copied to clipboard!");
     } catch {
       toast.error("Could not copy folder info");
+    }
+  };
+
+  const handleShareNotebook = async (notebook: Notebook) => {
+    if (onShareItem) {
+      onShareItem('notebook', notebook.id, notebook.title || 'Notebook');
+      return;
+    }
+
+    const title = notebook.title || 'Notebook';
+    const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/?notebookId=${notebook.id}` : '';
+    const shareData = {
+      title,
+      text: `CubNotes Notebook: ${title}`,
+      url: shareUrl,
+    };
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share(shareData);
+        toast.success("Notebook shared!");
+        return;
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl || window.location.href);
+      toast.success("Notebook link copied to clipboard!");
+    } catch {
+      toast.error("Could not copy notebook link");
     }
   };
 
@@ -611,8 +656,13 @@ export function MobileNavigation({
                           >
                             <div className="flex items-center gap-1.5">
                               <Pin size={13} className="text-amber-500 fill-amber-500 flex-shrink-0" />
-                              <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
-                                {page.title || 'Untitled Note'}
+                              <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1.5">
+                                <span>{page.title || 'Untitled Note'}</span>
+                                {page.isShared && (
+                                  <span title="Shared Note" className="inline-flex items-center">
+                                    <Users size={12} className="text-primary-500 shrink-0" />
+                                  </span>
+                                )}
                               </span>
                             </div>
                             <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">
@@ -659,8 +709,11 @@ export function MobileNavigation({
                           onClick={() => onSelectPage(page.id)}
                           className="flex-1 text-left flex flex-col min-w-0 pr-3"
                         >
-                          <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
-                            {page.title || 'Untitled Note'}
+                          <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1.5">
+                            <span>{page.title || 'Untitled Note'}</span>
+                            {page.isShared && (
+                              <Users size={12} className="text-primary-500 shrink-0" title="Shared Note" />
+                            )}
                           </span>
                           <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">
                             {new Date(page.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -871,8 +924,13 @@ export function MobileNavigation({
                           {pinnedSectionIds.includes(sec.id) && (
                             <Pin size={13} className="text-amber-500 fill-amber-500 flex-shrink-0" />
                           )}
-                          <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate">
-                            {sec.title}
+                          <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1.5">
+                            <span>{sec.title}</span>
+                            {sec.isShared && (
+                              <span title="Shared Folder" className="inline-flex items-center">
+                                <Users size={12} className="text-primary-500 shrink-0" />
+                              </span>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -1004,6 +1062,7 @@ export function MobileNavigation({
                   openDirection={openSwipe?.id === `notebook-${nb.id}` ? openSwipe.direction : null}
                   onOpen={(id, direction) => setOpenSwipe({ id, direction })}
                   onClose={() => setOpenSwipe(null)}
+                  onShare={() => handleShareNotebook(nb)}
                   onRename={() => handleOpenRenameNotebook(nb)}
                   onDelete={() => handleDeleteNotebook(nb)}
                   onToggleJournal={onToggleJournalMode ? () => {
@@ -1013,7 +1072,7 @@ export function MobileNavigation({
                   isJournal={nb.is_journal}
                   className="rounded-xl overflow-hidden"
                   leftActionsWidth={80}
-                  rightActionsWidth={onToggleJournalMode ? 160 : 80}
+                  rightActionsWidth={onToggleJournalMode ? 230 : 150}
                 >
                   <div className="flex items-center justify-between px-3 py-2 bg-zinc-100/80 dark:bg-zinc-800/60 rounded-xl hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors">
                     <button 
@@ -1026,8 +1085,13 @@ export function MobileNavigation({
                       ) : (
                         <Folder size={15} className="text-zinc-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors flex-shrink-0" />
                       )}
-                      <h2 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                        {nb.title}
+                      <h2 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors flex items-center gap-1.5">
+                        <span>{nb.title}</span>
+                        {nb.isShared && (
+                          <span title="Shared Notebook" className="inline-flex items-center">
+                            <Users size={12} className="text-primary-500 shrink-0" />
+                          </span>
+                        )}
                       </h2>
                       {nb.is_journal && (
                         <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex-shrink-0">
