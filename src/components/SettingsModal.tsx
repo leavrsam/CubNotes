@@ -280,6 +280,17 @@ export function SettingsModal({
               <span>Page</span>
             </button>
             <button
+              onClick={() => setActiveTab("updates")}
+              className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 flex items-center justify-center sm:justify-start gap-1.5 ${
+                activeTab === "updates"
+                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
+              }`}
+            >
+              <RefreshCw size={14} className={isUpdating ? "animate-spin" : ""} />
+              <span>Updates & App</span>
+            </button>
+            <button
               onClick={() => setActiveTab("ai")}
               className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 flex items-center justify-center sm:justify-start gap-1.5 ${
                 activeTab === "ai"
@@ -299,17 +310,6 @@ export function SettingsModal({
               }`}
             >
               Account
-            </button>
-            <button
-              onClick={() => setActiveTab("updates")}
-              className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 flex items-center justify-center sm:justify-start gap-1.5 ${
-                activeTab === "updates"
-                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
-              }`}
-            >
-              <RefreshCw size={14} className={isUpdating ? "animate-spin" : ""} />
-              <span>Updates & App</span>
             </button>
           </div>
           {/* Content */}
@@ -722,6 +722,21 @@ export function SettingsModal({
                             <span>Picker</span>
                           </label>
                         </div>
+                      </div>
+
+                      {/* APK & Background Recording Callout */}
+                      <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700/80 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <Smartphone size={16} className="text-primary-500 shrink-0" />
+                          <span className="text-zinc-700 dark:text-zinc-300 font-medium">Record with screen off?</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("updates")}
+                          className="text-primary-600 dark:text-primary-400 font-bold hover:underline"
+                        >
+                          Get Android APK →
+                        </button>
                       </div>
 
                       {/* Delete Page Option */}

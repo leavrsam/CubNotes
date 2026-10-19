@@ -21,7 +21,9 @@ import {
   Pin,
   PinOff,
   Edit2,
-  Users
+  Users,
+  Smartphone,
+  Download
 } from "lucide-react";
 import { SwipeableRow, SwipeDirection } from "./SwipeableRow";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
@@ -100,6 +102,14 @@ export function MobileNavigation({
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
   const [newFolderTitle, setNewFolderTitle] = useState("");
   const [selectedNotebookIdForFolder, setSelectedNotebookIdForFolder] = useState<string>("");
+  const [isDismissedApkBanner, setIsDismissedApkBanner] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('cubnotes_dismiss_apk_banner') === 'true';
+      } catch {}
+    }
+    return false;
+  });
 
   // Rename Modals
   const [renameNotebook, setRenameNotebook] = useState<{ id: string; title: string } | null>(null);
@@ -1029,7 +1039,46 @@ export function MobileNavigation({
       </div>
 
       {/* Folders & Notebooks List */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 pb-24">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
+        {/* Android APK Download Banner for Screen-Off Recording */}
+        {typeof window !== 'undefined' && !isDismissedApkBanner && !((window as any).Capacitor?.isNativePlatform?.()) && (
+          <div className="p-3.5 bg-gradient-to-r from-primary-950/40 via-zinc-900/90 to-zinc-900 border border-primary-500/30 rounded-2xl flex items-center justify-between gap-3 shadow-md animate-in fade-in duration-200">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-primary-600/20 border border-primary-500/40 flex items-center justify-center text-primary-400 shrink-0">
+                <Smartphone size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  Record with Screen Off
+                </p>
+                <p className="text-[11px] text-zinc-400 truncate">
+                  Download Android APK for background audio
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <a
+                href="/CubNotes.apk"
+                download="CubNotes.apk"
+                className="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform"
+              >
+                <Download size={13} />
+                <span>APK</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDismissedApkBanner(true);
+                  try { localStorage.setItem('cubnotes_dismiss_apk_banner', 'true'); } catch {}
+                }}
+                className="p-1 text-zinc-500 hover:text-zinc-300 rounded-lg"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
         {notebooks.length === 0 ? (
           <div className="flex flex-col items-center justify-center mt-16 text-center text-zinc-400">
             <Folder size={46} className="opacity-30 mb-3 text-primary-500" />
