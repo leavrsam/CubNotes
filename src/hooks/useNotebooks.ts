@@ -92,8 +92,11 @@ export function useNotebooks() {
         }
       }
 
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
+      let user = (await supabase.auth.getUser())?.data?.user;
+      if (!user) {
+        user = (await supabase.auth.getSession())?.data?.session?.user;
+      }
+      if (!user) {
         const cached = await getCachedNotebooks();
         if (cached && cached.length > 0) {
           setNotebooks(cached);
@@ -101,7 +104,7 @@ export function useNotebooks() {
         }
         return;
       }
-      setUserId(userData.user.id);
+      setUserId(user.id);
 
       // Fetch all hierarchy data — exclude document_state from pages to avoid huge payloads
       const [nbRes, secRes, pRes] = await Promise.all([
@@ -111,7 +114,9 @@ export function useNotebooks() {
       ]);
 
       if (nbRes.error || secRes.error || pRes.error) {
-        console.error('Error fetching data from Supabase:', nbRes.error || secRes.error || pRes.error);
+        const err = nbRes.error || secRes.error || pRes.error;
+        console.error('Error fetching data from Supabase:', err);
+        toast.error(`Database error loading notes: ${err?.message || 'Check connection'}`, { id: 'db-fetch-error' });
         const cached = await getCachedNotebooks();
         if (cached && cached.length > 0) {
           setNotebooks(cached);
@@ -292,8 +297,20 @@ export function useNotebooks() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'collaborations' }, fetchNotebooks)
       .subscribe();
 
+    // Listen to auth state transitions (login, session hydration, token refresh)
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setUserId(session.user.id);
+        fetchNotebooks();
+      } else if (event === 'SIGNED_OUT') {
+        setUserId(null);
+        setNotebooks([]);
+      }
+    });
+
     return () => {
       supabase.removeChannel(channel);
+      authSub.unsubscribe();
     };
   }, [fetchNotebooks, supabase]);
 
@@ -1185,6 +1202,7 @@ export function useNotebooks() {
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
     addPage, updatePage, deletePage, movePage,
-    trash, restoreItem, permanentDeleteItem, emptyTrash, resurrectOrphanedPages
+    trash, restoreItem, permanentDeleteItem, emptyTrash, resurrectOrphanedPages,
+    refreshNotebooks: fetchNotebooks
   };
 }

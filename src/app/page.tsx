@@ -37,7 +37,8 @@ export default function Home() {
     addNotebook, updateNotebook, deleteNotebook, toggleJournalMode, togglePageJournalMode,
     addSection, updateSection, deleteSection, moveSection,
     addPage, updatePage, deletePage, movePage,
-    trash, restoreItem, permanentDeleteItem, emptyTrash, resurrectOrphanedPages
+    trash, restoreItem, permanentDeleteItem, emptyTrash, resurrectOrphanedPages,
+    refreshNotebooks
   } = useNotebooks();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
@@ -334,6 +335,7 @@ export default function Home() {
         setUserEmail(session.user.email || "");
         setCurrentUser(session.user);
         setAuthChecking(false);
+        refreshNotebooks();
       }
     };
     
@@ -346,13 +348,14 @@ export default function Home() {
       } else {
         setUserEmail(session.user.email || "");
         setCurrentUser(session.user);
+        refreshNotebooks();
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [router, supabase]);
+  }, [router, supabase, refreshNotebooks]);
 
   // Save selected page to localStorage
   useEffect(() => {
@@ -827,6 +830,8 @@ export default function Home() {
               onOpenTrash={() => setIsTrashOpen(true)}
               trashCount={trash.length}
               onShareItem={handleOpenShare}
+              onRefresh={refreshNotebooks}
+              userEmail={userEmail}
             />
           ) : (
             <div className="w-full h-full flex flex-col relative">

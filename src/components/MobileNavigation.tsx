@@ -23,7 +23,8 @@ import {
   Edit2,
   Users,
   Smartphone,
-  Download
+  Download,
+  RefreshCw
 } from "lucide-react";
 import { SwipeableRow, SwipeDirection } from "./SwipeableRow";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
@@ -52,6 +53,8 @@ interface MobileNavigationProps {
   onOpenTrash?: () => void;
   trashCount?: number;
   onShareItem?: (type: 'notebook' | 'section' | 'page', id: string, title: string) => void;
+  onRefresh?: () => void;
+  userEmail?: string;
 }
 
 export function MobileNavigation({
@@ -76,7 +79,9 @@ export function MobileNavigation({
   onOpenSettings,
   onOpenTrash,
   trashCount,
-  onShareItem
+  onShareItem,
+  onRefresh,
+  userEmail
 }: MobileNavigationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -1000,6 +1005,20 @@ export function MobileNavigation({
               </button>
             )}
 
+            {onRefresh && (
+              <button 
+                onClick={() => {
+                  toast.loading("Syncing notes from cloud...", { id: "sync-toast" });
+                  onRefresh();
+                  setTimeout(() => toast.success("Notes synced!", { id: "sync-toast" }), 800);
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors"
+                title="Sync Notes"
+              >
+                <RefreshCw size={17} />
+              </button>
+            )}
+
             {onOpenSettings && (
               <button 
                 onClick={onOpenSettings}
@@ -1080,16 +1099,38 @@ export function MobileNavigation({
           </div>
         )}
         {notebooks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center mt-16 text-center text-zinc-400">
+          <div className="flex flex-col items-center justify-center mt-14 text-center text-zinc-400 px-4">
             <Folder size={46} className="opacity-30 mb-3 text-primary-500" />
             <p className="text-base font-semibold text-zinc-700 dark:text-zinc-300">No folders yet</p>
-            <p className="text-xs text-zinc-400 mt-1 max-w-[240px]">Create your first notebook to organize your notes.</p>
-            <button 
-              onClick={() => setIsNewNotebookModalOpen(true)}
-              className="mt-5 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-xs font-semibold shadow-md active:scale-95 transition-transform"
-            >
-              + Create Notebook
-            </button>
+            {userEmail && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Signed in as <strong className="text-zinc-700 dark:text-zinc-200">{userEmail}</strong>
+              </p>
+            )}
+            <p className="text-xs text-zinc-400 mt-1 max-w-[260px]">
+              If you have notes under another email, switch accounts in Settings or tap Sync below.
+            </p>
+            <div className="flex items-center gap-2 mt-5">
+              {onRefresh && (
+                <button 
+                  onClick={() => {
+                    toast.loading("Syncing notes from cloud...", { id: "sync-toast" });
+                    onRefresh();
+                    setTimeout(() => toast.success("Notes synced!", { id: "sync-toast" }), 800);
+                  }}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-full text-xs font-semibold shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform"
+                >
+                  <RefreshCw size={14} />
+                  <span>Sync Cloud</span>
+                </button>
+              )}
+              <button 
+                onClick={() => setIsNewNotebookModalOpen(true)}
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-xs font-semibold shadow-md active:scale-95 transition-transform"
+              >
+                + Create Notebook
+              </button>
+            </div>
           </div>
         ) : (
           notebooks.map((nb) => {
