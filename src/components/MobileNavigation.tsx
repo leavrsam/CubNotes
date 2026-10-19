@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { SwipeableRow, SwipeDirection } from "./SwipeableRow";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { isNativeApp } from "@/lib/nativeAudio";
 import toast from "react-hot-toast";
 
 interface MobileNavigationProps {
@@ -1059,8 +1060,8 @@ export function MobileNavigation({
 
       {/* Folders & Notebooks List */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-        {/* Android APK Download Banner for Screen-Off Recording */}
-        {typeof window !== 'undefined' && !isDismissedApkBanner && !((window as any).Capacitor?.isNativePlatform?.()) && (
+        {/* Android APK Download Banner for Screen-Off Recording (Only shown in browser) */}
+        {typeof window !== 'undefined' && !isDismissedApkBanner && !isNativeApp() && (
           <div className="p-3.5 bg-gradient-to-r from-primary-950/40 via-zinc-900/90 to-zinc-900 border border-primary-500/30 rounded-2xl flex items-center justify-between gap-3 shadow-md animate-in fade-in duration-200">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-xl bg-primary-600/20 border border-primary-500/40 flex items-center justify-center text-primary-400 shrink-0">

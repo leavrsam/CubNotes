@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import { useMinimapSettings } from "@/hooks/useMinimapSettings";
 import { Notebook } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { isNativeApp } from "@/lib/nativeAudio";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -288,7 +289,7 @@ export function SettingsModal({
               }`}
             >
               <RefreshCw size={14} className={isUpdating ? "animate-spin" : ""} />
-              <span>Updates & App</span>
+              <span>{isNativeApp() ? "Updates" : "Updates & App"}</span>
             </button>
             <button
               onClick={() => setActiveTab("ai")}
@@ -724,20 +725,22 @@ export function SettingsModal({
                         </div>
                       </div>
 
-                      {/* APK & Background Recording Callout */}
-                      <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700/80 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <Smartphone size={16} className="text-primary-500 shrink-0" />
-                          <span className="text-zinc-700 dark:text-zinc-300 font-medium">Record with screen off?</span>
+                      {/* APK & Background Recording Callout (Only in browser) */}
+                      {!isNativeApp() && (
+                        <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700/80 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <Smartphone size={16} className="text-primary-500 shrink-0" />
+                            <span className="text-zinc-700 dark:text-zinc-300 font-medium">Record with screen off?</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("updates")}
+                            className="text-primary-600 dark:text-primary-400 font-bold hover:underline"
+                          >
+                            Get Android APK →
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab("updates")}
-                          className="text-primary-600 dark:text-primary-400 font-bold hover:underline"
-                        >
-                          Get Android APK →
-                        </button>
-                      </div>
+                      )}
 
                       {/* Delete Page Option */}
                       {onDeletePage && activePageId && (
@@ -895,10 +898,12 @@ export function SettingsModal({
                 <div>
                   <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
                     <RefreshCw size={16} className="text-primary-500" />
-                    Web App & Service Worker Updates
+                    {isNativeApp() ? "App Updates & Cache Refresh" : "Web App & Service Worker Updates"}
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
-                    CubNotes runs as an offline-first PWA. If new features or bug fixes aren&apos;t showing up immediately, click below to force-refresh cached assets and sync with the latest build.
+                    {isNativeApp() 
+                      ? "CubNotes automatically loads the latest live cloud features. Click below to refresh cached assets and sync with the newest build."
+                      : "CubNotes runs as an offline-first PWA. If new features or bug fixes aren't showing up immediately, click below to force-refresh cached assets and sync with the latest build."}
                   </p>
                   <button
                     onClick={handleCheckUpdates}
@@ -910,32 +915,48 @@ export function SettingsModal({
                   </button>
                 </div>
 
-                <div className="pt-5 border-t border-zinc-200 dark:border-zinc-800">
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
-                    <Smartphone size={16} className="text-primary-500" />
-                    Screen-Off & Background Recording (Android APK)
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-                    Mobile web browsers aggressively pause audio recording when your phone screen turns off or when you switch apps. Install the standalone CubNotes Android APK to keep recording long lectures, meetings, and voice memos uninterrupted in the background.
-                  </p>
-                  <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 mb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
-                    <p className="font-semibold text-zinc-800 dark:text-zinc-200">✨ APK Features:</p>
-                    <ul className="list-disc list-inside space-y-0.5 ml-1">
-                      <li>Continuous recording with screen locked / turned off</li>
-                      <li>Background audio capture while using other apps</li>
-                      <li>Foreground recording status notification in Android drawer</li>
-                      <li>Auto-loads latest live features seamlessly</li>
-                    </ul>
+                {isNativeApp() ? (
+                  <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/25 border border-emerald-200/80 dark:border-emerald-800/50 rounded-2xl flex items-center gap-3 text-xs text-emerald-800 dark:text-emerald-300">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <Check size={18} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-emerald-900 dark:text-emerald-200">CubNotes Android APK Active</p>
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400/90 mt-0.5">
+                          Screen-off audio recording, wake locks, and native background services are running.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <a
-                    href="/CubNotes.apk"
-                    download="CubNotes.apk"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-sm rounded-xl shadow-sm transition-all"
-                  >
-                    <Download size={15} />
-                    <span>Download Android App (CubNotes.apk)</span>
-                  </a>
-                </div>
+                ) : (
+                  <div className="pt-5 border-t border-zinc-200 dark:border-zinc-800">
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
+                      <Smartphone size={16} className="text-primary-500" />
+                      Screen-Off & Background Recording (Android APK)
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+                      Mobile web browsers aggressively pause audio recording when your phone screen turns off or when you switch apps. Install the standalone CubNotes Android APK to keep recording long lectures, meetings, and voice memos uninterrupted in the background.
+                    </p>
+                    <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 mb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+                      <p className="font-semibold text-zinc-800 dark:text-zinc-200">✨ APK Features:</p>
+                      <ul className="list-disc list-inside space-y-0.5 ml-1">
+                        <li>Continuous recording with screen locked / turned off</li>
+                        <li>Background audio capture while using other apps</li>
+                        <li>Foreground recording status notification in Android drawer</li>
+                        <li>Auto-loads latest live features seamlessly</li>
+                      </ul>
+                    </div>
+                    <a
+                      href="/CubNotes.apk"
+                      download="CubNotes.apk"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-sm rounded-xl shadow-sm transition-all"
+                    >
+                      <Download size={15} />
+                      <span>Download Android App (CubNotes.apk)</span>
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>

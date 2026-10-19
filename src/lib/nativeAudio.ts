@@ -5,6 +5,17 @@ export const isNativeAndroid = () => {
   return typeof window !== 'undefined' && Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 };
 
+export const isNativeApp = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (Capacitor.isNativePlatform()) return true;
+    const cap = (window as any).Capacitor;
+    if (cap && (cap.platform === 'android' || cap.platform === 'ios')) return true;
+    if (cap?.isNativePlatform?.()) return true;
+  } catch {}
+  return false;
+};
+
 export async function startNativeRecording(): Promise<void> {
   const { NativeAudioService } = (Capacitor as any).Plugins || {};
   if (!NativeAudioService) {
