@@ -58,19 +58,32 @@ export class WebAudioRecorder {
     return !!this.mediaRecorder && this.mediaRecorder.state === 'paused';
   }
 
-  public async start(): Promise<void> {
+  public async start(specificDeviceId?: string): Promise<void> {
     this.isStopping = false;
 
     // 1. Get user media with robust cross-browser fallback (ideal constraints instead of exact)
+    let preferredDeviceId = specificDeviceId;
+    if (!preferredDeviceId && typeof window !== 'undefined') {
+      try {
+        preferredDeviceId = localStorage.getItem('cubnotes_preferred_audio_input') || undefined;
+      } catch {}
+    }
+
+    const audioConstraints: MediaTrackConstraints = {
+      channelCount: { ideal: 1 },
+      noiseSuppression: { ideal: true },
+      echoCancellation: { ideal: true },
+      autoGainControl: { ideal: true },
+    };
+
+    if (preferredDeviceId) {
+      audioConstraints.deviceId = { ideal: preferredDeviceId };
+    }
+
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: { ideal: 1 },
-          noiseSuppression: { ideal: true },
-          echoCancellation: { ideal: true },
-          autoGainControl: { ideal: true },
-        },
+        audio: audioConstraints,
       });
     } catch (constraintErr) {
       console.warn('Microphone ideal constraints failed, falling back to basic audio:', constraintErr);
@@ -311,3 +324,31 @@ export class WebAudioRecorder {
     }
   }
 }
+
+export async function getAvailableAudioInputs(): Promise<Array<{ deviceId: string; label: string }>> {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+    return [];
+  }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter(d => d.kind === 'audioinput')
+      .map((d, index) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Microphone ${index + 1}`
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export function setPreferredAudioInput(deviceId: string) {
+  if (typeof window !== 'undefined') {
+    if (deviceId) {
+      localStorage.setItem('cubnotes_preferred_audio_input', deviceId);
+    } else {
+      localStorage.removeItem('cubnotes_preferred_audio_input');
+    }
+  }
+}
+

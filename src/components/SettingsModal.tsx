@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useAccent, AccentColor } from "./AccentProvider";
-import { X, Moon, Sun, Monitor, LogOut, Check, User as UserIcon, Upload, Loader2, Trash2, BookOpen, Folder, Edit2, FileText, Sparkles, Key } from "lucide-react";
+import { X, Moon, Sun, Monitor, LogOut, Check, User as UserIcon, Upload, Loader2, Trash2, BookOpen, Folder, Edit2, FileText, Sparkles, Key, RefreshCw, Smartphone, Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 import { useMinimapSettings } from "@/hooks/useMinimapSettings";
@@ -44,13 +44,38 @@ export function SettingsModal({
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccent();
   const { showMinimap, setShowMinimap } = useMinimapSettings();
-  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "page" | "ai" | "account">(
+  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "page" | "ai" | "account" | "updates">(
     activePageId ? "page" : "profile"
   );
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [isConfirmingDeletePage, setIsConfirmingDeletePage] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleCheckUpdates = async () => {
+    setIsUpdating(true);
+    toast.loading("Checking for updates...", { id: "update-check" });
+    try {
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+      }
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.update();
+        }
+      }
+      toast.success("Updated to the latest version! Reloading...", { id: "update-check" });
+      setTimeout(() => {
+        window.location.reload();
+      }, 700);
+    } catch (e: any) {
+      toast.error("Failed to update cache: " + (e?.message || "Unknown error"), { id: "update-check" });
+      setIsUpdating(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -274,6 +299,17 @@ export function SettingsModal({
               }`}
             >
               Account
+            </button>
+            <button
+              onClick={() => setActiveTab("updates")}
+              className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl text-center sm:text-left transition-all shrink-0 flex items-center justify-center sm:justify-start gap-1.5 ${
+                activeTab === "updates"
+                  ? "bg-white dark:bg-zinc-800 text-primary-600 dark:text-primary-400 shadow-sm font-semibold"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/50"
+              }`}
+            >
+              <RefreshCw size={14} className={isUpdating ? "animate-spin" : ""} />
+              <span>Updates & App</span>
             </button>
           </div>
           {/* Content */}
@@ -835,6 +871,55 @@ export function SettingsModal({
                   >
                     <LogOut size={16} /> Sign out
                   </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "updates" && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
+                    <RefreshCw size={16} className="text-primary-500" />
+                    Web App & Service Worker Updates
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+                    CubNotes runs as an offline-first PWA. If new features or bug fixes aren&apos;t showing up immediately, click below to force-refresh cached assets and sync with the latest build.
+                  </p>
+                  <button
+                    onClick={handleCheckUpdates}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} />
+                    <span>{isUpdating ? "Checking & Updating..." : "Check for Updates & Reload"}</span>
+                  </button>
+                </div>
+
+                <div className="pt-5 border-t border-zinc-200 dark:border-zinc-800">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
+                    <Smartphone size={16} className="text-primary-500" />
+                    Screen-Off & Background Recording (Android APK)
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+                    Mobile web browsers aggressively pause audio recording when your phone screen turns off or when you switch apps. Install the standalone CubNotes Android APK to keep recording long lectures, meetings, and voice memos uninterrupted in the background.
+                  </p>
+                  <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 mb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+                    <p className="font-semibold text-zinc-800 dark:text-zinc-200">✨ APK Features:</p>
+                    <ul className="list-disc list-inside space-y-0.5 ml-1">
+                      <li>Continuous recording with screen locked / turned off</li>
+                      <li>Background audio capture while using other apps</li>
+                      <li>Foreground recording status notification in Android drawer</li>
+                      <li>Auto-loads latest live features seamlessly</li>
+                    </ul>
+                  </div>
+                  <a
+                    href="/CubNotes.apk"
+                    download="CubNotes.apk"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-sm rounded-xl shadow-sm transition-all"
+                  >
+                    <Download size={15} />
+                    <span>Download Android App (CubNotes.apk)</span>
+                  </a>
                 </div>
               </div>
             )}

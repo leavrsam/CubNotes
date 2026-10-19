@@ -5,7 +5,7 @@ import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor, LineSpacingDropdown, executeIndent, executeOutdent } from "./TipTapEditor";
 import type { Editor } from "@tiptap/react";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2 } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -14,6 +14,7 @@ import { SettingsModal } from "./SettingsModal";
 import { MobileAudioCard } from "./MobileAudioCard";
 import { MobileDrawOverlay } from "./MobileDrawOverlay";
 import { uploadMediaFile } from "@/lib/storage";
+import { getAvailableAudioInputs, setPreferredAudioInput } from "@/lib/audioRecorder";
 import type { Stroke, TextNode, ImageNode, AudioNode, FileNode, VideoNode } from "./CustomCanvas";
 
 function getStrokeBoundingBox(stroke: Stroke) {
@@ -489,6 +490,60 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [editorUpdateTick, setEditorUpdateTick] = useState(0);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
   const [activeTray, setActiveTray] = useState<'none' | 'insert' | 'format'>('none');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isTopMenuOpen, setIsTopMenuOpen] = useState(false);
+  const [audioInputs, setAudioInputs] = useState<Array<{ deviceId: string; label: string }>>([]);
+  const [selectedAudioInput, setSelectedAudioInput] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cubnotes_preferred_audio_input') || '';
+      setSelectedAudioInput(saved);
+      getAvailableAudioInputs().then(inputs => {
+        setAudioInputs(inputs);
+      });
+    }
+  }, []);
+
+  const handleSelectAudioInput = (deviceId: string) => {
+    setSelectedAudioInput(deviceId);
+    setPreferredAudioInput(deviceId);
+    toast.success("Audio input updated", { duration: 1500 });
+  };
+
+  const autoScrollToCursor = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+    
+    requestAnimationFrame(() => {
+      try {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        if (!rect || (rect.top === 0 && rect.bottom === 0)) return;
+
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        // Viewable bottom boundary is above the keyboard and active toolbar
+        const bottomNavHeight = isKeyboardOpen 
+          ? Math.max(keyboardOffset || 0, 280) + (activeTray !== 'none' ? 190 : 54) 
+          : 90;
+        const visibleBottom = window.innerHeight - bottomNavHeight - 24;
+        const visibleTop = 72; // below floating top bar
+
+        if (rect.bottom > visibleBottom) {
+          const scrollDiff = rect.bottom - visibleBottom + 32;
+          container.scrollBy({ top: scrollDiff, behavior: 'smooth' });
+        } else if (rect.top < visibleTop) {
+          const scrollDiff = rect.top - visibleTop - 24;
+          container.scrollBy({ top: scrollDiff, behavior: 'smooth' });
+        }
+      } catch {}
+    });
+  }, [isKeyboardOpen, keyboardOffset, activeTray]);
+
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -963,52 +1018,79 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
             </button>
           ) : <div />}
 
-          <div className="pointer-events-auto flex items-center gap-2">
-            {onOpenShare && (
-              <button 
-                onClick={onOpenShare}
-                className="w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-primary-500 active:scale-95 transition-all"
-                title="Share & Collaborate"
-              >
-                <Share2 size={16} />
-              </button>
+          <div className="pointer-events-auto flex items-center gap-1.5 p-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all">
+            {isTopMenuOpen && (
+              <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-2 duration-150">
+                {onOpenShare && (
+                  <button 
+                    onClick={() => {
+                      setIsTopMenuOpen(false);
+                      onOpenShare();
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-primary-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+                    title="Share & Collaborate"
+                  >
+                    <Share2 size={16} />
+                  </button>
+                )}
+
+                <button 
+                  onClick={() => {
+                    setIsTopMenuOpen(false);
+                    setIsRearranging(true);
+                    toast.success("Rearrange Mode Activated", { id: 'rearrange-toast', duration: 1500 });
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+                  title="Rearrange Blocks"
+                >
+                  <GripVertical size={16} />
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setIsTopMenuOpen(false);
+                    if (onOpenSettings) {
+                      onOpenSettings();
+                    } else {
+                      setIsInternalSettingsOpen(true);
+                    }
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+                  title="Settings"
+                >
+                  <Settings size={16} />
+                </button>
+
+                <div className="w-px h-4 bg-zinc-300 dark:bg-zinc-700 mx-0.5" />
+              </div>
             )}
 
             <button 
-              onClick={() => {
-                setIsRearranging(true);
-                toast.success("Rearrange Mode Activated", { id: 'rearrange-toast', duration: 1500 });
-              }}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
-              title="Rearrange Blocks"
+              onClick={() => setIsTopMenuOpen(prev => !prev)}
+              className={`w-8 h-8 flex items-center justify-center rounded-full transition-all active:scale-95 ${
+                isTopMenuOpen 
+                  ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-white' 
+                  : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'
+              }`}
+              title={isTopMenuOpen ? "Close Menu" : "More Options"}
             >
-              <GripVertical size={18} />
-            </button>
-
-            <button 
-              onClick={() => {
-                if (onOpenSettings) {
-                  onOpenSettings();
-                } else {
-                  setIsInternalSettingsOpen(true);
-                }
-              }}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
-              title="Settings"
-            >
-              <MoreHorizontal size={19} />
+              <MoreHorizontal size={18} />
             </button>
           </div>
         </div>
       )}
 
       <div 
+        ref={scrollContainerRef}
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative scroll-smooth overscroll-contain select-text" 
         style={{ 
           WebkitOverflowScrolling: 'touch',
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)'
         }}
-        onClick={() => setActiveBlockId(null)}
+        onClick={() => {
+          setActiveBlockId(null);
+          setIsTopMenuOpen(false);
+        }}
       >
         
         {/* Title area (scrolls with content) */}
@@ -1064,7 +1146,14 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         </div>
 
         {/* Linear feed of blocks */}
-        <div className="flex flex-col gap-6 w-full px-5 pb-32 relative z-10 min-h-full">
+        <div 
+          className="flex flex-col gap-6 w-full px-5 relative z-10 min-h-full transition-[padding] duration-150"
+          style={{
+            paddingBottom: isKeyboardOpen 
+              ? `${Math.max(keyboardOffset || 0, 280) + (activeTray !== 'none' ? 240 : 130)}px` 
+              : '140px'
+          }}
+        >
           {sortedBlocks.map((block, index) => {
             const blockBox = getBlockBoundingBox(block);
             const strokeExtent = getAttachedStrokesExtent(block.attachedStrokes);
@@ -1155,15 +1244,22 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       content={block.content}
                       onChange={(content) => {
                         setTexts(prev => prev.map(t => t.id === block.id ? { ...t, content } : t));
+                        autoScrollToCursor();
                       }}
                       onDelete={() => {
                         setTexts(prev => prev.filter(t => t.id !== block.id));
                       }}
                       setActiveEditor={(editor) => {
                         setMobileActiveEditor(editor);
-                        if (editor) setIsKeyboardOpen(true);
+                        if (editor) {
+                          setIsKeyboardOpen(true);
+                          autoScrollToCursor();
+                        }
                       }}
-                      onEditorUpdate={() => setEditorUpdateTick(t => t + 1)}
+                      onEditorUpdate={() => {
+                        setEditorUpdateTick(t => t + 1);
+                        autoScrollToCursor();
+                      }}
                       onBlurText={() => {
                         setTimeout(() => {
                           const active = document.activeElement;
@@ -1415,69 +1511,61 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                   ✕
                 </button>
               </div>
-              <div className="grid grid-cols-4 gap-2">
-                {/* Photo / Image */}
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setActiveTray('none');
-                    imageInputRef.current?.click();
-                  }}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
-                >
-                  <ImageIcon size={20} className="text-blue-400 mb-1" />
-                  <span className="text-[11px] font-medium leading-none">Photo</span>
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Photo / Image */}
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setActiveTray('none');
+                      imageInputRef.current?.click();
+                    }}
+                    className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
+                  >
+                    <ImageIcon size={18} className="text-blue-400" />
+                    <span className="text-xs font-medium">Add Photo</span>
+                  </button>
 
-                {/* Voice / Audio Note */}
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setActiveTray('none');
-                    onToggleMeeting();
-                  }}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
-                >
-                  <Mic size={20} className="text-red-400 mb-1" />
-                  <span className="text-[11px] font-medium leading-none">Voice</span>
-                </button>
+                  {/* Drawing / Sketch */}
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setActiveTray('none');
+                      if (activeBlockId) {
+                        const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
+                        openDrawOverlay(activeBlockId, activeBlock?.type || 'block', activeBlock?.y);
+                      } else {
+                        startNewSketchBlock();
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
+                  >
+                    <PenTool size={18} className="text-amber-400" />
+                    <span className="text-xs font-medium">Draw / Sketch</span>
+                  </button>
+                </div>
 
-                {/* Drawing / Sketch */}
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setActiveTray('none');
-                    if (activeBlockId) {
-                      const activeBlock = sortedBlocks.find(b => b.id === activeBlockId);
-                      openDrawOverlay(activeBlockId, activeBlock?.type || 'block', activeBlock?.y);
-                    } else {
-                      startNewSketchBlock();
-                    }
-                  }}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
-                >
-                  <PenTool size={20} className="text-amber-400 mb-1" />
-                  <span className="text-[11px] font-medium leading-none">Drawing</span>
-                </button>
-
-                {/* Checklist */}
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setActiveTray('none');
-                    if (mobileActiveEditor) {
-                      executeFormat(() => (mobileActiveEditor.chain().focus() as any)?.toggleTaskList().run());
-                    }
-                  }}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700/60 active:scale-95 transition-all text-zinc-200 hover:text-white"
-                >
-                  <CheckSquare size={20} className="text-emerald-400 mb-1" />
-                  <span className="text-[11px] font-medium leading-none">Checklist</span>
-                </button>
+                {/* Audio Recording Input Source Selector */}
+                {audioInputs.length > 0 && (
+                  <div className="p-2 rounded-xl bg-zinc-800/60 border border-zinc-700/50 flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-zinc-300 truncate">
+                      <Volume2 size={15} className="text-primary-400 shrink-0" />
+                      <span className="text-[11px] font-medium truncate">Recording Input:</span>
+                    </div>
+                    <select 
+                      value={selectedAudioInput} 
+                      onChange={(e) => handleSelectAudioInput(e.target.value)}
+                      className="bg-zinc-900 text-zinc-200 border border-zinc-700 rounded-lg px-2 py-1 text-[11px] max-w-[190px] truncate outline-none cursor-pointer"
+                    >
+                      <option value="">Default Microphone</option>
+                      {audioInputs.map(input => (
+                        <option key={input.deviceId} value={input.deviceId}>{input.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1604,6 +1692,23 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
               className="h-[48px] bg-zinc-900/95 dark:bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/80 px-2 shadow-lg flex items-center justify-between text-white"
             >
               <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+                {/* Dedicated Voice / Audio Record Button right on the bar above keyboard */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => onToggleMeeting?.()}
+                  disabled={isProcessing}
+                  className={`h-9 px-2.5 rounded-lg flex items-center gap-1.5 font-semibold text-xs transition-all active:scale-95 ${
+                    isRecording
+                      ? 'bg-red-500/25 text-red-400 font-bold border border-red-500/50 animate-pulse'
+                      : 'bg-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-750'
+                  }`}
+                  title={isRecording ? "Stop Recording" : "Record Audio / Meeting"}
+                >
+                  <Mic size={17} className={isRecording ? "text-red-500 animate-pulse" : "text-red-400"} />
+                  <span>{isRecording ? "Stop" : "Record"}</span>
+                </button>
+
                 {/* Option Button 1: Insert Drawer Toggle */}
                 <button
                   type="button"
