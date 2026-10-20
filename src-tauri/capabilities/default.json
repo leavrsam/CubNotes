@@ -5,6 +5,11 @@
   "windows": [
     "main"
   ],
+  "remote": {
+    "urls": [
+      "https://cub-notes.vercel.app/*"
+    ]
+  },
   "permissions": [
     "core:default"
   ]

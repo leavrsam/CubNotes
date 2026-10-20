@@ -959,6 +959,27 @@ export function SettingsModal({
                     </a>
                   </div>
                 )}
+
+                <div className="pt-5 border-t border-zinc-200 dark:border-zinc-800">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
+                    <Monitor size={16} className="text-primary-500" />
+                    Desktop Apps (macOS & Windows)
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+                    Download standalone native installers for macOS (.dmg) and Windows (.exe / .msi) or install directly from Chrome/Edge as a desktop app. All desktop apps automatically sync over the air with live cloud updates.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <a
+                      href="https://github.com/leavrsam/CubNotes/releases/latest"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-xs rounded-xl shadow-sm transition-all"
+                    >
+                      <Download size={14} />
+                      <span>macOS (.dmg) & Windows (.exe) Releases</span>
+                    </a>
+                  </div>
+                </div>
               </div>
             )}
           </div>

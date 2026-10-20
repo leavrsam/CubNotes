@@ -23,37 +23,46 @@ pub fn start_recording() -> Result<String, String> {
     
     OUT_BUFFER.lock().unwrap().clear();
     IN_BUFFER.lock().unwrap().clear();
+    *OUT_CONFIG.lock().unwrap() = None;
+    *IN_CONFIG.lock().unwrap() = None;
     
-    // System Loopback (Output)
-    let out_device = host.default_output_device().ok_or("No output device available")?;
-    let out_cfg = out_device.default_output_config().map_err(|e| e.to_string())?;
-    let out_sample_format = out_cfg.sample_format();
-    let out_config: cpal::StreamConfig = out_cfg.into();
-    *OUT_CONFIG.lock().unwrap() = Some(out_config.clone());
+    let mut started_any = false;
 
-    let out_stream = match out_sample_format {
-        cpal::SampleFormat::F32 => out_device.build_input_stream(
-            &out_config,
-            move |data: &[f32], _: &_| {
-                if let Ok(mut buf) = OUT_BUFFER.lock() {
-                    buf.extend_from_slice(data);
+    // 1. Try System Loopback (Output capture on supported platforms like Windows)
+    if let Some(out_device) = host.default_output_device() {
+        if let Ok(out_cfg) = out_device.default_output_config() {
+            let out_sample_format = out_cfg.sample_format();
+            let out_config: cpal::StreamConfig = out_cfg.into();
+
+            let out_stream = match out_sample_format {
+                cpal::SampleFormat::F32 => out_device.build_input_stream(
+                    &out_config,
+                    move |data: &[f32], _: &_| {
+                        if let Ok(mut buf) = OUT_BUFFER.lock() {
+                            buf.extend_from_slice(data);
+                        }
+                    },
+                    |err| eprintln!("out stream error: {}", err),
+                    None,
+                ).ok(),
+                _ => None,
+            };
+
+            if let Some(stream) = out_stream {
+                if stream.play().is_ok() {
+                    *OUT_CONFIG.lock().unwrap() = Some(out_config);
+                    *OUT_STREAM.lock().unwrap() = StreamWrapper(Some(stream));
+                    started_any = true;
                 }
-            },
-            |err| eprintln!("out stream error: {}", err),
-            None,
-        ),
-        _ => return Err("Unsupported out sample format".to_string()),
-    }.map_err(|e| e.to_string())?;
-    
-    out_stream.play().map_err(|e| e.to_string())?;
-    *OUT_STREAM.lock().unwrap() = StreamWrapper(Some(out_stream));
+            }
+        }
+    }
 
-    // Microphone (Input)
+    // 2. Microphone (Input capture on all platforms)
     if let Some(in_device) = host.default_input_device() {
         if let Ok(in_cfg) = in_device.default_input_config() {
             let in_sample_format = in_cfg.sample_format();
             let in_config: cpal::StreamConfig = in_cfg.into();
-            *IN_CONFIG.lock().unwrap() = Some(in_config.clone());
 
             let in_stream = match in_sample_format {
                 cpal::SampleFormat::F32 => in_device.build_input_stream(
@@ -65,18 +74,25 @@ pub fn start_recording() -> Result<String, String> {
                     },
                     |err| eprintln!("in stream error: {}", err),
                     None,
-                ),
-                _ => return Err("Unsupported in sample format".to_string()),
+                ).ok(),
+                _ => None,
             };
             
-            if let Ok(stream) = in_stream {
-                let _ = stream.play();
-                *IN_STREAM.lock().unwrap() = StreamWrapper(Some(stream));
+            if let Some(stream) = in_stream {
+                if stream.play().is_ok() {
+                    *IN_CONFIG.lock().unwrap() = Some(in_config);
+                    *IN_STREAM.lock().unwrap() = StreamWrapper(Some(stream));
+                    started_any = true;
+                }
             }
         }
     }
 
-    Ok("Recording started".to_string())
+    if started_any {
+        Ok("Recording started".to_string())
+    } else {
+        Err("No audio recording device available".to_string())
+    }
 }
 
 #[tauri::command]
@@ -87,24 +103,30 @@ pub fn stop_recording() -> Result<String, String> {
     let out_buf = OUT_BUFFER.lock().unwrap().clone();
     let in_buf = IN_BUFFER.lock().unwrap().clone();
     
-    let out_cfg = OUT_CONFIG.lock().unwrap().clone().ok_or("No out config")?;
+    let out_cfg = OUT_CONFIG.lock().unwrap().clone();
     let in_cfg = IN_CONFIG.lock().unwrap().clone();
 
-    // The target config will be the output (system) config
-    let target_channels = out_cfg.channels as usize;
-    let target_rate = out_cfg.sample_rate.0 as f32;
+    // Pick whichever config is active
+    let active_cfg = out_cfg.clone().or(in_cfg.clone()).ok_or("No audio recorded")?;
 
-    let mut mixed_buf = out_buf.clone();
+    let target_channels = active_cfg.channels as usize;
+    let target_rate = active_cfg.sample_rate.0 as f32;
 
-    if let Some(cfg) = in_cfg {
+    let mut mixed_buf = if !out_buf.is_empty() {
+        out_buf.clone()
+    } else {
+        in_buf.clone()
+    };
+
+    // If both out and in buffers have audio, mix mic into output
+    if !out_buf.is_empty() && !in_buf.is_empty() && in_cfg.is_some() {
+        let cfg = in_cfg.unwrap();
         let src_channels = cfg.channels as usize;
         let src_rate = cfg.sample_rate.0 as f32;
         let ratio = src_rate / target_rate;
 
-        // Ensure we calculate frames properly to avoid out of bounds panic
         let src_frames = if src_channels > 0 { in_buf.len() / src_channels } else { 0 };
-        let target_frames = if target_channels > 0 { out_buf.len() / target_channels } else { 0 };
-        
+        let target_frames = if target_channels > 0 { mixed_buf.len() / target_channels } else { 0 };
         let frames_to_mix = target_frames;
 
         for i in 0..frames_to_mix {
@@ -112,20 +134,16 @@ pub fn stop_recording() -> Result<String, String> {
             let src_idx = src_idx_f.floor() as usize;
             
             if src_idx >= src_frames.saturating_sub(1) {
-                break; // end of mic buffer
+                break;
             }
             
             let frac = src_idx_f - src_idx as f32;
 
             for ch in 0..target_channels {
-                // if mic is mono, use channel 0, else match channel or modulo
                 let s_ch = ch % src_channels;
-                
                 let s1 = in_buf[src_idx * src_channels + s_ch];
                 let s2 = in_buf[(src_idx + 1) * src_channels + s_ch];
-                
                 let interpolated = s1 + (s2 - s1) * frac;
-                
                 mixed_buf[i * target_channels + ch] += interpolated;
             }
         }
@@ -135,8 +153,8 @@ pub fn stop_recording() -> Result<String, String> {
     let file_path = temp_dir.join("meeting_capture.wav").to_string_lossy().to_string();
 
     let spec = WavSpec {
-        channels: out_cfg.channels as u16,
-        sample_rate: out_cfg.sample_rate.0 as u32,
+        channels: active_cfg.channels as u16,
+        sample_rate: active_cfg.sample_rate.0 as u32,
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
