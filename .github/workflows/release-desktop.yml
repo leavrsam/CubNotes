@@ -1,0 +1,75 @@
+name: "Release Desktop Apps"
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release Tag (e.g. v0.1.0)'
+        required: false
+        default: 'v0.1.0'
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon (M1 / M2 / M3 / M4)
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          
+          # macOS Intel
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          
+          # Windows x64 (.msi and .exe setup installer)
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Setup Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Tauri App & Publish GitHub Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
+          releaseName: 'CubNotes ${{ github.event.inputs.release_tag || github.ref_name }}'
+          releaseBody: |
+            Official CubNotes desktop release for macOS and Windows.
+            
+            ### Included Installers:
+            - **macOS (Apple Silicon)**: `.dmg` (M1/M2/M3/M4 chips)
+            - **macOS (Intel)**: `.dmg`
+            - **Windows**: `.exe` and `.msi` setup installers
+            
+            All desktop apps automatically sync over the air with live cloud updates.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
