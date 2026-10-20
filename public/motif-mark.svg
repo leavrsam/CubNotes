@@ -1,54 +1,133 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- 3D Isometric Lighting Gradients -->
+    <!-- Soundwaves (Laser Cyan -> Sovereign Cobalt) -->
+    <linearGradient id="fin-wave-top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#00F0FF"/>
+    </linearGradient>
+    <linearGradient id="fin-wave-front" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="60%" stop-color="#0052FF"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="fin-wave-deep" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0052FF"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
 
-        <defs>
-          <linearGradient id="h-wave-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#00F0FF"/>
-            <stop offset="100%" stop-color="#0052FF"/>
-          </linearGradient>
-          <linearGradient id="h-diamond-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#0052FF"/>
-            <stop offset="100%" stop-color="#4F46E5"/>
-          </linearGradient>
-          <linearGradient id="h-branch-top" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#0052FF"/>
-            <stop offset="100%" stop-color="#10B981"/>
-          </linearGradient>
-          <linearGradient id="h-branch-bot" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#4F46E5"/>
-            <stop offset="100%" stop-color="#F59E0B"/>
-          </linearGradient>
-          <filter id="h-shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#0052FF" flood-opacity="0.25"/>
-          </filter>
-        </defs>
-        
+    <!-- Diamond Prism Facets -->
+    <linearGradient id="fin-prism-top" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="50%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#00D4FF"/>
+    </linearGradient>
+    <linearGradient id="fin-prism-left" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D4FF"/>
+      <stop offset="70%" stop-color="#0052FF"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="fin-prism-right" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0052FF"/>
+      <stop offset="60%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+
+    <!-- Flowchart Branches -->
+    <linearGradient id="fin-branch-top" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="40%" stop-color="#0052FF"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="fin-branch-bot" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="60%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#FFB000"/>
+    </linearGradient>
+
+    <!-- Emerald Jewel & Amber Tile 3D Shading -->
+    <linearGradient id="fin-emerald-sphere" x1="30%" y1="20%" x2="80%" y2="90%">
+      <stop offset="0%" stop-color="#6EE7B7"/>
+      <stop offset="30%" stop-color="#10B981"/>
+      <stop offset="75%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#064E3B"/>
+    </linearGradient>
+    <linearGradient id="fin-amber-top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="fin-amber-front" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+
+    <!-- Realistic Ambient & Drop Occlusion Shadow -->
+    <filter id="fin-master-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#0052FF" flood-opacity="0.38"/>
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- THE FINALE WINNING LOGO: Sculptural Isometric Flowchart -->
+  <g filter="url(#fin-master-shadow)" transform="translate(0, 0)">
     
+    <!-- 1. ACOUSTIC SOUNDWAVE SCULPTURE (Curved 3D Titanium/Frosted-Glass Arcs) -->
+    <!-- Outer Wave (Deep Resonance) -->
+    <path d="M 92 168 A 100 100 0 0 1 92 344" 
+          fill="none" stroke="url(#fin-wave-deep)" stroke-width="26" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 94 166 A 100 100 0 0 1 94 342" 
+          fill="none" stroke="url(#fin-wave-top)" stroke-width="14" stroke-linecap="round" opacity="0.4"/>
+
+    <!-- Middle Wave (Acoustic Inflow) -->
+    <path d="M 134 194 A 70 70 0 0 1 134 318" 
+          fill="none" stroke="url(#fin-wave-front)" stroke-width="28" stroke-linecap="round"/>
+    <path d="M 136 192 A 70 70 0 0 1 136 316" 
+          fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.55"/>
+
+    <!-- Inner Wave (Focused Compression) -->
+    <path d="M 176 220 A 40 40 0 0 1 176 292" 
+          fill="none" stroke="url(#fin-wave-front)" stroke-width="30" stroke-linecap="round"/>
     
-    <g transform="translate(0, 0)" filter="url(#h-shadow)">
-      <!-- Acoustic Soundwave Arcs (Speech Recording) -->
-      <path d="M 112 178 A 90 90 0 0 1 112 334" fill="none" stroke="#00F0FF" stroke-width="18" stroke-linecap="round" opacity="0.45"/>
-      <path d="M 148 202 A 62 62 0 0 1 148 310" fill="none" stroke="#00D4FF" stroke-width="20" stroke-linecap="round" opacity="0.8"/>
-      <path d="M 184 226 A 34 34 0 0 1 184 286" fill="none" stroke="#0085FF" stroke-width="22" stroke-linecap="round"/>
+    <!-- Direct Inflow Bridge -->
+    <line x1="184" y1="256" x2="224" y2="256" stroke="url(#fin-prism-left)" stroke-width="30" stroke-linecap="round"/>
 
-      <!-- Audio Inflow Stem -->
-      <line x1="196" y1="256" x2="224" y2="256" stroke="#0052FF" stroke-width="22" stroke-linecap="round"/>
-
-      <!-- Central AI Decision Diamond (Gemini 3.8 Synthesis) -->
-      <polygon points="256,212 300,256 256,300 212,256" fill="url(#h-diamond-grad)"/>
-      <circle cx="256" cy="256" r="11" fill="#FFFFFF"/>
-      <circle cx="256" cy="256" r="5" fill="#0052FF"/>
-
-      <!-- Flowchart Top Branch (Milestone Node) -->
-      <path d="M 300 256 L 334 256 A 20 20 0 0 0 354 236 L 354 186 A 20 20 0 0 1 374 166 L 398 166" 
-            fill="none" stroke="url(#h-branch-top)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="400" cy="166" r="22" fill="#10B981"/>
-      <circle cx="400" cy="166" r="9" fill="#FFFFFF"/>
-
-      <!-- Flowchart Bottom Branch (Action Node Card) -->
-      <path d="M 300 256 L 334 256 A 20 20 0 0 1 354 276 L 354 326 A 20 20 0 0 0 374 346 L 398 346" 
-            fill="none" stroke="url(#h-branch-bot)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-      <rect x="378" y="324" width="44" height="44" rx="14" fill="#F59E0B"/>
-      <circle cx="400" cy="346" r="8" fill="#FFFFFF"/>
-    </g>
+    <!-- 2. CENTRAL GEMINI AI DECISION DIAMOND (3D Faceted Crystal Prism, NO EYE) -->
+    <!-- Base 45° Diamond Prism -->
+    <polygon points="256,180 324,248 256,332 188,248" fill="url(#fin-prism-left)"/>
     
+    <!-- Top-Illuminated Facet (Crystal Reflection) -->
+    <polygon points="256,180 324,248 256,256 188,248" fill="url(#fin-prism-top)" opacity="0.85"/>
+    
+    <!-- Right Refractive Bevel Facet -->
+    <polygon points="256,256 324,248 256,332" fill="url(#fin-prism-right)" opacity="0.95"/>
+    
+    <!-- Chamfered Prism Spine Highlight -->
+    <line x1="256" y1="180" x2="256" y2="332" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+
+    <!-- 3. ORTHOGONAL 3D FLOWCHART BRANCHES -->
+    <!-- Top Branch (Ascending to Milestone) -->
+    <path d="M 324 248 L 354 248 A 14 14 0 0 0 368 234 L 368 174 A 14 14 0 0 1 382 160 L 404 160" 
+          fill="none" stroke="url(#fin-branch-top)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Top Branch Bevel Spine -->
+    <path d="M 324 246 L 354 246 A 14 14 0 0 0 366 232 L 366 174 A 14 14 0 0 1 380 158 L 404 158" 
+          fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+
+    <!-- Milestone Process Node (Spherical 3D Emerald Jewel, NO EYE) -->
+    <circle cx="416" cy="160" r="30" fill="url(#fin-emerald-sphere)"/>
+    <!-- Specular Highlight on Sphere -->
+    <ellipse cx="406" cy="150" rx="10" ry="7" transform="rotate(-30 406 150)" fill="#FFFFFF" opacity="0.6"/>
+
+    <!-- Bottom Branch (Descending to Task Card) -->
+    <path d="M 324 248 L 354 248 A 14 14 0 0 1 368 262 L 368 322 A 14 14 0 0 0 382 336 L 404 336" 
+          fill="none" stroke="url(#fin-branch-bot)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Bottom Branch Bevel Spine -->
+    <path d="M 324 250 L 354 250 A 14 14 0 0 1 370 264 L 370 322 A 14 14 0 0 0 384 338 L 404 338" 
+          fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
+
+    <!-- Action Task Node (Chamfered 3D Solar Amber Squircle Tile) -->
+    <rect x="386" y="306" width="60" height="60" rx="18" fill="url(#fin-amber-front)"/>
+    <rect x="388" y="308" width="56" height="52" rx="16" fill="url(#fin-amber-top)"/>
+    <!-- Tile Chamfer Highlight -->
+    <rect x="392" y="312" width="20" height="6" rx="3" fill="#FFFFFF" opacity="0.55"/>
+  </g>
 </svg>
