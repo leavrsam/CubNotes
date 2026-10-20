@@ -92,7 +92,7 @@ export function useNotebooks() {
         }
       }
 
-      let user = (await supabase.auth.getUser())?.data?.user;
+      let user: any = (await supabase.auth.getUser())?.data?.user;
       if (!user) {
         user = (await supabase.auth.getSession())?.data?.session?.user;
       }
@@ -107,7 +107,7 @@ export function useNotebooks() {
       setUserId(user.id);
 
       // Fetch all hierarchy data — exclude document_state from pages to avoid huge payloads
-      let [nbRes, secRes, pRes] = await Promise.all([
+      let [nbRes, secRes, pRes]: [any, any, any] = await Promise.all([
         supabase.from('notebooks').select('*').order('created_at', { ascending: true }),
         supabase.from('sections').select('*').order('sort_order', { ascending: true }),
         supabase.from('pages').select('id, section_id, title, date, is_journal_entry, created_at, deleted_at').order('created_at', { ascending: false }),
@@ -150,21 +150,21 @@ export function useNotebooks() {
       }
 
       // Merge server rows with in-flight optimistic creations and deletions, excluding soft-deleted items
-      let pages = (pRes.data as Page[]).filter(p => !inFlightDeletedIdsRef.current.has(p.id) && !p.deleted_at);
+      let pages = (((pRes.data || []) as Page[])).filter(p => !inFlightDeletedIdsRef.current.has(p.id) && !p.deleted_at);
       for (const [id, page] of inFlightNewPagesRef.current.entries()) {
         if (!pages.some(p => p.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
           pages.unshift(page);
         }
       }
 
-      let sectionsRaw = (secRes.data as any[]).filter(s => !inFlightDeletedIdsRef.current.has(s.id) && !s.deleted_at);
+      let sectionsRaw = (((secRes.data || []) as any[])).filter(s => !inFlightDeletedIdsRef.current.has(s.id) && !s.deleted_at);
       for (const [id, sec] of inFlightNewSectionsRef.current.entries()) {
         if (!sectionsRaw.some(s => s.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
           sectionsRaw.push(sec);
         }
       }
 
-      let notebooksRaw = (nbRes.data as any[]).filter(nb => !inFlightDeletedIdsRef.current.has(nb.id) && !nb.deleted_at);
+      let notebooksRaw = (((nbRes.data || []) as any[])).filter(nb => !inFlightDeletedIdsRef.current.has(nb.id) && !nb.deleted_at);
       for (const [id, nb] of inFlightNewNotebooksRef.current.entries()) {
         if (!notebooksRaw.some(n => n.id === id) && !inFlightDeletedIdsRef.current.has(id)) {
           notebooksRaw.push(nb);
@@ -189,7 +189,7 @@ export function useNotebooks() {
         return {
           ...nb,
           isShared: isNbShared,
-          isOwner: nb.user_id === userData.user.id,
+          isOwner: nb.user_id === user.id,
           sections: nbSections,
         };
       }) as Notebook[];
