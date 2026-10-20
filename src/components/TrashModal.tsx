@@ -88,38 +88,43 @@ export function TrashModal({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/80">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-xl">
-                <Trash2 size={20} />
+          <div className="flex items-center justify-between p-4 sm:px-6 sm:py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/80 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 sm:p-2.5 bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-xl shrink-0">
+                <Trash2 size={18} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                  <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 truncate">
                     Trash & Archive
                   </h2>
-                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                  <span className="shrink-0 inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-zinc-200/80 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
                     {trash.length} {trash.length === 1 ? 'item' : 'items'}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Items remain in Trash for 30 days before being permanently deleted
+                <p className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                  Items are permanently deleted after 30 days
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {trash.length > 0 && (
                 <button
+                  type="button"
                   onClick={() => setIsConfirmingEmptyTrash(true)}
-                  className="px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer"
+                  title="Empty all items in trash"
                 >
-                  Empty Trash
+                  <Trash2 size={13} />
+                  <span>Empty Trash</span>
                 </button>
               )}
               <button
+                type="button"
                 onClick={onClose}
-                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer"
+                aria-label="Close"
               >
                 <X size={18} />
               </button>
@@ -127,7 +132,7 @@ export function TrashModal({
           </div>
 
           {/* Search & Filter Bar */}
-          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row gap-3 items-center justify-between bg-zinc-50/30 dark:bg-zinc-900/30">
+          <div className="p-3 sm:p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-stretch sm:items-center justify-between bg-zinc-50/30 dark:bg-zinc-900/30">
             <div className="relative w-full sm:w-72">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
               <input
@@ -140,14 +145,14 @@ export function TrashModal({
             </div>
 
             {/* Type filters */}
-            <div className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:pb-0">
               {(['all', 'notebook', 'section', 'page'] as const).map((type) => (
                 <button
                   key={type}
                   onClick={() => setFilterType(type)}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors capitalize ${
+                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors capitalize cursor-pointer whitespace-nowrap ${
                     filterType === type
-                      ? 'bg-primary-600 text-white font-semibold'
+                      ? 'bg-primary-600 text-white font-semibold shadow-xs'
                       : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                   }`}
                 >

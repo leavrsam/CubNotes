@@ -357,14 +357,17 @@ export default function Home() {
     };
   }, [router, supabase, refreshNotebooks]);
 
-  // Save selected page to localStorage
+  // Save selected page to localStorage (or clear it when navigating back to main notebook organization page)
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     if (selectedPageId) {
       localStorage.setItem('lastSelectedPageId', selectedPageId);
+    } else {
+      localStorage.removeItem('lastSelectedPageId');
     }
   }, [selectedPageId]);
 
-  // Auto-select the last available page or first available page only on initial load
+  // Remember last page or open to the main notebook organization page on startup
   const hasAutoSelected = React.useRef(false);
   useEffect(() => {
     if (hasAutoSelected.current) return;
@@ -387,17 +390,22 @@ export default function Home() {
         }
       }
 
-      const lastSelectedId = localStorage.getItem('lastSelectedPageId');
+      // 2. Check if user previously had a note open
+      const lastSelectedId = typeof window !== 'undefined' ? localStorage.getItem('lastSelectedPageId') : null;
       if (!targetPageId && lastSelectedId) {
         // Verify it still exists in the loaded notebooks
         const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === lastSelectedId)));
         if (exists) {
           targetPageId = lastSelectedId;
+        } else {
+          localStorage.removeItem('lastSelectedPageId');
         }
       }
 
-      if (!targetPageId) {
-        // Fallback to first available
+      // 3. Fallback: on desktop (screen >= 768px), default to first available page so canvas isn't blank.
+      // On mobile (screen < 768px), keep targetPageId = null so it opens directly to the main notebook organization view!
+      const isDesktopScreen = typeof window !== 'undefined' && window.innerWidth >= 768;
+      if (!targetPageId && isDesktopScreen) {
         for (const nb of notebooks) {
           for (const sec of nb.sections) {
             if (sec.pages.length > 0) {
