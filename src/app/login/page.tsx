@@ -17,7 +17,10 @@ import {
   ArrowLeft,
   MailCheck,
   Users,
-  Download
+  Download,
+  Smartphone,
+  Apple,
+  Monitor
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -518,16 +521,46 @@ function LoginForm() {
           )}
         </div>
 
-        {/* Android App Download Link */}
-        <div className="mt-5 text-center">
-          <a
-            href="/Motif.apk"
-            download="Motif.apk"
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 rounded-full transition-colors shadow-xs"
-          >
-            <Download size={13} className="text-primary-400" />
-            <span>Download Android App (.apk)</span>
-          </a>
+        {/* Native Apps Download Section */}
+        <div className="mt-5 pt-4 border-t border-zinc-800/60 flex flex-col items-center gap-2.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400">
+            <Download size={12} className="text-primary-400" />
+            <span>Download Auto-Updating Apps</span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 w-full">
+            <a
+              href="/Motif.apk"
+              download="Motif.apk"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 rounded-full transition-all shadow-xs group"
+              title="Download Android APK"
+            >
+              <Smartphone size={13} className="text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span>Android (.apk)</span>
+            </a>
+
+            <a
+              href="https://github.com/leavrsam/CubNotes/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 rounded-full transition-all shadow-xs group"
+              title="Download macOS App (.dmg)"
+            >
+              <Apple size={13} className="text-zinc-200 group-hover:scale-110 transition-transform" />
+              <span>macOS (.dmg)</span>
+            </a>
+
+            <a
+              href="https://github.com/leavrsam/CubNotes/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 rounded-full transition-all shadow-xs group"
+              title="Download Windows App (.exe)"
+            >
+              <Monitor size={13} className="text-blue-400 group-hover:scale-110 transition-transform" />
+              <span>Windows (.exe)</span>
+            </a>
+          </div>
         </div>
 
       </div>

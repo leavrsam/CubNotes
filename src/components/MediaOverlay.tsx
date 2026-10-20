@@ -93,6 +93,7 @@ export function MediaOverlay({
       {images.map(img => (
         <div
           key={img.id}
+          id={`image-node-${img.id}`}
           className="absolute"
           style={{
             transform: `translate(${img.x * zoom + pan.x}px, ${img.y * zoom + pan.y}px) scale(${zoom})`,
@@ -140,6 +141,7 @@ export function MediaOverlay({
       {files.map(file => (
         <div
           key={file.id}
+          id={`file-node-${file.id}`}
           className="absolute"
           style={{
             transform: `translate(${file.x * zoom + pan.x}px, ${file.y * zoom + pan.y}px) scale(${zoom})`,
@@ -191,6 +193,7 @@ export function MediaOverlay({
       {videos.map(video => (
         <div
           key={video.id}
+          id={`video-node-${video.id}`}
           className="absolute"
           style={{
             transform: `translate(${video.x * zoom + pan.x}px, ${video.y * zoom + pan.y}px) scale(${zoom})`,

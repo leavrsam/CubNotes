@@ -302,6 +302,7 @@ function AudioNodeCard({
 
   return (
     <div 
+      id={`audio-node-${node.id}`}
       className={`absolute pointer-events-auto group transition-colors rounded-xl`}
       style={{
         left: node.x,

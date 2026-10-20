@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download } from "lucide-react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download, Monitor, Smartphone } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { isNativeApp } from "@/lib/nativeAudio";
@@ -237,20 +237,37 @@ export function Sidebar(props: SidebarProps) {
       {/* Settings & Trash Footer */}
       <div className="p-3 border-t border-zinc-800 space-y-1 mt-auto">
         {!isNativeApp() && (
-          <a
-            href="/Motif.apk"
-            download="Motif.apk"
-            className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
-            title="Download Motif Android App (APK)"
-          >
-            <div className="flex items-center gap-2.5">
-              <Download size={15} className="text-zinc-400 group-hover:text-primary-400 transition-colors" />
-              <span>Download App</span>
-            </div>
-            <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/60 rounded text-[10px] font-medium">
-              APK
-            </span>
-          </a>
+          <div className="space-y-0.5">
+            <a
+              href="https://github.com/leavrsam/CubNotes/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
+              title="Download Desktop App for Mac & Windows"
+            >
+              <div className="flex items-center gap-2.5">
+                <Monitor size={15} className="text-zinc-400 group-hover:text-primary-400 transition-colors" />
+                <span>Desktop App</span>
+              </div>
+              <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/60 rounded text-[10px] font-medium">
+                Mac / Win
+              </span>
+            </a>
+            <a
+              href="/Motif.apk"
+              download="Motif.apk"
+              className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
+              title="Download Motif Android App (APK)"
+            >
+              <div className="flex items-center gap-2.5">
+                <Smartphone size={15} className="text-zinc-400 group-hover:text-emerald-400 transition-colors" />
+                <span>Mobile App</span>
+              </div>
+              <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/60 rounded text-[10px] font-medium">
+                APK
+              </span>
+            </a>
+          </div>
         )}
 
         {props.onOpenTrash && (
