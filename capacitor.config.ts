@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.cubnotes.app',
-  appName: 'CubNotes',
+  appName: 'Motif',
   webDir: 'out',
   server: {
     url: 'https://cub-notes.vercel.app',

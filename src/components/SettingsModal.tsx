@@ -775,7 +775,7 @@ export function SettingsModal({
                     <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Google Gemini AI</h3>
                   </div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    CubNotes is powered by <strong>Gemini 3.8 Flash</strong> for speaker-diarized audio meeting transcriptions, structured executive summaries, and intelligent note organization.
+                    Motif is powered by <strong>Gemini 3.8 Flash</strong> for speaker-diarized audio meeting transcriptions, structured executive summaries, and intelligent note organization.
                   </p>
                 </div>
 
@@ -837,7 +837,7 @@ export function SettingsModal({
                   <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
                     <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Trash & Data Recovery</h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      CubNotes retains deleted items for 30 days before permanent purging.
+                      Motif retains deleted items for 30 days before permanent purging.
                     </p>
                     <div className="flex flex-wrap gap-2 pt-1">
                       {onOpenTrash && (
@@ -902,8 +902,8 @@ export function SettingsModal({
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
                     {isNativeApp() 
-                      ? "CubNotes automatically loads the latest live cloud features. Click below to refresh cached assets and sync with the newest build."
-                      : "CubNotes runs as an offline-first PWA. If new features or bug fixes aren't showing up immediately, click below to force-refresh cached assets and sync with the latest build."}
+                      ? "Motif automatically loads the latest live cloud features. Click below to refresh cached assets and sync with the newest build."
+                      : "Motif runs as an offline-first PWA. If new features or bug fixes aren't showing up immediately, click below to force-refresh cached assets and sync with the latest build."}
                   </p>
                   <button
                     onClick={handleCheckUpdates}
@@ -922,7 +922,7 @@ export function SettingsModal({
                         <Check size={18} />
                       </div>
                       <div>
-                        <p className="font-bold text-emerald-900 dark:text-emerald-200">CubNotes Android APK Active</p>
+                        <p className="font-bold text-emerald-900 dark:text-emerald-200">Motif Android APK Active</p>
                         <p className="text-[11px] text-emerald-700 dark:text-emerald-400/90 mt-0.5">
                           Screen-off audio recording, wake locks, and native background services are running.
                         </p>
@@ -936,7 +936,7 @@ export function SettingsModal({
                       Screen-Off & Background Recording (Android APK)
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-                      Mobile web browsers aggressively pause audio recording when your phone screen turns off or when you switch apps. Install the standalone CubNotes Android APK to keep recording long lectures, meetings, and voice memos uninterrupted in the background.
+                      Mobile web browsers aggressively pause audio recording when your phone screen turns off or when you switch apps. Install the standalone Motif Android APK to keep recording long lectures, meetings, and voice memos uninterrupted in the background.
                     </p>
                     <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 mb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
                       <p className="font-semibold text-zinc-800 dark:text-zinc-200">✨ APK Features:</p>
@@ -949,11 +949,11 @@ export function SettingsModal({
                     </div>
                     <a
                       href="/CubNotes.apk"
-                      download="CubNotes.apk"
+                      download="Motif.apk"
                       className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-sm rounded-xl shadow-sm transition-all"
                     >
                       <Download size={15} />
-                      <span>Download Android App (CubNotes.apk)</span>
+                      <span>Download Android App (Motif.apk)</span>
                     </a>
                   </div>
                 )}

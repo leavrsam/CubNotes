@@ -97,7 +97,7 @@ export function AccentProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Load saved accent color from localStorage on mount
-    const saved = localStorage.getItem("cubnotes-accent-color") as AccentColor;
+    const saved = (localStorage.getItem("motif-accent-color") || localStorage.getItem("cubnotes-accent-color")) as AccentColor;
     if (saved && ACCENT_COLORS[saved]) {
       setAccentColorState(saved);
     }
@@ -105,7 +105,7 @@ export function AccentProvider({ children }: { children: React.ReactNode }) {
 
   const setAccentColor = (color: AccentColor) => {
     setAccentColorState(color);
-    localStorage.setItem("cubnotes-accent-color", color);
+    localStorage.setItem("motif-accent-color", color);
   };
 
   // Update CSS variables when accent color changes

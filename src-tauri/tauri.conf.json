@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CubNotes",
+  "productName": "Motif",
   "version": "0.1.0",
   "identifier": "com.cubnotes.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "CubNotes",
+        "title": "Motif",
         "width": 800,
         "height": 600,
         "resizable": true,

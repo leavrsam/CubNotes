@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cubnotes-shell-v2';
+const CACHE_NAME = 'motif-shell-v1';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -81,7 +81,7 @@ self.addEventListener('fetch', (event) => {
           if (cached) return cached;
           const rootCached = await caches.match('/');
           if (rootCached) return rootCached;
-          return new Response('Offline: CubNotes is operating offline.', {
+          return new Response('Offline: Motif is operating offline.', {
             status: 200,
             headers: { 'Content-Type': 'text/plain' },
           });

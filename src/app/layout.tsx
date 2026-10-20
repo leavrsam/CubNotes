@@ -3,8 +3,8 @@ import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CubNotes",
-  description: "AI-powered infinite canvas workspace",
+  title: "Motif",
+  description: "AI-powered infinite spatial canvas & meeting workspace",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "CubNotes",
+    title: "Motif",
   },
 };
 

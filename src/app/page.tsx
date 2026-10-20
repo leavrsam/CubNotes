@@ -19,7 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2 } from "lucide-react";
+import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2, Download } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -30,6 +30,7 @@ import { ShareModal } from "@/components/ShareModal";
 import { uploadMediaFile } from "@/lib/storage";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
+import { isNativeApp } from "@/lib/nativeAudio";
 
 export default function Home() {
   const { 
@@ -755,6 +756,17 @@ export default function Home() {
               onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
               headerControls={
                 <>
+                  {!isNativeApp() && (
+                    <a
+                      href="/CubNotes.apk"
+                      download="CubNotes.apk"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold transition-colors shrink-0"
+                      title="Download CubNotes for Android"
+                    >
+                      <Download size={14} className="text-primary-500" />
+                      <span>Download App</span>
+                    </a>
+                  )}
                   <button
                     onClick={() => handleOpenShare('page', selectedPageId, activePageTitle)}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary-600/10 hover:bg-primary-600/20 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"

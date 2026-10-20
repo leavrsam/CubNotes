@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     const { textNodes = [], audioSummaries = [], imageNodes = [], apiKey: clientApiKey } = body;
     const apiKey = clientApiKey || req.headers.get('x-gemini-api-key') || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "Gemini API key is not configured. Please set GEMINI_API_KEY in Vercel or add your key in CubNotes Settings." }, { status: 500 });
+      return NextResponse.json({ error: "Gemini API key is not configured. Please set GEMINI_API_KEY in Vercel or add your key in Motif Settings." }, { status: 500 });
     }
     const ai = new GoogleGenAI({ apiKey });
 

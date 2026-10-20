@@ -286,7 +286,7 @@ export function TrashModal({
           itemType={confirmDeleteTarget.type === 'section' ? 'folder' : confirmDeleteTarget.type}
           itemName={confirmDeleteTarget.title}
           isPermanent={true}
-          details="This item will be permanently removed from CubNotes and cannot be recovered."
+          details="This item will be permanently removed from Motif and cannot be recovered."
         />
       )}
 

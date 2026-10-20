@@ -324,7 +324,7 @@ export function MobileNavigation({
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/?page=${page.id}` : '';
     const shareData = {
       title,
-      text: `CubNotes: ${title}`,
+      text: `Motif: ${title}`,
       url: shareUrl,
     };
 
@@ -357,7 +357,7 @@ export function MobileNavigation({
     const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
     const shareData = {
       title,
-      text: `CubNotes Folder: ${title} (${section.pages.length} notes)`,
+      text: `Motif Folder: ${title} (${section.pages.length} notes)`,
       url: shareUrl,
     };
 
@@ -389,7 +389,7 @@ export function MobileNavigation({
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/?notebookId=${notebook.id}` : '';
     const shareData = {
       title,
-      text: `CubNotes Notebook: ${title}`,
+      text: `Motif Notebook: ${title}`,
       url: shareUrl,
     };
 
@@ -977,8 +977,8 @@ export function MobileNavigation({
       >
         <div className="flex items-center justify-between px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="CubNotes" className="w-6 h-6 object-contain" />
-            <span className="font-bold text-sm text-zinc-700 dark:text-zinc-300">CubNotes</span>
+            <img src="/logo.png" alt="Motif" className="w-6 h-6 object-contain" />
+            <span className="font-bold text-sm text-zinc-700 dark:text-zinc-300">Motif</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1004,6 +1004,17 @@ export function MobileNavigation({
                   </span>
                 )}
               </button>
+            )}
+
+            {!isNativeApp() && (
+              <a 
+                href="/CubNotes.apk"
+                download="CubNotes.apk"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 transition-colors"
+                title="Download Android App (APK)"
+              >
+                <Download size={17} />
+              </a>
             )}
 
             {onRefresh && (
@@ -1079,7 +1090,7 @@ export function MobileNavigation({
             <div className="flex items-center gap-1.5 shrink-0">
               <a
                 href="/CubNotes.apk"
-                download="CubNotes.apk"
+                download="Motif.apk"
                 className="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform"
               >
                 <Download size={13} />

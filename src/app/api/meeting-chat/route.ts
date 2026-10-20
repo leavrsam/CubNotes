@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const ai = new GoogleGenAI({ apiKey });
 
     // Build context
-    const contextPrompt = `You are an intelligent, perceptive meeting co-pilot for CubNotes, designed to provide specific, exact answers about this meeting.
+    const contextPrompt = `You are an intelligent, perceptive meeting co-pilot for Motif, designed to provide specific, exact answers about this meeting.
 
 CONTEXT:
 ${summary ? `### Executive Summary:\n${summary}\n\n` : ''}

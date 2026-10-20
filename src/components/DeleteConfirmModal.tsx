@@ -85,7 +85,7 @@ export function DeleteConfirmModal({
               : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40 text-amber-800 dark:text-amber-300'
           }`}>
             {isPermanent ? (
-              <span>⚠️ <strong>Permanent Deletion:</strong> This will permanently erase this {typeLabel.toLowerCase()} and its contents from CubNotes and cannot be recovered.</span>
+              <span>⚠️ <strong>Permanent Deletion:</strong> This will permanently erase this {typeLabel.toLowerCase()} and its contents from Motif and cannot be recovered.</span>
             ) : (
               <span>📦 <strong>30-Day Trash:</strong> This will be moved to your Trash. You can restore it at any time over the next 30 days before it is permanently removed.</span>
             )}

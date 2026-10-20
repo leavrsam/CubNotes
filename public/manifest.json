@@ -1,12 +1,12 @@
 {
-  "name": "CubNotes",
-  "short_name": "CubNotes",
+  "name": "Motif",
+  "short_name": "Motif",
   "description": "Infinite spatial whiteboard, rich notes, and Gemini AI meeting transcriber.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#0b0e17",
+  "theme_color": "#0b0e17",
   "icons": [
     {
       "src": "/icon.png",

@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users } from "lucide-react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { isNativeApp } from "@/lib/nativeAudio";
 
 interface SidebarProps {
   notebooks: Notebook[];
@@ -108,8 +109,8 @@ export function Sidebar(props: SidebarProps) {
     >
       <div className="p-4 border-b border-zinc-800 flex items-center justify-between group">
         <h1 className="text-lg font-bold text-zinc-100 tracking-tight flex items-center gap-2.5">
-          <img src="/logo.png" alt="CubNotes" className="w-6 h-6 object-contain" />
-          <span>CubNotes</span>
+          <img src="/logo.png" alt="Motif" className="w-6 h-6 object-contain" />
+          <span>Motif</span>
         </h1>
         <div className="flex items-center gap-1">
           <button 
@@ -235,6 +236,23 @@ export function Sidebar(props: SidebarProps) {
       
       {/* Settings & Trash Footer */}
       <div className="p-3 border-t border-zinc-800 space-y-1 mt-auto">
+        {!isNativeApp() && (
+          <a
+            href="/CubNotes.apk"
+            download="Motif.apk"
+            className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
+            title="Download Motif Android App (APK)"
+          >
+            <div className="flex items-center gap-2.5">
+              <Download size={15} className="text-zinc-400 group-hover:text-primary-400 transition-colors" />
+              <span>Download App</span>
+            </div>
+            <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/60 rounded text-[10px] font-medium">
+              APK
+            </span>
+          </a>
+        )}
+
         {props.onOpenTrash && (
           <button 
             onClick={props.onOpenTrash}

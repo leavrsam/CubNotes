@@ -312,7 +312,7 @@ export function CommandPalette({
             <span><kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded font-mono">↑</kbd> <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded font-mono">↓</kbd> Navigate</span>
             <span><kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded font-mono">↵</kbd> Select</span>
           </div>
-          <span>CubNotes Quick Switcher</span>
+          <span>Motif Quick Switcher</span>
         </div>
       </div>
     </div>

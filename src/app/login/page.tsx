@@ -16,7 +16,8 @@ import {
   BookOpen,
   ArrowLeft,
   MailCheck,
-  Users
+  Users,
+  Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -309,9 +310,9 @@ function LoginForm() {
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center space-y-2">
           <div className="w-16 h-16 mb-1 flex items-center justify-center">
-            <img src="/logo.png" alt="CubNotes" className="w-full h-full object-contain drop-shadow-md" />
+            <img src="/logo.png" alt="Motif" className="w-full h-full object-contain drop-shadow-md" />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">CubNotes</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Motif</h1>
           <p className="text-xs text-zinc-400">
             {mode === 'signin' && 'Sign in to access your spatial workspace'}
             {mode === 'signup' && 'Create your account to get started in seconds'}
@@ -515,6 +516,18 @@ function LoginForm() {
               </button>
             </p>
           )}
+        </div>
+
+        {/* Android App Download Link */}
+        <div className="mt-5 text-center">
+          <a
+            href="/CubNotes.apk"
+            download="CubNotes.apk"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 rounded-full transition-colors shadow-xs"
+          >
+            <Download size={13} className="text-primary-400" />
+            <span>Download Android App (.apk)</span>
+          </a>
         </div>
 
       </div>

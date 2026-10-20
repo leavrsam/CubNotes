@@ -311,7 +311,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
     if (!safeAudioUrl && !payloadBase64) {
       // Audio is too large to send directly through Vercel serverless payload limit without cloud storage
       if (!customKey) {
-        throw new Error("This recording is too long to process without cloud storage or an API key. Please add your Google Gemini API key in CubNotes Settings > AI to transcribe long recordings directly without limits.");
+        throw new Error("This recording is too long to process without cloud storage or an API key. Please add your Google Gemini API key in Motif Settings > AI to transcribe long recordings directly without limits.");
       }
     }
 
@@ -352,13 +352,13 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
 
     const message = apiErr?.message || String(apiErr);
     if (message.includes('API key is not configured') || message.includes('API_KEY')) {
-      throw new Error("Gemini API key is not configured. Please open CubNotes Settings > AI to verify your Google Gemini API key.");
+      throw new Error("Gemini API key is not configured. Please open Motif Settings > AI to verify your Google Gemini API key.");
     }
     if (message.includes('413') || message.includes('Payload Too Large')) {
       throw new Error("Recording is too large to send directly. Please ensure audio storage is connected or enter your Gemini API key in Settings.");
     }
     if (message.includes('504') || message.includes('Gateway Timeout')) {
-      throw new Error("The recording took longer than expected to process on the server (HTTP 504 Gateway Timeout). Please add your Google Gemini API key in CubNotes Settings > AI to transcribe recordings directly without server limits.");
+      throw new Error("The recording took longer than expected to process on the server (HTTP 504 Gateway Timeout). Please add your Google Gemini API key in Motif Settings > AI to transcribe recordings directly without server limits.");
     }
     if (message.includes('503') || message.includes('high demand') || message.includes('UNAVAILABLE')) {
       throw new Error("Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.");

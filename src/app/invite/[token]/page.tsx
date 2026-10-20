@@ -121,10 +121,10 @@ export default function InvitePage() {
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-zinc-800 to-zinc-900 border border-zinc-700/80 p-2.5 shadow-xl flex items-center justify-center mb-3.5">
-            <img src="/logo.png" alt="CubNotes" className="w-full h-full object-contain" />
+            <img src="/logo.png" alt="Motif" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <span>CubNotes Collaboration</span>
+            <span>Motif Collaboration</span>
             <Sparkles size={16} className="text-primary-400" />
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
@@ -156,7 +156,7 @@ export default function InvitePage() {
               onClick={() => router.push('/')}
               className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 text-xs font-semibold transition-colors"
             >
-              Go to CubNotes
+              Go to Motif
             </button>
           </div>
         )}
@@ -228,7 +228,7 @@ export default function InvitePage() {
               /* Path B: User does not have an account yet or is logged out */
               <div className="space-y-3">
                 <p className="text-xs text-center text-zinc-400 leading-relaxed px-2">
-                  Create a free CubNotes account or log in to view and contribute to this note in real-time.
+                  Create a free Motif account or log in to view and contribute to this note in real-time.
                 </p>
 
                 <button
