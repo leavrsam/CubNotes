@@ -378,6 +378,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     });
   }, [texts, audios, images, files, videos, strokes]);
 
+  const INITIAL_CONTENT_Y = 240;
+
   useEffect(() => {
     if (sortedBlocks.length > 0) {
       const last = sortedBlocks[sortedBlocks.length - 1];
@@ -388,11 +390,76 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           height = el.offsetHeight;
         }
       }
-      setBottomY((last.y ?? 0) + height + 32);
+      const safeLastY = Math.max(last.y ?? INITIAL_CONTENT_Y, INITIAL_CONTENT_Y);
+      setBottomY(safeLastY + height + 32);
     } else {
-      setBottomY(100);
+      setBottomY(INITIAL_CONTENT_Y);
     }
   }, [sortedBlocks]);
+
+  // Synchronizes physical linear layout on mobile with desktop canvas coordinates
+  // Ensures blocks always start below the desktop Title header (y >= 240) and have >= 32px spacing
+  const syncBlockPositions = useCallback(() => {
+    if (sortedBlocks.length === 0) return;
+    let currentY = INITIAL_CONTENT_Y;
+    let hasChanges = false;
+
+    const newTexts = [...texts];
+    const newAudios = [...audios];
+    const newImages = [...(images || [])];
+    const newFiles = [...(files || [])];
+    const newVideos = [...(videos || [])];
+
+    sortedBlocks.forEach(block => {
+      let height = block.height || (block.type === 'image' ? 400 : block.type === 'audio' ? (block.isCollapsed ? 80 : 160) : 120);
+      if (typeof document !== 'undefined') {
+        const el = document.getElementById(`block-${block.id}`);
+        if (el && el.offsetHeight > 0) {
+          height = el.offsetHeight;
+        }
+      }
+
+      if (Math.abs((block.y ?? 0) - currentY) > 8) {
+        hasChanges = true;
+        if (block.type === 'text') {
+          const idx = newTexts.findIndex(t => t.id === block.id);
+          if (idx !== -1) newTexts[idx] = { ...newTexts[idx], y: currentY };
+        } else if (block.type === 'audio') {
+          const idx = newAudios.findIndex(a => a.id === block.id);
+          if (idx !== -1) newAudios[idx] = { ...newAudios[idx], y: currentY };
+        } else if (block.type === 'image') {
+          const idx = newImages.findIndex(i => i.id === block.id);
+          if (idx !== -1) newImages[idx] = { ...newImages[idx], y: currentY };
+        } else if (block.type === 'file') {
+          const idx = newFiles.findIndex(f => f.id === block.id);
+          if (idx !== -1) newFiles[idx] = { ...newFiles[idx], y: currentY };
+        } else if (block.type === 'video') {
+          const idx = newVideos.findIndex(v => v.id === block.id);
+          if (idx !== -1) newVideos[idx] = { ...newVideos[idx], y: currentY };
+        }
+      }
+
+      currentY += height + 32;
+    });
+
+    if (hasChanges) {
+      setTexts(newTexts);
+      setAudios(newAudios);
+      if (images) setImages(newImages);
+      if (files) setFiles(newFiles);
+      if (videos) setVideos(newVideos);
+      setBottomY(currentY);
+    }
+  }, [sortedBlocks, texts, audios, images, files, videos, setTexts, setAudios, setImages, setFiles, setVideos]);
+
+  // Initial mount auto-sync (fixes legacy overlapping coordinates from past mobile sessions)
+  useEffect(() => {
+    if (loading) return;
+    const timer = setTimeout(() => {
+      syncBlockPositions();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [loading, pageId, syncBlockPositions]);
 
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   
@@ -505,7 +572,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
   const startNewSketchBlock = () => {
     const newSketchId = `sketch-${uuidv4()}`;
-    openDrawOverlay(newSketchId, 'drawing', bottomY);
+    openDrawOverlay(newSketchId, 'drawing', Math.max(INITIAL_CONTENT_Y, bottomY));
   };
   
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -656,8 +723,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       const customEvent = e as CustomEvent<{ id: string }>;
       const { id } = customEvent.detail;
       const targetY = isJournal 
-        ? (sortedBlocks.length > 0 ? Math.min(...sortedBlocks.map(b => b.y ?? 0)) - 200 : 0)
-        : bottomY;
+        ? INITIAL_CONTENT_Y
+        : Math.max(INITIAL_CONTENT_Y, bottomY);
+
+      if (isJournal) {
+        const shiftY = 200;
+        setTexts(prev => prev.map(t => ({ ...t, y: (t.y ?? INITIAL_CONTENT_Y) + shiftY })));
+        setAudios(prev => prev.map(a => ({ ...a, y: (a.y ?? INITIAL_CONTENT_Y) + shiftY })));
+        setImages(prev => prev.map(i => ({ ...i, y: (i.y ?? INITIAL_CONTENT_Y) + shiftY })));
+        setFiles(prev => prev.map(f => ({ ...f, y: (f.y ?? INITIAL_CONTENT_Y) + shiftY })));
+        setVideos(prev => prev.map(v => ({ ...v, y: (v.y ?? INITIAL_CONTENT_Y) + shiftY })));
+      }
+
       const newAudio = {
         id,
         url: "",
@@ -799,9 +876,17 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
     const updatedVideos: VideoNode[] = [];
     let updatedStrokes = [...strokes];
 
-    newBlocks.forEach((block, index) => {
-      const newY = 100 + index * 250;
-      const deltaY = newY - block.y;
+    let currentY = INITIAL_CONTENT_Y;
+    newBlocks.forEach((block) => {
+      let blockHeight = block.height || (block.type === 'image' ? 400 : block.type === 'audio' ? (block.isCollapsed ? 80 : 160) : 120);
+      if (typeof document !== 'undefined') {
+        const el = document.getElementById(`block-${block.id}`);
+        if (el && el.offsetHeight > 0) {
+          blockHeight = el.offsetHeight;
+        }
+      }
+      const newY = currentY;
+      const deltaY = newY - (block.y ?? currentY);
 
       if (block.type === 'text') {
         const existing = texts.find(t => t.id === block.id);
@@ -831,6 +916,8 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
           return s;
         });
       }
+
+      currentY += blockHeight + 32;
     });
 
     setTexts(updatedTexts);
@@ -869,7 +956,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
       setImages(prev => [...(prev || []), {
         id: uuidv4(),
         x: 50,
-        y: bottomY,
+        y: Math.max(INITIAL_CONTENT_Y, bottomY),
         width: imgWidth,
         height: imgHeight,
         url: publicUrl
@@ -888,8 +975,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
   const addTextBlock = () => {
     const targetY = isJournal 
-      ? (sortedBlocks.length > 0 ? Math.min(...sortedBlocks.map(b => b.y ?? 0)) - 200 : 0)
-      : bottomY;
+      ? INITIAL_CONTENT_Y
+      : Math.max(INITIAL_CONTENT_Y, bottomY);
+
+    if (isJournal) {
+      const shiftY = 160;
+      setTexts(prev => prev.map(t => ({ ...t, y: (t.y ?? INITIAL_CONTENT_Y) + shiftY })));
+      setAudios(prev => prev.map(a => ({ ...a, y: (a.y ?? INITIAL_CONTENT_Y) + shiftY })));
+      setImages(prev => prev.map(i => ({ ...i, y: (i.y ?? INITIAL_CONTENT_Y) + shiftY })));
+      setFiles(prev => prev.map(f => ({ ...f, y: (f.y ?? INITIAL_CONTENT_Y) + shiftY })));
+      setVideos(prev => prev.map(v => ({ ...v, y: (v.y ?? INITIAL_CONTENT_Y) + shiftY })));
+    }
+
     const newNode = {
       id: uuidv4(),
       x: 50,
@@ -1315,6 +1412,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                             setIsKeyboardOpen(false);
                             setKeyboardOffset(0);
                             setMobileActiveEditor(null);
+                            syncBlockPositions();
                           }
                         }, 150);
                       }}

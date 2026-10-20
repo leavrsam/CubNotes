@@ -351,34 +351,132 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     return Math.max(1, count);
   }, [texts, audios, isJournal]);
 
-  // Auto-resolve vertical block collisions on desktop canvas (prevents images from covering text)
-  useEffect(() => {
-    if (loading || !texts || !images || images.length === 0 || texts.length === 0) return;
+  // Comprehensive Auto-Resolve for Canvas Collisions on Desktop:
+  // 1. Clears Title Header Zone (ensures no content overlaps title/date at x < 720, y < 240)
+  // 2. Clears Element-to-Element vertical overlaps in the same column (maintains clean >= 32px spacing)
+  const resolveCanvasCollisions = useCallback(() => {
+    if (loading) return;
+    if (originalSelectionRef.current !== null) return; // Do not run while user is dragging
 
-    let hasOverlap = false;
-    const adjustedTexts = [...texts];
+    const SAFE_TITLE_TOP_Y = 240;
+    const TITLE_COLUMN_MAX_X = 720;
+    const GAP = 32;
 
-    images.forEach(img => {
-      const imgWidth = img.width || 400;
-      const imgHeight = img.height || 350;
-      const imgBottom = img.y + imgHeight;
-
-      adjustedTexts.forEach((txt, idx) => {
-        const txtWidth = txt.width || 400;
-        const hOverlap = Math.max(0, Math.min(img.x + imgWidth, txt.x + txtWidth) - Math.max(img.x, txt.x));
-        if (hOverlap > 80) {
-          if (txt.y >= img.y - 20 && txt.y < imgBottom) {
-            adjustedTexts[idx] = { ...txt, y: imgBottom + 32 };
-            hasOverlap = true;
+    const getItemHeight = (item: { id: string; type: string; height?: number; content?: string; isCollapsed?: boolean }) => {
+      if (typeof document !== 'undefined') {
+        const domId = item.type === 'text' ? `text-node-${item.id}` :
+                      item.type === 'audio' ? `audio-node-${item.id}` :
+                      item.type === 'image' ? `image-node-${item.id}` :
+                      item.type === 'video' ? `video-node-${item.id}` :
+                      item.type === 'file' ? `file-node-${item.id}` : null;
+        if (domId) {
+          const el = document.getElementById(domId);
+          if (el && el.offsetHeight > 0) {
+            return el.offsetHeight;
           }
         }
-      });
-    });
+      }
+      if (item.height && item.height > 0) return item.height;
+      if (item.type === 'text') {
+        const clean = (item.content || '').replace(/<[^>]*>/g, '').trim();
+        const lines = Math.max(1, Math.ceil(clean.length / 45));
+        return Math.max(80, lines * 26 + 40);
+      }
+      if (item.type === 'audio') return item.isCollapsed ? 80 : 160;
+      if (item.type === 'image') return 300;
+      if (item.type === 'video') return 270;
+      if (item.type === 'file') return 80;
+      return 100;
+    };
 
-    if (hasOverlap) {
-      setTexts(adjustedTexts);
+    type UnifiedItem = {
+      id: string;
+      type: 'text' | 'audio' | 'image' | 'video' | 'file';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+
+    const allItems: UnifiedItem[] = [
+      ...texts.map(t => ({ id: t.id, type: 'text' as const, x: t.x ?? 50, y: t.y ?? 100, width: t.width || 400, height: getItemHeight({ id: t.id, type: 'text', content: t.content }) })),
+      ...(audios || []).map(a => ({ id: a.id, type: 'audio' as const, x: a.x ?? 50, y: a.y ?? 100, width: a.width || 500, height: getItemHeight({ id: a.id, type: 'audio', isCollapsed: a.isCollapsed }) })),
+      ...(images || []).map(i => ({ id: i.id, type: 'image' as const, x: i.x ?? 50, y: i.y ?? 100, width: i.width || 400, height: getItemHeight({ id: i.id, type: 'image', height: i.height }) })),
+      ...(videos || []).map(v => ({ id: v.id, type: 'video' as const, x: v.x ?? 50, y: v.y ?? 100, width: v.width || 480, height: getItemHeight({ id: v.id, type: 'video', height: v.height }) })),
+      ...(files || []).map(f => ({ id: f.id, type: 'file' as const, x: f.x ?? 50, y: f.y ?? 100, width: f.width || 256, height: getItemHeight({ id: f.id, type: 'file', height: f.height }) }))
+    ];
+
+    if (allItems.length === 0) return;
+
+    // Cluster items into vertical columns based on horizontal overlap
+    const visited = new Set<string>();
+    const clusters: UnifiedItem[][] = [];
+
+    for (const item of allItems) {
+      if (visited.has(item.id)) continue;
+      const cluster: UnifiedItem[] = [item];
+      visited.add(item.id);
+
+      for (const other of allItems) {
+        if (visited.has(other.id)) continue;
+        const hOverlap = Math.max(0, Math.min(item.x + item.width, other.x + other.width) - Math.max(item.x, other.x));
+        const minW = Math.min(item.width, other.width);
+        if (hOverlap >= Math.min(80, minW * 0.4)) {
+          cluster.push(other);
+          visited.add(other.id);
+        }
+      }
+      clusters.push(cluster);
     }
-  }, [loading, images, texts.length]);
+
+    let hasAnyChanges = false;
+    const updatedYMap = new Map<string, number>();
+
+    for (const cluster of clusters) {
+      cluster.sort((a, b) => a.y - b.y);
+
+      const inTitleColumn = cluster.some(item => item.x < TITLE_COLUMN_MAX_X);
+      let runningY = inTitleColumn ? SAFE_TITLE_TOP_Y : cluster[0].y;
+
+      for (let i = 0; i < cluster.length; i++) {
+        const item = cluster[i];
+        let targetY = item.y;
+
+        if (inTitleColumn && targetY < SAFE_TITLE_TOP_Y) {
+          targetY = SAFE_TITLE_TOP_Y;
+        }
+
+        if (targetY < runningY) {
+          targetY = runningY;
+        }
+
+        if (Math.abs(targetY - item.y) > 2) {
+          updatedYMap.set(item.id, targetY);
+          hasAnyChanges = true;
+          item.y = targetY;
+        }
+
+        runningY = item.y + item.height + GAP;
+      }
+    }
+
+    if (hasAnyChanges) {
+      setTexts(prev => prev.map(t => updatedYMap.has(t.id) ? { ...t, y: updatedYMap.get(t.id)! } : t));
+      setAudios(prev => prev.map(a => updatedYMap.has(a.id) ? { ...a, y: updatedYMap.get(a.id)! } : a));
+      setImages(prev => prev.map(i => updatedYMap.has(i.id) ? { ...i, y: updatedYMap.get(i.id)! } : i));
+      setVideos(prev => prev.map(v => updatedYMap.has(v.id) ? { ...v, y: updatedYMap.get(v.id)! } : v));
+      setFiles(prev => prev.map(f => updatedYMap.has(f.id) ? { ...f, y: updatedYMap.get(f.id)! } : f));
+    }
+  }, [loading, texts, audios, images, videos, files, setTexts, setAudios, setImages, setVideos, setFiles]);
+
+  // Auto-resolve collisions on page load and when item counts change
+  useEffect(() => {
+    if (loading) return;
+    const timer = setTimeout(() => {
+      resolveCanvasCollisions();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [loading, pageId, texts.length, (audios || []).length, (images || []).length, (files || []).length, (videos || []).length, resolveCanvasCollisions]);
 
   // View state
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
@@ -1060,7 +1158,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         const newAudio: AudioNode = {
           id: newId,
           x: center.x - 220,
-          y: isJournal ? 80 : center.y - 100,
+          y: isJournal ? 240 : Math.max(240, center.y - 100),
           width: 500,
           url: "",
           title: `Meeting - ${format(new Date(), 'MMM d, yyyy')}`,
@@ -1143,7 +1241,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       setAudios(prev => [...(prev || []), {
         id: nodeId,
         x: center.x - 220,
-        y: isJournal ? 80 : center.y - 100,
+        y: isJournal ? 240 : Math.max(240, center.y - 100),
         width: 500,
         url: "",
         title: isJournal ? `Journal Entry - ${format(new Date(), 'MMM d, yyyy')}` : `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
@@ -1372,11 +1470,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       }
 
       const snapY = backgroundStyle === 'ruled' || backgroundStyle === 'grid' ? Math.round(y / 32) * 32 : y;
+      // Prevent spawning directly over the desktop Page Title header (x < 720, y < 240)
+      const safeY = (x < 720 && snapY < 240) ? 240 : snapY;
       const newId = uuidv4();
       const newNode: TextNode = {
         id: newId,
         x,
-        y: snapY,
+        y: safeY,
         width: 600,
         content: "<p></p>"
       };
