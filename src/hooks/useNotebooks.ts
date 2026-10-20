@@ -107,11 +107,16 @@ export function useNotebooks() {
       setUserId(user.id);
 
       // Fetch all hierarchy data — exclude document_state from pages to avoid huge payloads
-      const [nbRes, secRes, pRes] = await Promise.all([
+      let [nbRes, secRes, pRes] = await Promise.all([
         supabase.from('notebooks').select('*').order('created_at', { ascending: true }),
         supabase.from('sections').select('*').order('sort_order', { ascending: true }),
         supabase.from('pages').select('id, section_id, title, date, is_journal_entry, created_at, deleted_at').order('created_at', { ascending: false }),
       ]);
+
+      // If pages.deleted_at does not exist on the database yet, retry pages query without it
+      if (pRes.error && (pRes.error.message?.includes('deleted_at') || pRes.error.code === '42703')) {
+        pRes = await supabase.from('pages').select('id, section_id, title, date, is_journal_entry, created_at').order('created_at', { ascending: false });
+      }
 
       if (nbRes.error || secRes.error || pRes.error) {
         const err = nbRes.error || secRes.error || pRes.error;
