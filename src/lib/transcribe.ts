@@ -262,7 +262,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
   const safeAudioUrl = isBlobUrl ? undefined : params.audioUrl;
   let audioBase64 = params.audioBase64;
   
-  const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
+  const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
 
   // Resolve base64 from blob if needed
   if (!audioBase64 && params.audioBlob) {

@@ -758,10 +758,10 @@ export default function Home() {
                 <>
                   {!isNativeApp() && (
                     <a
-                      href="/CubNotes.apk"
-                      download="CubNotes.apk"
+                      href="/Motif.apk"
+                      download="Motif.apk"
                       className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold transition-colors shrink-0"
-                      title="Download CubNotes for Android"
+                      title="Download Motif for Android"
                     >
                       <Download size={14} className="text-primary-500" />
                       <span>Download App</span>

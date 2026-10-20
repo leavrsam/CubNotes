@@ -1008,10 +1008,10 @@ export function MobileNavigation({
 
             {!isNativeApp() && (
               <a 
-                href="/CubNotes.apk"
-                download="CubNotes.apk"
+                href="/Motif.apk"
+                download="Motif.apk"
                 className="w-8 h-8 rounded-full flex items-center justify-center text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 transition-colors"
-                title="Download Android App (APK)"
+                title="Download Motif Android App (APK)"
               >
                 <Download size={17} />
               </a>
@@ -1089,7 +1089,7 @@ export function MobileNavigation({
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <a
-                href="/CubNotes.apk"
+                href="/Motif.apk"
                 download="Motif.apk"
                 className="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform"
               >

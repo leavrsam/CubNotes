@@ -143,7 +143,7 @@ export function MeetingWorkspace({
     const toastId = toast.loading("Enhancing notes with gemini-3.8-flash...");
 
     try {
-      const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
+      const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
       const res = await fetch('/api/enhance-notes', {
         method: 'POST',
         headers: {
@@ -194,7 +194,7 @@ export function MeetingWorkspace({
     }
 
     try {
-      const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
+      const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
       const res = await fetch('/api/meeting-chat', {
         method: 'POST',
         headers: {

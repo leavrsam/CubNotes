@@ -66,7 +66,7 @@ public class MeetingWidgetProvider extends AppWidgetProvider {
         );
         views.setOnClickPendingIntent(R.id.widget_btn_record, pendingToggle);
 
-        // Click on widget title/body to open CubNotes app
+        // Click on widget title/body to open Motif app
         Intent openAppIntent = new Intent(context, MainActivity.class);
         openAppIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent pendingOpen = PendingIntent.getActivity(

@@ -1,5 +1,5 @@
 /**
- * IndexedDB Offline Storage and Sync Queue for CubNotes.
+ * IndexedDB Offline Storage and Sync Queue for Motif.
  * Enables zero-latency startup and full offline note viewing and editing.
  */
 

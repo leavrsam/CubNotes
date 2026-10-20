@@ -46,7 +46,7 @@
         <!-- 1-Tap Home Screen Meeting Widget -->
         <receiver
             android:name=".MeetingWidgetProvider"
-            android:label="CubNotes 1-Tap Meeting Recorder"
+            android:label="Motif 1-Tap Meeting Recorder"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

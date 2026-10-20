@@ -80,7 +80,7 @@ export function SettingsModal({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setGeminiApiKey(localStorage.getItem('cubnotes_gemini_api_key') || "");
+      setGeminiApiKey(localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key') || "");
     }
   }, [isOpen]);
 
@@ -89,9 +89,11 @@ export function SettingsModal({
     setGeminiApiKey(trimmed);
     if (typeof window !== 'undefined') {
       if (trimmed) {
+        localStorage.setItem('motif_gemini_api_key', trimmed);
         localStorage.setItem('cubnotes_gemini_api_key', trimmed);
         toast.success("Gemini API key saved!");
       } else {
+        localStorage.removeItem('motif_gemini_api_key');
         localStorage.removeItem('cubnotes_gemini_api_key');
         toast.success("Gemini API key removed.");
       }
@@ -948,7 +950,7 @@ export function SettingsModal({
                       </ul>
                     </div>
                     <a
-                      href="/CubNotes.apk"
+                      href="/Motif.apk"
                       download="Motif.apk"
                       className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-sm rounded-xl shadow-sm transition-all"
                     >

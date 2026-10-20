@@ -479,7 +479,7 @@ export function FlowchartOverlay({
           // Write signature to clipboard to invalidate any prior image in clipboard
           if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
             navigator.clipboard.writeText(JSON.stringify({
-              type: 'cubnotes/flowchart-shapes',
+              type: 'motif/flowchart-shapes',
               data: toCopy
             })).catch(() => {});
           }

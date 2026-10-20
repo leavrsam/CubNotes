@@ -238,7 +238,7 @@ export function Sidebar(props: SidebarProps) {
       <div className="p-3 border-t border-zinc-800 space-y-1 mt-auto">
         {!isNativeApp() && (
           <a
-            href="/CubNotes.apk"
+            href="/Motif.apk"
             download="Motif.apk"
             className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
             title="Download Motif Android App (APK)"

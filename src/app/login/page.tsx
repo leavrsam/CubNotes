@@ -521,8 +521,8 @@ function LoginForm() {
         {/* Android App Download Link */}
         <div className="mt-5 text-center">
           <a
-            href="/CubNotes.apk"
-            download="CubNotes.apk"
+            href="/Motif.apk"
+            download="Motif.apk"
             className="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 rounded-full transition-colors shadow-xs"
           >
             <Download size={13} className="text-primary-400" />

@@ -190,9 +190,9 @@ export function EmergencyRecoveryModal({
     }
   };
 
-  const consoleRescueSnippet = `// === CubNotes Emergency CDO Notebook Rescue Script ===
+  const consoleRescueSnippet = `// === Motif Emergency CDO Notebook Rescue Script ===
 (async () => {
-  console.log("🔍 Scanning CubNotes IndexedDB for orphaned pages...");
+  console.log("🔍 Scanning Motif IndexedDB for orphaned pages...");
   const dbReq = indexedDB.open('cubnotes_offline_db');
   dbReq.onsuccess = async () => {
     const db = dbReq.result;
@@ -314,7 +314,7 @@ export function EmergencyRecoveryModal({
               How Recovery Works for Issy (&ldquo;CDO&rdquo; Notebook):
             </p>
             <p>
-              When a notebook is deleted, CubNotes does not purge individual note canvas drawings or audios from the browser&apos;s local IndexedDB. 
+              When a notebook is deleted, Motif does not purge individual note canvas drawings or audios from the browser&apos;s local IndexedDB. 
               As long as the user hasn&apos;t cleared browser cache/data, their notes are cached intact right here.
             </p>
           </div>

@@ -21,7 +21,7 @@ import java.io.File;
 import java.io.IOException;
 
 public class AudioRecordingService extends Service {
-    private static final String TAG = "CubNotesRecordingSvc";
+    private static final String TAG = "MotifRecordingSvc";
     public static final String CHANNEL_ID = "cubnotes_recording_channel";
     public static final int NOTIFICATION_ID = 2001;
 
@@ -79,7 +79,7 @@ public class AudioRecordingService extends Service {
             // 1. Acquire WakeLock to keep CPU alive when screen is off
             PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (powerManager != null) {
-                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CubNotes:RecordingWakeLock");
+                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Motif:RecordingWakeLock");
                 wakeLock.acquire(120 * 60 * 1000L); // Max 2 hours safety timeout
             }
 
@@ -209,7 +209,7 @@ public class AudioRecordingService extends Service {
         );
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("CubNotes Meeting Recording")
+                .setContentTitle("Motif Meeting Recording")
                 .setContentText("Recording in background with phone off/in pocket...")
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(openPendingIntent)
@@ -223,10 +223,10 @@ public class AudioRecordingService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "CubNotes Background Recording",
+                    "Motif Background Recording",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Shows notification when CubNotes is recording audio in background");
+            channel.setDescription("Shows notification when Motif is recording audio in background");
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);

@@ -73,7 +73,7 @@ export async function uploadMediaFile(
   }
 
   // 2. Fallback to Supabase Storage (try specified bucket, then common alternatives)
-  const candidateBuckets = [bucket, 'recordings', 'cubnotes-media', 'notes-media'];
+  const candidateBuckets = [bucket, 'recordings', 'motif-media', 'cubnotes-media', 'notes-media'];
   const triedBuckets = new Set<string>();
 
   for (const targetBucket of candidateBuckets) {

@@ -206,7 +206,7 @@ export async function getInviteDetails(inviteToken: string): Promise<InviteDetai
       resource_type: directData.resource_type,
       resource_id: directData.resource_id,
       resource_title: title,
-      owner_email: 'A CubNotes user',
+      owner_email: 'A Motif user',
       owner_name: 'Team member',
       permission: directData.permission,
       status: directData.status,

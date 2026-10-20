@@ -107,7 +107,7 @@ DO NOT include markdown wrappers or backticks. Return ONLY raw JSON.
       return NextResponse.json({ error: "No diagram nodes generated." }, { status: 400 });
     }
 
-    // Map AI output to CubNotes ShapeNode and ConnectorNode with spatial coordinates
+    // Map AI output to Motif ShapeNode and ConnectorNode with spatial coordinates
     const idMap = new Map<string, string>();
     const COL_SPACING = 240;
     const ROW_SPACING = 140;

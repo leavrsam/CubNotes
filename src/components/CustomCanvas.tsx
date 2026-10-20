@@ -630,7 +630,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         }
       }
 
-      const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
+      const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
 
       const res = await fetch('/api/generate-flowchart', {
         method: 'POST',
@@ -1612,7 +1612,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         return;
       }
 
-      const customKey = typeof window !== 'undefined' ? localStorage.getItem('cubnotes_gemini_api_key') : null;
+      const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
 
       const res = await fetch('/api/organize', {
         method: 'POST',
@@ -1973,7 +1973,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       if (pastedText) {
         try {
           const parsed = JSON.parse(pastedText);
-          if (parsed && parsed.type === 'cubnotes/flowchart-shapes') {
+          if (parsed && (parsed.type === 'motif/flowchart-shapes' || parsed.type === 'cubnotes/flowchart-shapes')) {
             e.preventDefault();
             return;
           }
