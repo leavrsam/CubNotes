@@ -97,6 +97,11 @@ export async function setCachedNotebooks(notebooks: Notebook[]): Promise<void> {
 // --- Page State Cache ---
 
 export async function getCachedPageState(pageId: string): Promise<DocumentState | null> {
+  const record = await getCachedPageRecord(pageId);
+  return record ? record.documentState : null;
+}
+
+export async function getCachedPageRecord(pageId: string): Promise<CachedPageRecord | null> {
   const db = await openDB();
   if (!db) return null;
 
@@ -106,8 +111,7 @@ export async function getCachedPageState(pageId: string): Promise<DocumentState 
       const store = tx.objectStore('pages');
       const req = store.get(pageId);
       req.onsuccess = () => {
-        const record = req.result as CachedPageRecord | undefined;
-        resolve(record ? record.documentState : null);
+        resolve((req.result as CachedPageRecord) || null);
       };
       req.onerror = () => resolve(null);
     } catch {
@@ -131,7 +135,7 @@ export async function setCachedPageState(
       const record: CachedPageRecord = {
         pageId,
         documentState: state,
-        updatedAt: Date.now(),
+        updatedAt: (state as any)?._clientUpdatedAt || Date.now(),
         isDirty,
       };
       store.put(record);
@@ -160,6 +164,37 @@ export async function queueOfflineSync(action: SyncAction): Promise<void> {
       resolve();
     }
   });
+}
+
+export async function replayPendingSync(supabase: any): Promise<number> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return 0;
+  try {
+    const pending = await getPendingSyncActions();
+    if (!pending || pending.length === 0) return 0;
+
+    let syncedCount = 0;
+    for (const action of pending) {
+      if (action.action === 'save_canvas') {
+        const { error } = await supabase
+          .from('pages')
+          .update({ document_state: action.payload })
+          .eq('id', action.pageId);
+
+        if (!error) {
+          await removeSyncAction(action.id);
+          const cached = await getCachedPageRecord(action.pageId);
+          if (cached) {
+            await setCachedPageState(action.pageId, cached.documentState, false);
+          }
+          syncedCount++;
+        }
+      }
+    }
+    return syncedCount;
+  } catch (err) {
+    console.warn("Error replaying sync queue:", err);
+    return 0;
+  }
 }
 
 export async function getPendingSyncActions(): Promise<SyncAction[]> {

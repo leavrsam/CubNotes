@@ -5,7 +5,7 @@ import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor, LineSpacingDropdown, executeIndent, executeOutdent } from "./TipTapEditor";
 import type { Editor } from "@tiptap/react";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2 } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2, History, RotateCcw, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -246,7 +246,20 @@ interface MobilePageProps {
 }
 
 export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting, onOpenSettings, onOpenShare, isJournal }: MobilePageProps) {
-  const { loading, strokes, setStrokes, texts, setTexts, audios, setAudios, images, setImages, files, setFiles, videos, setVideos } = useCanvasData(pageId);
+  const {
+    loading,
+    strokes, setStrokes,
+    texts, setTexts,
+    audios, setAudios,
+    images, setImages,
+    files, setFiles,
+    videos, setVideos,
+    flushSave,
+    pageVersions,
+    fetchVersions,
+    restoreVersion,
+    saveManualSnapshot
+  } = useCanvasData(pageId);
   const [bottomY, setBottomY] = useState(0);
 
   // Group blocks and strokes
@@ -426,6 +439,22 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
   const [drawOverlayBlockType, setDrawOverlayBlockType] = useState<string | null>(null);
   const [drawOverlayInitialY, setDrawOverlayInitialY] = useState<number | undefined>(undefined);
 
+  // Version History Modal State
+  const [isVersionsModalOpen, setIsVersionsModalOpen] = useState(false);
+  const [isTakingSnapshot, setIsTakingSnapshot] = useState(false);
+
+  // Safe navigation back that flushes pending edits first
+  const handleBack = useCallback(async () => {
+    if (flushSave) {
+      try {
+        await flushSave();
+      } catch (e) {
+        console.warn("Error flushing save on back:", e);
+      }
+    }
+    if (onBack) onBack();
+  }, [flushSave, onBack]);
+
   // Swipe-to-go-back gesture handling
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -449,7 +478,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
 
     // If swipe right was at least 65px and mostly horizontal
     if (deltaX > 65 && deltaX > deltaY * 1.3) {
-      if (onBack) onBack();
+      handleBack();
     }
     touchStartX.current = null;
     touchStartY.current = null;
@@ -1009,7 +1038,7 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         >
           {onBack ? (
             <button 
-              onClick={onBack}
+              onClick={handleBack}
               className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 text-primary-600 dark:text-primary-400 font-semibold text-sm active:scale-95 transition-all"
               title="Back to Folders"
             >
@@ -1033,6 +1062,18 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                     <Share2 size={16} />
                   </button>
                 )}
+
+                <button 
+                  onClick={() => {
+                    setIsTopMenuOpen(false);
+                    fetchVersions();
+                    setIsVersionsModalOpen(true);
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+                  title="Version History"
+                >
+                  <History size={16} />
+                </button>
 
                 <button 
                   onClick={() => {
@@ -1962,6 +2003,123 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
         isJournal={isJournal}
         onUpdatePageTitle={onUpdatePageTitle}
       />
+
+      {/* Mobile Version History Modal */}
+      {isVersionsModalOpen && (
+        <div 
+          className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setIsVersionsModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-lg max-h-[85vh] bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-250 border border-zinc-200 dark:border-zinc-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-primary-500" />
+                <h3 className="font-bold text-base text-zinc-900 dark:text-white">Version History</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isTakingSnapshot}
+                  onClick={async () => {
+                    setIsTakingSnapshot(true);
+                    try {
+                      const ok = await saveManualSnapshot();
+                      if (ok) {
+                        toast.success("Snapshot created!");
+                        await fetchVersions();
+                      } else {
+                        toast.error("No canvas changes to snapshot");
+                      }
+                    } catch {
+                      toast.error("Failed to take snapshot");
+                    } finally {
+                      setIsTakingSnapshot(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-full bg-primary-500 text-white hover:bg-primary-600 active:scale-95 transition-all flex items-center gap-1 shadow-sm disabled:opacity-50"
+                >
+                  <Plus size={14} />
+                  <span>Snapshot</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsVersionsModalOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Subheader */}
+            <div className="px-5 py-2.5 bg-zinc-50 dark:bg-zinc-800/40 border-b border-zinc-100 dark:border-zinc-800 text-[12px] text-zinc-500 dark:text-zinc-400">
+              Automatic snapshots are saved as you work. Tap a version below to restore it.
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+              {pageVersions.length === 0 ? (
+                <div className="py-12 text-center text-zinc-400 text-sm flex flex-col items-center gap-2">
+                  <Clock className="w-8 h-8 opacity-40" />
+                  <p>No past snapshots recorded yet.</p>
+                  <p className="text-xs text-zinc-500">Tap &quot;+ Snapshot&quot; above to capture a point in time.</p>
+                </div>
+              ) : (
+                pageVersions.map((version) => {
+                  const state = version.document_state || {};
+                  const textCount = state.texts?.length || 0;
+                  const strokeCount = state.strokes?.length || 0;
+                  const audioCount = state.audios?.length || 0;
+                  const imgCount = state.images?.length || 0;
+
+                  return (
+                    <div
+                      key={version.id}
+                      className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 flex items-center justify-between gap-3 hover:border-primary-500/50 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-zinc-900 dark:text-white truncate">
+                          {format(new Date(version.created_at), "MMM d, yyyy 'at' h:mm:ss a")}
+                        </div>
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                          {textCount > 0 && <span>{textCount} {textCount === 1 ? 'text' : 'texts'}</span>}
+                          {strokeCount > 0 && <span>• {strokeCount} strokes</span>}
+                          {audioCount > 0 && <span>• {audioCount} audio</span>}
+                          {imgCount > 0 && <span>• {imgCount} images</span>}
+                          {textCount === 0 && strokeCount === 0 && audioCount === 0 && imgCount === 0 && (
+                            <span>Empty canvas</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          restoreVersion(version.document_state);
+                          setIsVersionsModalOpen(false);
+                          toast.success("Restored previous version. (You can undo if needed)");
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-zinc-700 text-primary-600 dark:text-primary-300 font-semibold text-xs border border-zinc-200 dark:border-zinc-600 shadow-xs hover:bg-primary-50 dark:hover:bg-zinc-600 active:scale-95 transition-all flex items-center gap-1.5"
+                      >
+                        <RotateCcw size={13} />
+                        <span>Restore</span>
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-center text-[11px] text-zinc-400">
+              Tiered retention: 10 today · 5/day this week · 1/day up to 60 days
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

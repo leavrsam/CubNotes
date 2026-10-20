@@ -4,10 +4,13 @@ import debounce from "lodash/debounce";
 import { v4 as uuidv4 } from "uuid";
 import { 
   getCachedPageState, 
+  getCachedPageRecord,
   setCachedPageState, 
   queueOfflineSync, 
   getPendingSyncActions, 
-  removeSyncAction 
+  removeSyncAction,
+  replayPendingSync,
+  CachedPageRecord
 } from "@/lib/offlineStore";
 import { Stroke, TextNode, AudioNode, ImageNode, FileNode, VideoNode, ShapeNode, ConnectorNode, DocumentState } from "@/components/CustomCanvas";
 
@@ -32,6 +35,9 @@ export function useCanvasData(pageId: string) {
   const lastSavedStateRef = useRef<DocumentState | null>(null);
   const isUndoingRef = useRef(false);
   const isRemoteUpdateRef = useRef(false);
+  const isDirtyRef = useRef(false);
+  const lastLocalEditTimeRef = useRef(0);
+  const isFlushingRef = useRef(false);
   const lastSnapshotHashRef = useRef<string>("");
   const lastSnapshotTimeRef = useRef<number>(0);
   const currentStateRef = useRef<DocumentState>({
@@ -55,10 +61,17 @@ export function useCanvasData(pageId: string) {
     let isMounted = true;
 
     async function loadData() {
+      // 0. Replay any pending offline sync actions if online
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        replayPendingSync(supabase).catch(e => console.warn("Replay sync error:", e));
+      }
+
       // 1. Instant load from local IndexedDB cache (0ms latency, works offline)
+      let localRecord: CachedPageRecord | null = null;
       try {
-        const cached = await getCachedPageState(pageId);
-        if (cached && isMounted) {
+        localRecord = await getCachedPageRecord(pageId);
+        if (localRecord?.documentState && isMounted) {
+          const cached = localRecord.documentState;
           setStrokes(cached.strokes || []);
           setTexts(cached.texts || []);
           setAudios(cached.audios || []);
@@ -67,6 +80,7 @@ export function useCanvasData(pageId: string) {
           setVideos(cached.videos || []);
           setShapes(cached.shapes || []);
           setConnectors(cached.connectors || []);
+          currentStateRef.current = cached;
           lastSavedStateRef.current = cached;
           lastSnapshotHashRef.current = JSON.stringify(cached);
           lastSnapshotTimeRef.current = Date.now();
@@ -75,6 +89,10 @@ export function useCanvasData(pageId: string) {
       } catch (cacheErr) {
         console.warn("Could not read local cached page state:", cacheErr);
       }
+
+      // Check if there are pending offline sync actions for this page
+      const pendingSyncs = await getPendingSyncActions();
+      const hasPendingSync = pendingSyncs.some(a => a.pageId === pageId);
 
       // If offline, stop here
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -93,20 +111,58 @@ export function useCanvasData(pageId: string) {
         if (error) {
           console.warn("Supabase fetch failed (possibly offline):", error);
         } else if (isMounted && data?.document_state) {
-          const state = data.document_state as DocumentState;
-          setStrokes(state.strokes || []);
-          setTexts(state.texts || []);
-          setAudios(state.audios || []);
-          setImages(state.images || []);
-          setFiles(state.files || []);
-          setVideos(state.videos || []);
-          setShapes(state.shapes || []);
-          setConnectors(state.connectors || []);
-          lastSavedStateRef.current = state;
-          lastSnapshotHashRef.current = JSON.stringify(state);
-          lastSnapshotTimeRef.current = Date.now();
-          // Update local cache with fresh state
-          setCachedPageState(pageId, state, false);
+          const remoteState = data.document_state as DocumentState;
+          const remoteTime = (remoteState as any)?._clientUpdatedAt || 0;
+          const localTime = Math.max(
+            (localRecord?.documentState as any)?._clientUpdatedAt || 0,
+            localRecord?.updatedAt || 0,
+            lastLocalEditTimeRef.current || 0
+          );
+
+          // Conflict resolution:
+          // If local has pending unsaved changes or local is NEWER than remote:
+          if (isDirtyRef.current || hasPendingSync || localRecord?.isDirty || (localTime > 0 && localTime > remoteTime)) {
+            console.log("Local state is NEWER than Supabase. Preserving local edits and syncing up to Supabase.");
+            // Keep local state on screen!
+            // Immediately sync newer local state up to Supabase so remote becomes up-to-date:
+            const stateToPush = (currentStateRef.current && (
+              (currentStateRef.current.texts && currentStateRef.current.texts.length > 0) ||
+              (currentStateRef.current.strokes && currentStateRef.current.strokes.length > 0) ||
+              (currentStateRef.current.audios && currentStateRef.current.audios.length > 0) ||
+              (currentStateRef.current.images && currentStateRef.current.images.length > 0)
+            )) ? currentStateRef.current : localRecord?.documentState;
+
+            if (stateToPush) {
+              const fullState = {
+                ...stateToPush,
+                _clientUpdatedAt: localTime || Date.now()
+              };
+              const { error: syncErr } = await supabase
+                .from("pages")
+                .update({ document_state: fullState })
+                .eq("id", pageId);
+              if (!syncErr) {
+                isDirtyRef.current = false;
+                await setCachedPageState(pageId, fullState as any, false);
+                await removeSyncAction(`sync_${pageId}`);
+              }
+            }
+          } else {
+            // Remote state is genuinely newer or identical: apply it
+            setStrokes(remoteState.strokes || []);
+            setTexts(remoteState.texts || []);
+            setAudios(remoteState.audios || []);
+            setImages(remoteState.images || []);
+            setFiles(remoteState.files || []);
+            setVideos(remoteState.videos || []);
+            setShapes(remoteState.shapes || []);
+            setConnectors(remoteState.connectors || []);
+            currentStateRef.current = remoteState;
+            lastSavedStateRef.current = remoteState;
+            lastSnapshotHashRef.current = JSON.stringify(remoteState);
+            lastSnapshotTimeRef.current = Date.now();
+            await setCachedPageState(pageId, remoteState, false);
+          }
         }
       } catch (networkErr) {
         console.warn("Network error loading canvas state:", networkErr);
@@ -124,7 +180,7 @@ export function useCanvasData(pageId: string) {
     };
   }, [pageId, supabase]);
 
-  // Debounced history snapshot
+  // Debounced history snapshot for Undo/Redo
   useEffect(() => {
     if (loading) return;
     if (isUndoingRef.current) {
@@ -153,27 +209,11 @@ export function useCanvasData(pageId: string) {
     return () => clearTimeout(timeoutId);
   }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading]);
 
-  // Save state: Write locally immediately, debounced sync to Supabase
-  const saveToSupabase = useCallback(
+  // Debounced network sync to Supabase (1500ms) to avoid saturating HTTP connection while typing
+  const debouncedSyncToSupabase = useCallback(
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    debounce(async (
-      newStrokes: Stroke[], newTexts: TextNode[], newAudios: AudioNode[],
-      newImages: ImageNode[], newFiles: FileNode[], newVideos: VideoNode[],
-      newShapes: ShapeNode[], newConnectors: ConnectorNode[]
-    ) => {
-      const state: DocumentState = { 
-        strokes: newStrokes, texts: newTexts, audios: newAudios,
-        images: newImages, files: newFiles, videos: newVideos,
-        shapes: newShapes, connectors: newConnectors
-      };
-
-      const isOfflineNow = typeof navigator !== 'undefined' && !navigator.onLine;
-
-      // Always save to local IndexedDB immediately
-      await setCachedPageState(pageId, state, isOfflineNow);
-
-      if (isOfflineNow) {
-        // Queue for background sync when back online
+    debounce(async (state: DocumentState) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         await queueOfflineSync({
           id: `sync_${pageId}`,
           action: 'save_canvas',
@@ -190,7 +230,11 @@ export function useCanvasData(pageId: string) {
           .update({ document_state: state })
           .eq('id', pageId);
 
-        if (error) {
+        if (!error) {
+          isDirtyRef.current = false;
+          await setCachedPageState(pageId, state, false);
+          await removeSyncAction(`sync_${pageId}`);
+        } else {
           console.warn("Supabase update error, queuing offline sync:", error);
           await queueOfflineSync({
             id: `sync_${pageId}`,
@@ -214,28 +258,69 @@ export function useCanvasData(pageId: string) {
     [pageId, supabase]
   );
 
+  // Immediate flush of in-flight changes (called on unmount, page hide, screen lock, or navigation)
+  const flushSave = useCallback(async () => {
+    debouncedSyncToSupabase.cancel();
+    if (!isDirtyRef.current || isFlushingRef.current) return;
+    isFlushingRef.current = true;
+
+    const stateToSave: DocumentState = {
+      ...currentStateRef.current,
+      _clientUpdatedAt: lastLocalEditTimeRef.current || Date.now()
+    } as any;
+
+    // 1. Ensure IndexedDB has it saved immediately
+    await setCachedPageState(pageId, stateToSave, true);
+
+    // 2. Push to Supabase if online
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const { error } = await supabase
+          .from('pages')
+          .update({ document_state: stateToSave })
+          .eq('id', pageId);
+
+        if (!error) {
+          isDirtyRef.current = false;
+          await setCachedPageState(pageId, stateToSave, false);
+          await removeSyncAction(`sync_${pageId}`);
+        } else {
+          await queueOfflineSync({
+            id: `sync_${pageId}`,
+            action: 'save_canvas',
+            pageId,
+            payload: stateToSave,
+            timestamp: Date.now(),
+          });
+        }
+      } catch (err) {
+        await queueOfflineSync({
+          id: `sync_${pageId}`,
+          action: 'save_canvas',
+          pageId,
+          payload: stateToSave,
+          timestamp: Date.now(),
+        });
+      }
+    } else {
+      await queueOfflineSync({
+        id: `sync_${pageId}`,
+        action: 'save_canvas',
+        pageId,
+        payload: stateToSave,
+        timestamp: Date.now(),
+      });
+    }
+    isFlushingRef.current = false;
+  }, [pageId, supabase, debouncedSyncToSupabase]);
+
   // Background Sync on Reconnection
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleReconnected = async () => {
       console.log("Device reconnected to internet. Replaying pending sync actions...");
-      try {
-        const pending = await getPendingSyncActions();
-        for (const action of pending) {
-          if (action.action === 'save_canvas') {
-            const { error } = await supabase
-              .from('pages')
-              .update({ document_state: action.payload })
-              .eq('id', action.pageId);
-            if (!error) {
-              await removeSyncAction(action.id);
-            }
-          }
-        }
-      } catch (syncErr) {
-        console.warn("Background sync error:", syncErr);
-      }
+      await replayPendingSync(supabase);
     };
 
     window.addEventListener('online', handleReconnected);
@@ -340,17 +425,79 @@ export function useCanvasData(pageId: string) {
     return false;
   }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageId, supabase, fetchVersions]);
 
-  // Continuous autosave (debounced 1500ms) and version snapshot scheduling
+  // Continuous autosave:
+  // 1) IMMEDIATELY save to local IndexedDB (zero debounce, instant persistence)
+  // 2) Debounced network sync to Supabase (1500ms)
+  // 3) Scheduled version snapshots
   useEffect(() => {
-    if (!loading) {
-      if (isRemoteUpdateRef.current) {
-        isRemoteUpdateRef.current = false;
-        return;
-      }
-      saveToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
-      saveVersionToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
+    if (loading) return;
+    if (isRemoteUpdateRef.current) {
+      isRemoteUpdateRef.current = false;
+      return;
     }
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading, saveToSupabase, saveVersionToSupabase]);
+
+    const now = Date.now();
+    lastLocalEditTimeRef.current = now;
+    isDirtyRef.current = true;
+
+    const stateToSave: DocumentState = {
+      strokes,
+      texts,
+      audios,
+      images,
+      files,
+      videos,
+      shapes,
+      connectors,
+      _clientUpdatedAt: now
+    } as any;
+
+    // 1. Instant local persistence to IndexedDB
+    setCachedPageState(pageId, stateToSave, true).catch(err => 
+      console.warn("Failed immediate local cache save:", err)
+    );
+
+    // 2. Debounced network sync
+    debouncedSyncToSupabase(stateToSave);
+
+    // 3. Version snapshot
+    saveVersionToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading, debouncedSyncToSupabase, saveVersionToSupabase, pageId]);
+
+  // Lifecycle listeners to flush immediately on background/screen-off/unmount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushSave();
+      }
+    };
+
+    const handlePageHide = () => {
+      flushSave();
+    };
+
+    const handleBeforeUnload = () => {
+      flushSave();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushSave();
+      if (Date.now() - lastSnapshotTimeRef.current >= 300000) {
+        saveVersionToSupabase.flush();
+      } else {
+        saveVersionToSupabase.cancel();
+      }
+    };
+  }, [flushSave, saveVersionToSupabase]);
 
   // Realtime subscription for collaborative updates on the current page
   useEffect(() => {
@@ -369,6 +516,11 @@ export function useCanvasData(pageId: string) {
         (payload: any) => {
           if (!payload.new || !payload.new.document_state) return;
 
+          // If local state is dirty or user edited recently (< 5s), do not let remote overwrite active typing!
+          if (isDirtyRef.current || (Date.now() - lastLocalEditTimeRef.current < 5000)) {
+            return;
+          }
+
           const remoteState = payload.new.document_state as DocumentState;
           const remoteJson = JSON.stringify(remoteState);
           const currentJson = JSON.stringify(currentStateRef.current);
@@ -376,6 +528,13 @@ export function useCanvasData(pageId: string) {
 
           // If the update came from our own save or is identical to our current state, skip
           if (remoteJson === currentJson || remoteJson === lastSavedJson) {
+            return;
+          }
+
+          const remoteTime = (remoteState as any)?._clientUpdatedAt || 0;
+          const localTime = (currentStateRef.current as any)?._clientUpdatedAt || lastLocalEditTimeRef.current || 0;
+
+          if (localTime > 0 && localTime > remoteTime) {
             return;
           }
 
@@ -399,20 +558,6 @@ export function useCanvasData(pageId: string) {
       supabase.removeChannel(channel);
     };
   }, [pageId, supabase]);
-
-  // Flush live autosave when leaving page or unmounting
-  useEffect(() => {
-    return () => {
-      saveToSupabase.flush();
-      if (Date.now() - lastSnapshotTimeRef.current >= 300000) {
-        saveVersionToSupabase.flush();
-      } else {
-        saveVersionToSupabase.cancel();
-      }
-    };
-  }, [pageId, saveToSupabase, saveVersionToSupabase]);
-
-
 
   const restoreVersion = useCallback((versionState: DocumentState) => {
     // Push current state to past before restoring, so we can undo the restore
@@ -509,7 +654,8 @@ export function useCanvasData(pageId: string) {
     pageVersions,
     fetchVersions,
     restoreVersion,
-    saveManualSnapshot
+    saveManualSnapshot,
+    flushSave
   };
 }
 
