@@ -8,11 +8,15 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/icon.png" },
-      { url: "/logo.png" }
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48.png", type: "image/png", sizes: "48x48" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+      { url: "/logo.png", type: "image/png", sizes: "512x512" },
     ],
+    shortcut: "/favicon.ico",
     apple: [
-      { url: "/apple-touch-icon.png" }
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
   appleWebApp: {
