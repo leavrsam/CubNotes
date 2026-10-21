@@ -69,21 +69,30 @@ public class AudioRecordingService extends Service {
         return START_NOT_STICKY;
     }
 
-    private void startRecording() {
+    private synchronized void startRecording() {
         if (isRecording) {
             Log.d(TAG, "Already recording");
             return;
         }
 
         try {
-            // 1. Acquire WakeLock to keep CPU alive when screen is off
+            // 1. Immediately post Notification & start Foreground Service (Required by Android 14+)
+            createNotificationChannel();
+            Notification notification = buildForegroundNotification();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+
+            // 2. Acquire WakeLock to keep CPU alive when screen is off
             PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (powerManager != null) {
                 wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Motif:RecordingWakeLock");
-                wakeLock.acquire(120 * 60 * 1000L); // Max 2 hours safety timeout
+                wakeLock.acquire(180 * 60 * 1000L); // Max 3 hours safety timeout
             }
 
-            // 2. Prepare destination file
+            // 3. Prepare destination file
             File storageDir = getExternalFilesDir(null);
             if (storageDir == null) {
                 storageDir = getCacheDir();
@@ -91,7 +100,7 @@ public class AudioRecordingService extends Service {
             File audioFile = new File(storageDir, "meeting_" + System.currentTimeMillis() + ".m4a");
             currentAudioPath = audioFile.getAbsolutePath();
 
-            // 3. Configure MediaRecorder for AAC / MPEG-4 (universal standard)
+            // 4. Configure MediaRecorder for AAC / MPEG-4 (universal standard)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 mediaRecorder = new MediaRecorder(this);
             } else {
@@ -110,14 +119,6 @@ public class AudioRecordingService extends Service {
             isRecording = true;
             recordingStartTime = System.currentTimeMillis();
 
-            // 4. Start Foreground Service with Notification
-            Notification notification = buildForegroundNotification();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
-            } else {
-                startForeground(NOTIFICATION_ID, notification);
-            }
-
             // 5. Broadcast state to UI & Widget
             broadcastState(true, null, 0);
             MeetingWidgetProvider.updateAllWidgets(this, true);
@@ -128,17 +129,29 @@ public class AudioRecordingService extends Service {
             Log.e(TAG, "Failed to start recording", e);
             releaseRecorder();
             isRecording = false;
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+                wakeLock = null;
+            }
             stopForeground(true);
             stopSelf();
+            broadcastState(false, null, 0);
         }
     }
 
-    private void stopRecording() {
+    private synchronized void stopRecording() {
         if (!isRecording) {
             return;
         }
 
         long duration = System.currentTimeMillis() - recordingStartTime;
+        if (duration < 1000) {
+            try {
+                Thread.sleep(1000 - duration);
+            } catch (InterruptedException ignored) {}
+            duration = System.currentTimeMillis() - recordingStartTime;
+        }
+
         String finishedPath = currentAudioPath;
 
         try {
@@ -194,7 +207,9 @@ public class AudioRecordingService extends Service {
     private Notification buildForegroundNotification() {
         // Tap notification to open app
         Intent openIntent = new Intent(this, MainActivity.class);
-        openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        openIntent.setAction(Intent.ACTION_MAIN);
+        openIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        openIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent openPendingIntent = PendingIntent.getActivity(
                 this, 0, openIntent,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
@@ -208,25 +223,34 @@ public class AudioRecordingService extends Service {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
         );
 
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Motif Meeting Recording")
-                .setContentText("Recording in background with phone off/in pocket...")
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentText("Recording in background • Screen can be turned off")
+                .setSmallIcon(R.drawable.ic_mic_24)
                 .setContentIntent(openPendingIntent)
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .addAction(R.drawable.ic_stop_24, "Stop & Summarize", stopPendingIntent)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build();
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE);
+        }
+
+        return builder.build();
     }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "Motif Background Recording",
-                    NotificationManager.IMPORTANCE_LOW
+                    "Motif Meeting Recording",
+                    NotificationManager.IMPORTANCE_DEFAULT
             );
-            channel.setDescription("Shows notification when Motif is recording audio in background");
+            channel.setDescription("Shows active meeting recording status and controls");
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);

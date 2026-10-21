@@ -28,6 +28,7 @@ import { Minimap } from "./Minimap";
 import { MeetingWorkspace } from "./MeetingWorkspace";
 import { uploadMediaFile } from "@/lib/storage";
 import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
+import { isNativeAndroid, startNativeRecording, stopNativeRecording } from "@/lib/nativeAudio";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 
@@ -1221,15 +1222,19 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   // Recording Logic
   const startRecording = async () => {
     try {
-      const recorder = new WebAudioRecorder();
-      await recorder.start();
-      recorderRef.current = recorder;
+      if (isNativeAndroid()) {
+        await startNativeRecording();
+      } else {
+        const recorder = new WebAudioRecorder();
+        await recorder.start();
+        recorderRef.current = recorder;
 
-      // Start live speech recognizer AFTER mic stream is successfully established
-      try {
-        liveSpeechRecognizer.start();
-      } catch (speechErr) {
-        console.warn("Live speech recognizer not started:", speechErr);
+        // Start live speech recognizer AFTER mic stream is successfully established
+        try {
+          liveSpeechRecognizer.start();
+        } catch (speechErr) {
+          console.warn("Live speech recognizer not started:", speechErr);
+        }
       }
 
       const center = getCanvasCenter();
@@ -1379,7 +1384,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   };
 
   const stopRecording = async () => {
-    if (!recorderRef.current || isStoppingRecordingRef.current) return;
+    if ((!isNativeAndroid() && !recorderRef.current) || isStoppingRecordingRef.current) return;
     isStoppingRecordingRef.current = true;
     
     setIsRecording(false);
@@ -1394,7 +1399,14 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     activeRecordingNodeIdRef.current = null;
 
     try {
-      const result = await recorderRef.current.stop();
+      let result: RecordingResult;
+      if (isNativeAndroid()) {
+        result = await stopNativeRecording();
+      } else if (recorderRef.current) {
+        result = await recorderRef.current.stop();
+      } else {
+        throw new Error("No active recording found");
+      }
       await uploadAndTranscribeRecording(result, nodeId, liveTranscript);
     } catch (err: any) {
       console.error("Error stopping recording:", err);

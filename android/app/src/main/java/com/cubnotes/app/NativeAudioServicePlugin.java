@@ -13,11 +13,13 @@ import android.util.Log;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -87,12 +89,40 @@ public class NativeAudioServicePlugin extends Plugin {
 
     @PluginMethod
     public void startRecording(PluginCall call) {
-        // Check record audio permission
-        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(call);
+        if (AudioRecordingService.isRecording()) {
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("alreadyRecording", true);
+            ret.put("message", "Already recording in background");
+            call.resolve(ret);
             return;
         }
 
+        boolean hasMic = getPermissionState("microphone") == PermissionState.GRANTED;
+        boolean hasNotif = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasNotif = getPermissionState("notifications") == PermissionState.GRANTED;
+        }
+
+        if (!hasMic || !hasNotif) {
+            requestAllPermissions(call, "recordingPermissionsCallback");
+            return;
+        }
+
+        startRecordingService(call);
+    }
+
+    @PermissionCallback
+    private void recordingPermissionsCallback(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED) {
+            call.reject("Microphone permission is required to record meetings");
+            return;
+        }
+
+        startRecordingService(call);
+    }
+
+    private void startRecordingService(PluginCall call) {
         try {
             Context context = getContext();
             Intent serviceIntent = new Intent(context, AudioRecordingService.class);

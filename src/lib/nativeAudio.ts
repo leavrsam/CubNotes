@@ -51,7 +51,7 @@ export async function stopNativeRecording(): Promise<RecordingResult> {
     blob,
     mimeType: cleanMime,
     base64: res.base64,
-    duration: res.duration || 0,
+    durationMs: res.duration || 0,
     fileExt: res.fileExt || 'm4a',
   };
 }
