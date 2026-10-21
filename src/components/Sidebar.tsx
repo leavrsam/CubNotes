@@ -239,9 +239,7 @@ export function Sidebar(props: SidebarProps) {
         {!isNativeApp() && (
           <div className="space-y-0.5">
             <a
-              href="https://github.com/leavrsam/CubNotes/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/download"
               className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
               title="Download Desktop App for Mac & Windows"
             >

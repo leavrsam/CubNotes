@@ -1038,13 +1038,25 @@ export function SettingsModal({
                   </p>
                   <div className="flex flex-wrap items-center gap-2.5">
                     <a
-                      href="https://github.com/leavrsam/CubNotes/releases/latest"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href="/download"
                       className="inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-xs rounded-xl shadow-sm transition-all"
                     >
                       <Download size={14} />
-                      <span>macOS (.dmg) & Windows (.exe) Releases</span>
+                      <span>Open Motif Downloads Hub (/download)</span>
+                    </a>
+                    <a
+                      href="/api/download?platform=mac"
+                      download
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-medium text-xs rounded-xl transition-all"
+                    >
+                      <span>macOS (.dmg)</span>
+                    </a>
+                    <a
+                      href="/api/download?platform=windows"
+                      download
+                      className="inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-medium text-xs rounded-xl transition-all"
+                    >
+                      <span>Windows (.exe)</span>
                     </a>
                   </div>
                 </div>

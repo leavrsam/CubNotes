@@ -533,16 +533,15 @@ function LoginForm() {
               href="/Motif.apk"
               download="Motif.apk"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 rounded-full transition-all shadow-xs group"
-              title="Download Android APK"
+              title="Direct Download Android APK"
             >
               <Smartphone size={13} className="text-emerald-400 group-hover:scale-110 transition-transform" />
               <span>Android (.apk)</span>
             </a>
 
             <a
-              href="https://github.com/leavrsam/CubNotes/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/api/download?platform=mac"
+              download
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 rounded-full transition-all shadow-xs group"
               title="Download macOS App (.dmg)"
             >
@@ -551,9 +550,8 @@ function LoginForm() {
             </a>
 
             <a
-              href="https://github.com/leavrsam/CubNotes/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/api/download?platform=windows"
+              download
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 rounded-full transition-all shadow-xs group"
               title="Download Windows App (.exe)"
             >
@@ -561,6 +559,14 @@ function LoginForm() {
               <span>Windows (.exe)</span>
             </a>
           </div>
+
+          <a 
+            href="/download"
+            className="text-[11px] text-zinc-500 hover:text-primary-400 transition-colors mt-0.5 inline-flex items-center gap-1"
+          >
+            <span>View all download options &amp; details</span>
+            <span>&rarr;</span>
+          </a>
         </div>
 
       </div>

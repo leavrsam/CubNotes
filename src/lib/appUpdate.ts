@@ -85,8 +85,8 @@ export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
   }
 }
 
-export async function downloadAndInstallApk(apkUrl: string = "https://github.com/leavrsam/CubNotes/raw/main/public/Motif.apk") {
-  const directApkUrl = apkUrl || "https://github.com/leavrsam/CubNotes/raw/main/public/Motif.apk";
+export async function downloadAndInstallApk(apkUrl: string = "https://motif.wolfcubventures.com/Motif.apk") {
+  const directApkUrl = apkUrl || "https://motif.wolfcubventures.com/Motif.apk";
 
   // 1. Try native auto-installer plugin method (available in updated APK builds)
   try {
