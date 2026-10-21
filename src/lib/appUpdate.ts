@@ -85,36 +85,32 @@ export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
   }
 }
 
-export async function downloadAndInstallApk(apkUrl: string = "https://cub-notes.vercel.app/Motif.apk") {
-  // 1. Try native plugin launcher if available
+export async function downloadAndInstallApk(apkUrl: string = "https://github.com/leavrsam/CubNotes/raw/main/public/Motif.apk") {
+  const directApkUrl = apkUrl || "https://github.com/leavrsam/CubNotes/raw/main/public/Motif.apk";
+
+  // 1. Try native auto-installer plugin method (available in updated APK builds)
   try {
     const { NativeAudioService } = (Capacitor as any).Plugins || {};
+    if (NativeAudioService && NativeAudioService.downloadAndInstallUpdate) {
+      await NativeAudioService.downloadAndInstallUpdate({ url: directApkUrl });
+      return;
+    }
     if (NativeAudioService && NativeAudioService.openUrl) {
-      await NativeAudioService.openUrl({ url: apkUrl });
+      await NativeAudioService.openUrl({ url: directApkUrl });
       return;
     }
   } catch (e) {
-    console.warn("NativeAudioService.openUrl failed:", e);
+    console.warn("NativeAudioService update method failed, falling back to external browser:", e);
   }
 
-  // 2. Fallback to window.open with _system target
+  // 2. Fallback for the currently installed older APK:
+  // Navigate directly to the external GitHub raw APK URL.
+  // Because github.com differs from cub-notes.vercel.app, Capacitor's launchIntent()
+  // immediately hands it over to Android's system browser / Chrome, which downloads the APK
+  // and displays the "Open" prompt to update!
   try {
-    const opened = window.open(apkUrl, '_system');
-    if (opened) return;
-  } catch (e) {
-    console.warn("window.open(_system) failed:", e);
-  }
-
-  // 3. Fallback to hidden anchor tag download
-  try {
-    const a = document.createElement('a');
-    a.href = apkUrl;
-    a.download = 'Motif.apk';
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    window.location.href = directApkUrl;
   } catch {
-    window.location.href = apkUrl;
+    window.open(directApkUrl, '_system') || window.open(directApkUrl, '_blank');
   }
 }

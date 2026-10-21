@@ -10,6 +10,8 @@ export function AppUpdatePrompt() {
   const [isDismissed, setIsDismissed] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  const [downloadTriggered, setDownloadTriggered] = useState(false);
+
   useEffect(() => {
     // Check if dismissed recently (within 2 hours)
     const dismissedTime = localStorage.getItem("dismissed_update_time");
@@ -33,15 +35,15 @@ export function AppUpdatePrompt() {
   const handleUpdate = async () => {
     if (!updateInfo) return;
     setIsDownloading(true);
+    setDownloadTriggered(true);
     toast.loading("Starting download of Motif.apk...", { id: "app-update" });
 
     try {
       await downloadAndInstallApk(updateInfo.apkUrl);
-      toast.success("Download started! Tap the download notification to update Motif.", {
+      toast.success("Download started! Tap the notification or Open to update.", {
         id: "app-update",
         duration: 7000,
       });
-      setIsDismissed(true);
     } catch (e: any) {
       toast.error("Could not trigger download. Please check internet connection.", {
         id: "app-update",
@@ -92,6 +94,26 @@ export function AppUpdatePrompt() {
           </button>
         </div>
 
+        {downloadTriggered && (
+          <div className="p-2.5 rounded-xl bg-primary-500/10 border border-primary-500/30 text-xs text-zinc-300 flex flex-col gap-1.5">
+            <p className="font-semibold text-primary-300 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-primary-400 animate-ping" />
+              Download initiated in browser/notifications
+            </p>
+            <p className="text-[11px] text-zinc-400">
+              When Android or your browser finishes downloading, tap <span className="text-white font-semibold">Open</span> or the download notification to complete the update.
+            </p>
+            <a
+              href={updateInfo.apkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-primary-400 underline font-medium mt-0.5"
+            >
+              Tap here if download didn't start automatically
+            </a>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex items-center gap-2 mt-1">
           <button
@@ -101,7 +123,7 @@ export function AppUpdatePrompt() {
             className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 active:scale-[0.98] text-white font-semibold text-xs transition-all shadow-md shadow-primary-900/30"
           >
             <Download size={14} className={isDownloading ? "animate-bounce" : ""} />
-            <span>{isDownloading ? "Starting Download..." : "Update Now"}</span>
+            <span>{isDownloading ? "Starting Download..." : downloadTriggered ? "Download Again" : "Update Now"}</span>
           </button>
 
           <button
