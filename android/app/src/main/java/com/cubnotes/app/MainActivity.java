@@ -1,6 +1,7 @@
 package com.cubnotes.app;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 
@@ -9,6 +10,19 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeAudioServicePlugin.class);
         super.onCreate(savedInstanceState);
+
+        // Allow downloading files (such as Motif.apk) directly through Android's DownloadManager / browser
+        try {
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_VIEW);
+                        i.setData(Uri.parse(url));
+                        startActivity(i);
+                    } catch (Exception ignored) {}
+                });
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override

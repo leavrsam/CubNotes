@@ -5,7 +5,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
@@ -243,6 +245,41 @@ public class NativeAudioServicePlugin extends Plugin {
         } catch (IOException e) {
             Log.e(TAG, "Error reading recorded audio file", e);
             call.reject("Error reading audio file: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getAppVersion(PluginCall call) {
+        try {
+            Context context = getContext();
+            PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            long versionCode;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                versionCode = pInfo.getLongVersionCode();
+            } else {
+                versionCode = pInfo.versionCode;
+            }
+            JSObject ret = new JSObject();
+            ret.put("versionCode", versionCode);
+            ret.put("versionName", pInfo.versionName);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Could not get app version: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void openUrl(PluginCall call) {
+        String url = call.getString("url", "https://cub-notes.vercel.app/Motif.apk");
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Could not open URL: " + e.getMessage());
         }
     }
 
