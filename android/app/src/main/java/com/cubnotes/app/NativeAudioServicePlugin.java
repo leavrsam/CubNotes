@@ -288,83 +288,16 @@ public class NativeAudioServicePlugin extends Plugin {
 
     @PluginMethod
     public void downloadAndInstallUpdate(PluginCall call) {
-        String apkUrl = call.getString("url", "https://github.com/leavrsam/CubNotes/raw/main/public/Motif.apk");
+        String apkUrl = call.getString("url", "https://cub-notes.vercel.app/Motif.apk");
+        String versionName = call.getString("versionName", "1.0.1");
         try {
-            Context context = getContext();
-            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
-            request.setTitle("Motif Update");
-            request.setDescription("Downloading latest version...");
-            request.setMimeType("application/vnd.android.package-archive");
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            
-            File downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-            if (downloadsDir != null && !downloadsDir.exists()) {
-                downloadsDir.mkdirs();
-            }
-            File destFile = new File(downloadsDir, "Motif_update.apk");
-            if (destFile.exists()) {
-                destFile.delete();
-            }
-            request.setDestinationUri(Uri.fromFile(destFile));
-
-            DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-            if (dm == null) {
-                throw new Exception("DownloadManager not available");
-            }
-            final long downloadId = dm.enqueue(request);
-
-            // Register receiver to auto-launch installation when download completes
-            BroadcastReceiver onComplete = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context c, Intent intent) {
-                    long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-                    if (id == downloadId) {
-                        try {
-                            context.unregisterReceiver(this);
-                        } catch (Exception ignored) {}
-
-                        try {
-                            Intent install = new Intent(Intent.ACTION_VIEW);
-                            install.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                            Uri contentUri = FileProvider.getUriForFile(
-                                context,
-                                context.getPackageName() + ".fileprovider",
-                                destFile
-                            );
-                            install.setDataAndType(contentUri, "application/vnd.android.package-archive");
-                            context.startActivity(install);
-                        } catch (Exception e) {
-                            Log.e(TAG, "Error launching package installer", e);
-                        }
-                    }
-                }
-            };
-
-            IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(onComplete, filter, Context.RECEIVER_EXPORTED);
-            } else {
-                context.registerReceiver(onComplete, filter);
-            }
-
+            UpdateManager.startDownloadAndInstall(getContext(), apkUrl, versionName);
             JSObject ret = new JSObject();
             ret.put("success", true);
-            ret.put("downloadId", downloadId);
             call.resolve(ret);
         } catch (Exception e) {
-            Log.e(TAG, "Error initiating native update download", e);
-            // Fallback to opening system browser with the URL
-            try {
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl));
-                browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getContext().startActivity(browserIntent);
-                JSObject ret = new JSObject();
-                ret.put("success", true);
-                ret.put("fallback", true);
-                call.resolve(ret);
-            } catch (Exception ex) {
-                call.reject("Failed to download or launch update: " + ex.getMessage());
-            }
+            Log.e(TAG, "Failed to start update", e);
+            call.reject("Failed to start update: " + e.getMessage());
         }
     }
 

@@ -11,14 +11,18 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativeAudioServicePlugin.class);
         super.onCreate(savedInstanceState);
 
-        // Allow downloading files (such as Motif.apk) directly through Android's DownloadManager / browser
+        // Allow downloading files (such as Motif.apk) directly through Android's DownloadManager / UpdateManager
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 getBridge().getWebView().setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
                     try {
-                        Intent i = new Intent(Intent.ACTION_VIEW);
-                        i.setData(Uri.parse(url));
-                        startActivity(i);
+                        if (url != null && (url.contains(".apk") || (mimetype != null && mimetype.contains("android.package-archive")))) {
+                            UpdateManager.startDownloadAndInstall(this, url, "latest");
+                        } else {
+                            Intent i = new Intent(Intent.ACTION_VIEW);
+                            i.setData(Uri.parse(url));
+                            startActivity(i);
+                        }
                     } catch (Exception ignored) {}
                 });
             }
