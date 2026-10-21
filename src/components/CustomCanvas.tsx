@@ -28,7 +28,7 @@ import { Minimap } from "./Minimap";
 import { MeetingWorkspace } from "./MeetingWorkspace";
 import { uploadMediaFile } from "@/lib/storage";
 import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
-import { isNativeAndroid, startNativeRecording, stopNativeRecording } from "@/lib/nativeAudio";
+import { isNativeAndroid, startNativeRecording, stopNativeRecording, pauseNativeRecording, resumeNativeRecording } from "@/lib/nativeAudio";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 
@@ -1228,13 +1228,13 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         const recorder = new WebAudioRecorder();
         await recorder.start();
         recorderRef.current = recorder;
+      }
 
-        // Start live speech recognizer AFTER mic stream is successfully established
-        try {
-          liveSpeechRecognizer.start();
-        } catch (speechErr) {
-          console.warn("Live speech recognizer not started:", speechErr);
-        }
+      // Start live speech recognizer for real-time transcription
+      try {
+        liveSpeechRecognizer.start();
+      } catch (speechErr) {
+        console.warn("Live speech recognizer not started:", speechErr);
       }
 
       const center = getCanvasCenter();
@@ -1276,7 +1276,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  const pauseRecording = () => {
+  const pauseRecording = async () => {
+    if (isNativeAndroid()) {
+      try {
+        await pauseNativeRecording();
+      } catch (e) {
+        console.warn("Native pause error:", e);
+      }
+      liveSpeechRecognizer.pause();
+      setIsPaused(true);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+      return;
+    }
     if (recorderRef.current && recorderRef.current.isRecording()) {
       recorderRef.current.pause();
       liveSpeechRecognizer.pause();
@@ -1287,7 +1300,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     }
   };
 
-  const resumeRecording = () => {
+  const resumeRecording = async () => {
+    if (isNativeAndroid()) {
+      try {
+        await resumeNativeRecording();
+      } catch (e) {
+        console.warn("Native resume error:", e);
+      }
+      liveSpeechRecognizer.resume();
+      setIsPaused(false);
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      return;
+    }
     if (recorderRef.current && recorderRef.current.isPaused()) {
       recorderRef.current.resume();
       liveSpeechRecognizer.resume();

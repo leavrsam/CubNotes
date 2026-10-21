@@ -27,14 +27,18 @@ public class AudioRecordingService extends Service {
 
     public static final String ACTION_START = "com.cubnotes.app.ACTION_START_RECORDING";
     public static final String ACTION_STOP = "com.cubnotes.app.ACTION_STOP_RECORDING";
+    public static final String ACTION_PAUSE = "com.cubnotes.app.ACTION_PAUSE_RECORDING";
+    public static final String ACTION_RESUME = "com.cubnotes.app.ACTION_RESUME_RECORDING";
     public static final String ACTION_STATE_CHANGED = "com.cubnotes.app.RECORDING_STATE_CHANGED";
     public static final String ACTION_RECORDING_FINISHED = "com.cubnotes.app.RECORDING_FINISHED";
     
     public static final String EXTRA_IS_RECORDING = "isRecording";
+    public static final String EXTRA_IS_PAUSED = "isPaused";
     public static final String EXTRA_FILE_PATH = "filePath";
     public static final String EXTRA_DURATION = "duration";
 
     private static volatile boolean isRecording = false;
+    private static volatile boolean isPaused = false;
     private static volatile String currentAudioPath = null;
     private static volatile long recordingStartTime = 0;
 
@@ -43,6 +47,10 @@ public class AudioRecordingService extends Service {
 
     public static boolean isRecording() {
         return isRecording;
+    }
+
+    public static boolean isPaused() {
+        return isPaused;
     }
 
     public static String getCurrentAudioPath() {
@@ -64,6 +72,10 @@ public class AudioRecordingService extends Service {
             startRecording();
         } else if (ACTION_STOP.equals(action)) {
             stopRecording();
+        } else if (ACTION_PAUSE.equals(action)) {
+            pauseRecording();
+        } else if (ACTION_RESUME.equals(action)) {
+            resumeRecording();
         }
 
         return START_NOT_STICKY;
@@ -117,6 +129,7 @@ public class AudioRecordingService extends Service {
             mediaRecorder.start();
 
             isRecording = true;
+            isPaused = false;
             recordingStartTime = System.currentTimeMillis();
 
             // 5. Broadcast state to UI & Widget
@@ -163,6 +176,7 @@ public class AudioRecordingService extends Service {
         } finally {
             releaseRecorder();
             isRecording = false;
+            isPaused = false;
         }
 
         // Release WakeLock
@@ -190,6 +204,47 @@ public class AudioRecordingService extends Service {
         }
 
         Log.d(TAG, "Background recording stopped: " + finishedPath + ", duration: " + duration + "ms");
+    }
+
+    private synchronized void pauseRecording() {
+        if (!isRecording || isPaused) {
+            return;
+        }
+        try {
+            if (mediaRecorder != null) {
+                mediaRecorder.pause();
+                isPaused = true;
+                updateNotification();
+                broadcastState(true, null, 0);
+                Log.d(TAG, "Recording paused");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error pausing media recorder", e);
+        }
+    }
+
+    private synchronized void resumeRecording() {
+        if (!isRecording || !isPaused) {
+            return;
+        }
+        try {
+            if (mediaRecorder != null) {
+                mediaRecorder.resume();
+                isPaused = false;
+                updateNotification();
+                broadcastState(true, null, 0);
+                Log.d(TAG, "Recording resumed");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error resuming media recorder", e);
+        }
+    }
+
+    private void updateNotification() {
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(NOTIFICATION_ID, buildForegroundNotification());
+        }
     }
 
     private void releaseRecorder() {
@@ -223,15 +278,30 @@ public class AudioRecordingService extends Service {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
         );
 
+        // Tap Pause / Resume button on notification
+        Intent togglePauseIntent = new Intent(this, AudioRecordingService.class);
+        togglePauseIntent.setAction(isPaused ? ACTION_RESUME : ACTION_PAUSE);
+        PendingIntent togglePausePendingIntent = PendingIntent.getService(
+                this, 2, togglePauseIntent,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT : PendingIntent.FLAG_UPDATE_CURRENT
+        );
+
+        String pauseTitle = isPaused ? "Resume" : "Pause";
+        int pauseIcon = isPaused ? R.drawable.ic_play_24 : R.drawable.ic_pause_24;
+        String contentText = isPaused 
+                ? "Recording paused • Tap Resume to continue" 
+                : "Recording in background • Screen can be turned off";
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Motif Meeting Recording")
-                .setContentText("Recording in background • Screen can be turned off")
+                .setContentText(contentText)
                 .setSmallIcon(R.drawable.ic_mic_24)
                 .setContentIntent(openPendingIntent)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .addAction(pauseIcon, pauseTitle, togglePausePendingIntent)
                 .addAction(R.drawable.ic_stop_24, "Stop & Summarize", stopPendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT);
 
@@ -261,6 +331,7 @@ public class AudioRecordingService extends Service {
     private void broadcastState(boolean recording, String filePath, long duration) {
         Intent intent = new Intent(ACTION_STATE_CHANGED);
         intent.putExtra(EXTRA_IS_RECORDING, recording);
+        intent.putExtra(EXTRA_IS_PAUSED, isPaused);
         if (filePath != null) {
             intent.putExtra(EXTRA_FILE_PATH, filePath);
             intent.putExtra(EXTRA_DURATION, duration);

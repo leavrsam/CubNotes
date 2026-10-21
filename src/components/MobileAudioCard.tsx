@@ -55,13 +55,21 @@ export function MobileAudioCard({
   updateAudioTitle, 
   updateAudioField, 
   deleteAudioNode,
-  onAnnotate
+  onAnnotate,
+  isActiveRecordingPaused = false,
+  onPauseRecording,
+  onResumeRecording,
+  onStopRecording,
 }: {
   node: AudioNode;
   updateAudioTitle: (id: string, title: string) => void;
   updateAudioField: (id: string, field: keyof AudioNode, value: any) => void;
   deleteAudioNode: (id: string) => void;
   onAnnotate?: (id: string) => void;
+  isActiveRecordingPaused?: boolean;
+  onPauseRecording?: () => void;
+  onResumeRecording?: () => void;
+  onStopRecording?: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'transcript' : 'summary');
   const [liveStatus, setLiveStatus] = useState<string>(node.isLiveRecording ? 'listening' : 'idle');
@@ -70,6 +78,7 @@ export function MobileAudioCard({
   const [isChatting, setIsChatting] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [liveTranscript, setLiveTranscript] = useState(node.transcript || "");
+  const [liveInterim, setLiveInterim] = useState("");
   const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
 
   // Sync with prop when not live recording
@@ -86,12 +95,15 @@ export function MobileAudioCard({
 
     const handleBroadcast = (e: Event) => {
       const customEvent = e as CustomEvent<{ transcript: string; interim: string; status: string; statusMessage: string }>;
-      const { transcript, status, statusMessage } = customEvent.detail;
+      const { transcript, interim, status, statusMessage } = customEvent.detail;
       if (status) setLiveStatus(status);
       if (statusMessage) setLiveStatusMsg(statusMessage);
       if (transcript !== undefined) {
         setLiveTranscript(transcript);
         updateAudioField(node.id, 'transcript', transcript);
+      }
+      if (interim !== undefined) {
+        setLiveInterim(interim);
       }
     };
 
@@ -194,16 +206,19 @@ export function MobileAudioCard({
   // Live timer for active recording
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  React.useEffect(() => {
-    if (node.isLiveRecording) {
-      setActiveTab('notes');
-      const start = node.recordingStartedAt || Date.now();
-      const interval = setInterval(() => {
-        setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
-      }, 1000);
-      return () => clearInterval(interval);
+  useEffect(() => {
+    if (!node.isLiveRecording) return;
+    if (isActiveRecordingPaused) return;
+
+    if (elapsedSeconds === 0 && node.recordingStartedAt) {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - node.recordingStartedAt) / 1000)));
     }
-  }, [node.isLiveRecording, node.recordingStartedAt]);
+
+    const interval = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [node.isLiveRecording, isActiveRecordingPaused, node.recordingStartedAt]);
 
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -392,13 +407,51 @@ export function MobileAudioCard({
           {node.isLiveRecording ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between px-3.5 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                  <span className="text-xs font-bold text-red-600 dark:text-red-400">Recording live meeting...</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`w-2.5 h-2.5 rounded-full ${isActiveRecordingPaused ? 'bg-amber-500' : 'bg-red-500 animate-ping'}`} />
+                  <span className="text-xs font-bold text-red-600 dark:text-red-400 truncate">
+                    {isActiveRecordingPaused ? "Recording paused" : "Recording live meeting..."}
+                  </span>
                 </div>
-                <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
-                  {formatTimer(elapsedSeconds)}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
+                    {formatTimer(elapsedSeconds)}
+                  </span>
+                  {(onPauseRecording || onResumeRecording) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isActiveRecordingPaused) {
+                          onResumeRecording?.();
+                        } else {
+                          onPauseRecording?.();
+                        }
+                      }}
+                      className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-800/70 text-red-700 dark:text-red-300 transition-colors shadow-xs"
+                      title={isActiveRecordingPaused ? "Resume recording" : "Pause recording"}
+                    >
+                      {isActiveRecordingPaused ? (
+                        <Play size={13} fill="currentColor" className="ml-0.5" />
+                      ) : (
+                        <Pause size={13} fill="currentColor" />
+                      )}
+                    </button>
+                  )}
+                  {onStopRecording && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStopRecording();
+                      }}
+                      className="px-2 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold transition-colors shadow-xs"
+                      title="Stop recording"
+                    >
+                      Stop
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Live Real-Time Speech Stream Box */}
@@ -416,9 +469,12 @@ export function MobileAudioCard({
                   ref={liveScrollRef}
                   className="text-xs text-zinc-700 dark:text-zinc-300 font-mono max-h-32 min-h-[44px] overflow-y-auto leading-relaxed whitespace-pre-wrap select-text custom-scrollbar"
                 >
-                  {node.transcript ? (
+                  {(liveTranscript || node.transcript || liveInterim) ? (
                     <span className="text-zinc-800 dark:text-zinc-200">
-                      {node.transcript}
+                      {liveTranscript || node.transcript}
+                      {liveInterim ? (
+                        <span className="text-zinc-500 italic ml-1">{liveInterim}</span>
+                      ) : null}
                       <span className="inline-block w-1.5 h-3.5 ml-1 bg-red-500 animate-pulse align-middle" />
                     </span>
                   ) : liveStatus === 'mic_busy' || liveStatus === 'unsupported' ? (

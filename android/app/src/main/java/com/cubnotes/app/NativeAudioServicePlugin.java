@@ -52,12 +52,14 @@ public class NativeAudioServicePlugin extends Plugin {
 
                 if (AudioRecordingService.ACTION_STATE_CHANGED.equals(action)) {
                     boolean recording = intent.getBooleanExtra(AudioRecordingService.EXTRA_IS_RECORDING, false);
+                    boolean paused = intent.getBooleanExtra(AudioRecordingService.EXTRA_IS_PAUSED, false);
                     String filePath = intent.getStringExtra(AudioRecordingService.EXTRA_FILE_PATH);
                     long duration = intent.getLongExtra(AudioRecordingService.EXTRA_DURATION, 0);
 
                     // Notify web listeners of status change
                     JSObject ret = new JSObject();
                     ret.put("isRecording", recording);
+                    ret.put("isPaused", paused);
                     ret.put("filePath", filePath);
                     ret.put("duration", duration);
                     notifyListeners("recordingStateChanged", ret);
@@ -83,6 +85,7 @@ public class NativeAudioServicePlugin extends Plugin {
     public void isRecording(PluginCall call) {
         JSObject ret = new JSObject();
         ret.put("isRecording", AudioRecordingService.isRecording());
+        ret.put("isPaused", AudioRecordingService.isPaused());
         ret.put("filePath", AudioRecordingService.getCurrentAudioPath());
         call.resolve(ret);
     }
@@ -142,6 +145,46 @@ public class NativeAudioServicePlugin extends Plugin {
             Log.e(TAG, "Error starting native recording service", e);
             call.reject("Failed to start background recording service: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void pauseRecording(PluginCall call) {
+        if (!AudioRecordingService.isRecording()) {
+            JSObject ret = new JSObject();
+            ret.put("success", false);
+            ret.put("message", "Not currently recording");
+            call.resolve(ret);
+            return;
+        }
+
+        Context context = getContext();
+        Intent serviceIntent = new Intent(context, AudioRecordingService.class);
+        serviceIntent.setAction(AudioRecordingService.ACTION_PAUSE);
+        context.startService(serviceIntent);
+
+        JSObject ret = new JSObject();
+        ret.put("success", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void resumeRecording(PluginCall call) {
+        if (!AudioRecordingService.isRecording()) {
+            JSObject ret = new JSObject();
+            ret.put("success", false);
+            ret.put("message", "Not currently recording");
+            call.resolve(ret);
+            return;
+        }
+
+        Context context = getContext();
+        Intent serviceIntent = new Intent(context, AudioRecordingService.class);
+        serviceIntent.setAction(AudioRecordingService.ACTION_RESUME);
+        context.startService(serviceIntent);
+
+        JSObject ret = new JSObject();
+        ret.put("success", true);
+        call.resolve(ret);
     }
 
     @PluginMethod

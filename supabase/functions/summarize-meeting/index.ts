@@ -123,15 +123,15 @@ Return ONLY valid JSON matching this format:
         }
       ]);
     } catch (e: any) {
-      console.warn("gemini-3.8-flash failed in edge function, falling back to gemini-2.5-flash:", e);
-      const fallbackModel = ai.getGenerativeModel({ 
-        model: "gemini-2.5-flash",
+      console.warn("First attempt failed, retrying with gemini-3.8-flash:", e);
+      const retryModel = ai.getGenerativeModel({ 
+        model: "gemini-3.8-flash",
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.1,
         }
       });
-      result = await fallbackModel.generateContent([
+      result = await retryModel.generateContent([
         prompt,
         {
           inlineData: {

@@ -238,6 +238,10 @@ interface MobilePageProps {
   onUpdatePageTitle: (title: string) => void;
   onBack?: () => void;
   isRecording?: boolean;
+  isPaused?: boolean;
+  onPauseRecording?: () => void;
+  onResumeRecording?: () => void;
+  onStopRecording?: () => void;
   isProcessing?: boolean;
   onToggleMeeting?: () => void;
   onOpenSettings?: () => void;
@@ -245,7 +249,23 @@ interface MobilePageProps {
   isJournal?: boolean;
 }
 
-export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, onBack, isRecording, isProcessing, onToggleMeeting, onOpenSettings, onOpenShare, isJournal }: MobilePageProps) {
+export function MobilePage({ 
+  pageId, 
+  pageTitle, 
+  pageCreatedAt, 
+  onUpdatePageTitle, 
+  onBack, 
+  isRecording, 
+  isPaused,
+  onPauseRecording,
+  onResumeRecording,
+  onStopRecording,
+  isProcessing, 
+  onToggleMeeting, 
+  onOpenSettings, 
+  onOpenShare, 
+  isJournal 
+}: MobilePageProps) {
   const {
     loading,
     strokes, setStrokes,
@@ -1439,6 +1459,10 @@ export function MobilePage({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle
                       updateAudioField={updateAudioField}
                       deleteAudioNode={deleteAudioNode}
                       onAnnotate={(id) => openDrawOverlay(id, 'audio')}
+                      isActiveRecordingPaused={isPaused}
+                      onPauseRecording={onPauseRecording}
+                      onResumeRecording={onResumeRecording}
+                      onStopRecording={onStopRecording || onToggleMeeting}
                     />
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                   </div>

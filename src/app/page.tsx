@@ -67,7 +67,14 @@ export default function Home() {
   // Meeting Recording State
   const [isDesktopRecording, setIsDesktopRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const { isRecording: isWebRecording, startRecording: startWeb, stopRecording: stopWeb } = useWebAudio();
+  const { 
+    isRecording: isWebRecording, 
+    isPaused: isWebPaused,
+    startRecording: startWeb, 
+    pauseRecording: pauseWeb,
+    resumeRecording: resumeWeb,
+    stopRecording: stopWeb 
+  } = useWebAudio();
   
   const router = useRouter();
   const [supabase] = useState(() => createClient());
@@ -863,6 +870,10 @@ export default function Home() {
                 onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
                 onBack={handleBackFromPage}
                 isRecording={isAnyRecording}
+                isPaused={isWebPaused}
+                onPauseRecording={pauseWeb}
+                onResumeRecording={resumeWeb}
+                onStopRecording={handleToggleMeeting}
                 isProcessing={isProcessing}
                 onToggleMeeting={handleToggleMeeting}
                 onOpenSettings={handleOpenSettings}

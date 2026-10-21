@@ -56,24 +56,43 @@ export async function stopNativeRecording(): Promise<RecordingResult> {
   };
 }
 
-export async function checkNativeRecordingStatus(): Promise<boolean> {
+export async function pauseNativeRecording(): Promise<void> {
+  const { NativeAudioService } = (Capacitor as any).Plugins || {};
+  if (!NativeAudioService) {
+    throw new Error('NativeAudioService plugin is not available');
+  }
+  await NativeAudioService.pauseRecording();
+}
+
+export async function resumeNativeRecording(): Promise<void> {
+  const { NativeAudioService } = (Capacitor as any).Plugins || {};
+  if (!NativeAudioService) {
+    throw new Error('NativeAudioService plugin is not available');
+  }
+  await NativeAudioService.resumeRecording();
+}
+
+export async function checkNativeRecordingStatus(): Promise<{ isRecording: boolean; isPaused: boolean }> {
   try {
     const { NativeAudioService } = (Capacitor as any).Plugins || {};
-    if (!NativeAudioService) return false;
+    if (!NativeAudioService) return { isRecording: false, isPaused: false };
     const res = await NativeAudioService.isRecording();
-    return Boolean(res?.isRecording);
+    return {
+      isRecording: Boolean(res?.isRecording),
+      isPaused: Boolean(res?.isPaused),
+    };
   } catch {
-    return false;
+    return { isRecording: false, isPaused: false };
   }
 }
 
-export function addNativeRecordingListener(callback: (isRecording: boolean) => void) {
+export function addNativeRecordingListener(callback: (isRecording: boolean, isPaused?: boolean) => void) {
   try {
     const { NativeAudioService } = (Capacitor as any).Plugins || {};
     if (!NativeAudioService || !NativeAudioService.addListener) return () => {};
     
     const handle = NativeAudioService.addListener('recordingStateChanged', (data: any) => {
-      callback(Boolean(data?.isRecording));
+      callback(Boolean(data?.isRecording), Boolean(data?.isPaused));
     });
 
     return () => {

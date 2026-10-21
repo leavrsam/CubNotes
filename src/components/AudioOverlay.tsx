@@ -118,7 +118,9 @@ function AudioNodeCard({
   const [liveStatusMsg, setLiveStatusMsg] = useState<string>('');
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
+  const [chatInput, setChatInput] = useState("");
   const [liveTranscript, setLiveTranscript] = useState(node.transcript || "");
+  const [liveInterim, setLiveInterim] = useState("");
   const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
 
   React.useEffect(() => {
@@ -235,12 +237,15 @@ function AudioNodeCard({
 
     const handleBroadcast = (e: Event) => {
       const customEvent = e as CustomEvent<{ transcript: string; interim: string; status: string; statusMessage: string }>;
-      const { transcript, status, statusMessage } = customEvent.detail;
+      const { transcript, interim, status, statusMessage } = customEvent.detail;
       if (status) setLiveStatus(status);
       if (statusMessage) setLiveStatusMsg(statusMessage);
       if (transcript !== undefined) {
         setLiveTranscript(transcript);
         updateAudioField(node.id, 'transcript', transcript);
+      }
+      if (interim !== undefined) {
+        setLiveInterim(interim);
       }
     };
 
@@ -547,9 +552,12 @@ function AudioNodeCard({
                   ref={liveScrollRef}
                   className="text-xs text-zinc-700 dark:text-zinc-300 font-mono max-h-32 min-h-[44px] overflow-y-auto leading-relaxed whitespace-pre-wrap select-text custom-scrollbar"
                 >
-                  {node.transcript ? (
+                  {(liveTranscript || node.transcript || liveInterim) ? (
                     <span className="text-zinc-800 dark:text-zinc-200">
-                      {node.transcript}
+                      {liveTranscript || node.transcript}
+                      {liveInterim ? (
+                        <span className="text-zinc-500 italic ml-1">{liveInterim}</span>
+                      ) : null}
                       <span className="inline-block w-1.5 h-3.5 ml-1 bg-red-500 animate-pulse align-middle" />
                     </span>
                   ) : liveStatus === 'mic_busy' || liveStatus === 'unsupported' ? (

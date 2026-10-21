@@ -5,6 +5,8 @@ import {
   isNativeAndroid,
   startNativeRecording,
   stopNativeRecording,
+  pauseNativeRecording,
+  resumeNativeRecording,
   checkNativeRecordingStatus,
   addNativeRecordingListener
 } from '@/lib/nativeAudio';
@@ -18,12 +20,16 @@ export function useWebAudio() {
   useEffect(() => {
     if (!isNativeAndroid()) return;
 
-    checkNativeRecordingStatus().then((active) => {
-      setIsRecording(active);
+    checkNativeRecordingStatus().then((status) => {
+      setIsRecording(status.isRecording);
+      setIsPaused(status.isPaused);
     });
 
-    const cleanup = addNativeRecordingListener((active) => {
+    const cleanup = addNativeRecordingListener((active, paused) => {
       setIsRecording(active);
+      if (paused !== undefined) {
+        setIsPaused(paused);
+      }
     });
 
     return () => {
@@ -37,6 +43,11 @@ export function useWebAudio() {
         await startNativeRecording();
         setIsRecording(true);
         setIsPaused(false);
+        try {
+          liveSpeechRecognizer.start();
+        } catch (speechErr) {
+          console.warn("Live speech recognition not started:", speechErr);
+        }
         return;
       }
 
@@ -61,7 +72,17 @@ export function useWebAudio() {
     }
   }, []);
 
-  const pauseRecording = useCallback(() => {
+  const pauseRecording = useCallback(async () => {
+    if (isNativeAndroid()) {
+      try {
+        await pauseNativeRecording();
+      } catch (e) {
+        console.warn("Native pause error:", e);
+      }
+      liveSpeechRecognizer.pause();
+      setIsPaused(true);
+      return;
+    }
     if (recorderRef.current) {
       recorderRef.current.pause();
       liveSpeechRecognizer.pause();
@@ -69,7 +90,17 @@ export function useWebAudio() {
     }
   }, []);
 
-  const resumeRecording = useCallback(() => {
+  const resumeRecording = useCallback(async () => {
+    if (isNativeAndroid()) {
+      try {
+        await resumeNativeRecording();
+      } catch (e) {
+        console.warn("Native resume error:", e);
+      }
+      liveSpeechRecognizer.resume();
+      setIsPaused(false);
+      return;
+    }
     if (recorderRef.current) {
       recorderRef.current.resume();
       liveSpeechRecognizer.resume();
@@ -85,7 +116,7 @@ export function useWebAudio() {
         const result = await stopNativeRecording();
         setIsRecording(false);
         setIsPaused(false);
-        return { ...result, liveTranscript };
+        return { ...result, liveTranscript: liveTranscript || result.liveTranscript || "" };
       } catch (err) {
         setIsRecording(false);
         setIsPaused(false);
