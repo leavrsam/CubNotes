@@ -728,7 +728,9 @@ export function MobileNavigation({
                           <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1.5">
                             <span>{page.title || 'Untitled Note'}</span>
                             {page.isShared && (
-                              <Users size={12} className="text-primary-500 shrink-0" title="Shared Note" />
+                              <span title="Shared Note" className="inline-flex items-center">
+                                <Users size={12} className="text-primary-500 shrink-0" />
+                              </span>
                             )}
                           </span>
                           <span className="text-[12px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-medium">

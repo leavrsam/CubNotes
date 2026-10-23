@@ -16,6 +16,7 @@ import { MobileDrawOverlay } from "./MobileDrawOverlay";
 import { uploadMediaFile } from "@/lib/storage";
 import { getAvailableAudioInputs, setPreferredAudioInput } from "@/lib/audioRecorder";
 import type { Stroke, TextNode, ImageNode, AudioNode, FileNode, VideoNode } from "./CustomCanvas";
+import { useYjsRoom } from "@/lib/yjs/useYjsRoom";
 
 function getStrokeBoundingBox(stroke: Stroke) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -486,6 +487,9 @@ export function MobilePage({
   const [isInternalSettingsOpen, setIsInternalSettingsOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string>("");
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Real-time Yjs CRDT Room & Collaborators
+  const { doc: ydoc, provider: yProvider, activeUsers, currentUser: yCurrentUser } = useYjsRoom(pageId, currentUser);
 
   // Paper & Background Style State
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
@@ -1231,7 +1235,36 @@ export function MobilePage({
             </button>
           ) : <div />}
 
-          <div className="pointer-events-auto flex items-center gap-1.5 p-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all">
+          <div className="flex items-center gap-2">
+            {/* Active Realtime Collaborators */}
+            {activeUsers && activeUsers.length > 0 && (
+              <div 
+                className="pointer-events-auto flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all text-xs"
+                title={`${activeUsers.length} collaborator${activeUsers.length > 1 ? 's' : ''} connected`}
+              >
+                <span className="flex h-2 w-2 relative mr-0.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <div className="flex items-center -space-x-1.5 overflow-hidden">
+                  {activeUsers.slice(0, 3).map((u, i) => (
+                    <div
+                      key={u.email || u.name || i}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase ring-1.5 ring-white dark:ring-zinc-900 shadow-xs select-none"
+                      style={{ backgroundColor: u.color }}
+                      title={`${u.name}${yCurrentUser && u.email === yCurrentUser.email ? ' (You)' : ''}`}
+                    >
+                      {u.name.slice(0, 2)}
+                    </div>
+                  ))}
+                </div>
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 ml-0.5">
+                  {activeUsers.length > 1 ? `${activeUsers.length}` : 'Live'}
+                </span>
+              </div>
+            )}
+
+            <div className="pointer-events-auto flex items-center gap-1.5 p-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all">
             {isTopMenuOpen && (
               <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-2 duration-150">
                 {onOpenShare && (
@@ -1303,6 +1336,7 @@ export function MobilePage({
             </button>
           </div>
         </div>
+      </div>
       )}
 
       <div 
@@ -1478,6 +1512,9 @@ export function MobilePage({
                     <TipTapEditor 
                       id={block.id}
                       content={block.content}
+                      ydoc={ydoc}
+                      provider={yProvider}
+                      user={yCurrentUser ? { name: yCurrentUser.name, color: yCurrentUser.color } : undefined}
                       onChange={(content) => {
                         setTexts(prev => prev.map(t => t.id === block.id ? { ...t, content } : t));
                       }}

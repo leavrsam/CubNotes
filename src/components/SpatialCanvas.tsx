@@ -37,7 +37,7 @@ interface SpatialCanvasProps {
   selectedIds?: string[];
   setSelectedIds?: React.Dispatch<React.SetStateAction<string[]>>;
   onCanvasClick?: (x: number, y: number) => void;
-  onDragSelectionStart?: () => void;
+  onDragSelectionStart?: (draggedId?: string) => void;
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
   onLassoComplete?: (minX: number, maxX: number, minY: number, maxY: number, path: number[][]) => void;

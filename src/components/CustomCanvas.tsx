@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
+import { getStroke } from "perfect-freehand";
 import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2 } from "lucide-react";
 import { Editor } from "@tiptap/react";
 import { 
@@ -53,6 +54,8 @@ export type Stroke = {
   y?: number;
   width?: number;
   height?: number;
+  scaleX?: number;
+  scaleY?: number;
   blockId?: string; // Links local strokes to specific blocks
   blockY?: number; // The absolute vertical position in the block feed
 };
@@ -102,6 +105,8 @@ export type FileNode = {
   y: number;
   url: string;
   filename: string;
+  width?: number;
+  height?: number;
 };
 
 export type VideoNode = {
@@ -161,7 +166,7 @@ export type ConnectorNode = {
 
 import { ColorPickerMenu } from "./ColorPickerMenu";
 
-export type ToolType = "pan" | "home" | "pen" | "eraser" | "lasso" | "shape" | "connector";
+export type ToolType = "pan" | "home" | "pen" | "eraser" | "lasso" | "shape" | "connector" | "highlighter";
 export type RibbonTab = "Home" | "Insert" | "Record" | "Draw" | "Flowchart" | "History" | "View";
 
 export type ToolPreset = {
@@ -487,7 +492,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   // View state
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
   const [pageColor, setPageColor] = useState<string>('default');
-  const [openColorMenu, setOpenColorMenu] = useState<'text' | 'drawing' | 'page' | null>(null);
+  const [openColorMenu, setOpenColorMenu] = useState<'text' | 'drawing' | 'page' | 'highlight' | null>(null);
 
   // Load per-page style settings
   useEffect(() => {
@@ -842,7 +847,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     shapes: any[];
   } | null>(null);
 
-  const handleDragSelectionStart = useCallback((draggedId: string) => {
+  const handleDragSelectionStart = useCallback((draggedId?: string) => {
+    if (!draggedId) return;
     const activeIds = selectedIds.includes(draggedId) ? selectedIds : [draggedId];
     if (!selectedIds.includes(draggedId)) {
       setSelectedIds([draggedId]);
@@ -3267,7 +3273,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                             if (ok) {
                               toast.success("Snapshot created!");
                             } else {
-                              toast.info("No canvas changes to snapshot.");
+                              toast("No canvas changes to snapshot.");
                             }
                           }}
                           className="text-[11px] font-medium px-2 py-1 rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 transition-opacity flex items-center gap-1 shadow-sm"

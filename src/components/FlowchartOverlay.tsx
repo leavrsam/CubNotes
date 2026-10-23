@@ -454,7 +454,7 @@ export function FlowchartOverlay({
         if (activeIds.length > 0) {
           e.preventDefault();
           setShapes(prev => prev.filter(s => !activeIds.includes(s.id)));
-          setConnectors(prev => prev.filter(c => !activeIds.includes(c.fromShapeId) && !activeIds.includes(c.toShapeId)));
+          setConnectors(prev => prev.filter(c => (!c.fromShapeId || !activeIds.includes(c.fromShapeId)) && (!c.toShapeId || !activeIds.includes(c.toShapeId))));
           setSelectedShapeId(null);
           setSelectedIds?.(prev => prev.filter(id => !activeIds.includes(id)));
           toast.success(activeIds.length === 1 ? "Shape deleted" : `${activeIds.length} shapes deleted`);
