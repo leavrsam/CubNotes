@@ -31,6 +31,7 @@ import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
 import { isNativeAndroid, startNativeRecording, stopNativeRecording, pauseNativeRecording, resumeNativeRecording } from "@/lib/nativeAudio";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
+import { useYjsRoom } from "@/lib/yjs/useYjsRoom";
 
 interface CustomCanvasProps {
   pageId: string;
@@ -39,6 +40,7 @@ interface CustomCanvasProps {
   onUpdatePageTitle: (title: string) => void;
   headerControls?: React.ReactNode;
   isJournal?: boolean;
+  currentUser?: any;
 }
 
 export type Stroke = {
@@ -320,7 +322,10 @@ function getSvgPathFromStroke(stroke: number[][]) {
   return d.join(" ");
 }
 
-export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls, isJournal }: CustomCanvasProps) {
+export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls, isJournal, currentUser }: CustomCanvasProps) {
+  // Real-time Yjs CRDT Collaboration Room
+  const { doc: ydoc, provider: yProvider, activeUsers, currentUser: yCurrentUser } = useYjsRoom(pageId, currentUser);
+
   const { 
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
     images, setImages, files, setFiles, videos, setVideos,
@@ -2402,6 +2407,39 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           </div>
 
           <div className="ml-auto mb-1 flex items-center gap-2">
+            {/* Active Realtime Collaborators */}
+            {activeUsers && activeUsers.length > 0 && (
+              <div 
+                className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-full border border-zinc-200 dark:border-zinc-700/60 shadow-2xs mr-1"
+                title={`${activeUsers.length} collaborator${activeUsers.length > 1 ? 's' : ''} connected via Realtime sync`}
+              >
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <div className="flex items-center -space-x-1.5 overflow-hidden">
+                  {activeUsers.slice(0, 4).map((u, i) => (
+                    <div
+                      key={u.email || u.name || i}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase ring-1.5 ring-white dark:ring-zinc-900 shadow-xs cursor-default select-none"
+                      style={{ backgroundColor: u.color }}
+                      title={`${u.name} (${u.email || 'Online'})${yCurrentUser && u.email === yCurrentUser.email ? ' (You)' : ''}`}
+                    >
+                      {u.name.slice(0, 2)}
+                    </div>
+                  ))}
+                  {activeUsers.length > 4 && (
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold bg-zinc-300 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 ring-1.5 ring-white dark:ring-zinc-900">
+                      +{activeUsers.length - 4}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hidden sm:inline pl-0.5">
+                  {activeUsers.length > 1 ? `${activeUsers.length} active` : 'Live'}
+                </span>
+              </div>
+            )}
+
             {audios && audios.length > 0 && (
               <button
                 onClick={() => toggleCollapseAllAudios()}
@@ -3521,6 +3559,9 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               body: JSON.stringify({ id, content: text, type: 'text', metadata: { pageId, x, y } })
             }).catch(err => console.error("Failed to sync text embedding", err));
           }}
+          ydoc={ydoc}
+          provider={yProvider}
+          user={yCurrentUser ? { name: yCurrentUser.name, color: yCurrentUser.color } : undefined}
         />
       </div>
 

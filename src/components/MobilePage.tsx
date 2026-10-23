@@ -628,9 +628,11 @@ export function MobilePage({
     toast.success("Audio input updated", { duration: 1500 });
   };
 
+  const isScrollingRef = useRef(false);
   const ensureCursorVisible = useCallback(() => {
     if (!scrollContainerRef.current) return;
-    
+    if (isScrollingRef.current) return;
+
     requestAnimationFrame(() => {
       try {
         const selection = window.getSelection();
@@ -644,22 +646,46 @@ export function MobilePage({
         const container = scrollContainerRef.current;
         if (!container) return;
 
-        // Viewable bottom boundary is above the keyboard and active toolbar
-        const bottomNavHeight = isKeyboardOpen 
-          ? Math.max(keyboardOffset || 0, 280) + (activeTray !== 'none' ? 190 : 54) 
-          : 90;
-        const visibleBottom = window.innerHeight - bottomNavHeight - 24;
+        // Viewable bottom boundary is directly above the keyboard and active toolbar
+        const toolbarEl = document.querySelector('[data-mobile-toolbar="true"]') as HTMLElement | null;
+        let maxVisibleBottom: number;
 
-        // Only scroll down if the cursor is actually obscured beneath the bottom keyboard/toolbar.
-        // Never scroll up while typing (prevents shooting to top of screen or bouncing).
-        if (rect.bottom > visibleBottom) {
-          const scrollDiff = rect.bottom - visibleBottom + 24;
-          // 'auto' prevents conflicting queued physics animations during typing
-          container.scrollBy({ top: scrollDiff, behavior: 'auto' });
+        if (toolbarEl) {
+          const tbRect = toolbarEl.getBoundingClientRect();
+          if (tbRect.top > 0 && tbRect.top < window.innerHeight) {
+            // Keep the active typing line comfortably 20px above the accessory toolbar
+            maxVisibleBottom = tbRect.top - 20;
+          } else {
+            maxVisibleBottom = window.innerHeight - (activeTray !== 'none' ? 240 : 64);
+          }
+        } else {
+          const vpHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+          const navOffset = isKeyboardOpen ? (activeTray !== 'none' ? 240 : 54) : 90;
+          maxVisibleBottom = vpHeight - navOffset - 20;
         }
+
+        // Viewable top boundary is underneath the floating top bar (~64px)
+        const minVisibleTop = 68;
+
+        if (rect.bottom > maxVisibleBottom) {
+          // Cursor is dipping below keyboard/toolbar line.
+          // Scroll down just enough so the current line is placed comfortably above the keyboard!
+          const scrollDiff = rect.bottom - maxVisibleBottom;
+          isScrollingRef.current = true;
+          container.scrollBy({ top: scrollDiff, behavior: 'auto' });
+          setTimeout(() => { isScrollingRef.current = false; }, 50);
+        } else if (rect.top < minVisibleTop) {
+          // Cursor is hidden underneath floating top bar.
+          const scrollDiff = rect.top - minVisibleTop - 12;
+          isScrollingRef.current = true;
+          container.scrollBy({ top: scrollDiff, behavior: 'auto' });
+          setTimeout(() => { isScrollingRef.current = false; }, 50);
+        }
+        // When between minVisibleTop and maxVisibleBottom:
+        // Do NOT scroll at all! The text remains exactly where the user put it.
       } catch {}
     });
-  }, [isKeyboardOpen, keyboardOffset, activeTray]);
+  }, [isKeyboardOpen, activeTray]);
 
 
   useEffect(() => {
@@ -704,6 +730,7 @@ export function MobilePage({
       if (isKbd) {
         setIsKeyboardOpen(true);
         setKeyboardOffset(Math.max(0, offset));
+        setTimeout(ensureCursorVisible, 60);
       } else if (isFocused) {
         setKeyboardOffset(Math.max(0, offset));
       } else {
@@ -1002,7 +1029,7 @@ export function MobilePage({
       const existingEditor = editorMapRef.current.get(candidateBlock.id);
       if (existingEditor) {
         setActiveBlockId(candidateBlock.id);
-        existingEditor.commands.focus('end');
+        existingEditor.commands.focus('end', { scrollIntoView: false });
         return;
       }
     }
@@ -1013,7 +1040,7 @@ export function MobilePage({
       if (activeTextNode) {
         const ed = editorMapRef.current.get(activeTextNode.id);
         if (ed) {
-          ed.commands.focus('end');
+          ed.commands.focus('end', { scrollIntoView: false });
           return;
         }
       }
@@ -1025,7 +1052,7 @@ export function MobilePage({
       const ed = editorMapRef.current.get(singleText.id);
       if (ed) {
         setActiveBlockId(singleText.id);
-        ed.commands.focus('end');
+        ed.commands.focus('end', { scrollIntoView: false });
         return;
       }
     }
@@ -1053,13 +1080,17 @@ export function MobilePage({
     if (isJournal) {
       setTexts(prev => [newNode, ...prev]);
       setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 100);
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
+        }
+      }, 50);
     } else {
       setTexts(prev => [...prev, newNode]);
       setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      }, 100);
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: 'auto' });
+        }
+      }, 50);
     }
   };
 
@@ -1276,7 +1307,7 @@ export function MobilePage({
 
       <div 
         ref={scrollContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative scroll-smooth overscroll-contain select-text" 
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative overscroll-contain select-text" 
         style={{ 
           WebkitOverflowScrolling: 'touch',
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)'
@@ -1341,11 +1372,11 @@ export function MobilePage({
 
         {/* Linear feed of blocks */}
         <div 
-          className="flex flex-col gap-6 w-full px-5 relative z-10 min-h-full transition-[padding] duration-150"
+          className="flex flex-col gap-6 w-full px-5 relative z-10 min-h-full"
           style={{
             paddingBottom: isKeyboardOpen 
-              ? `${Math.max(keyboardOffset || 0, 280) + (activeTray !== 'none' ? 240 : 130)}px` 
-              : '140px'
+              ? `${Math.max(keyboardOffset || 0, 180) + (activeTray !== 'none' ? 240 : 120)}px` 
+              : '160px'
           }}
         >
           {sortedBlocks.map((block, index) => {
@@ -1429,9 +1460,11 @@ export function MobilePage({
                       if (!isRearranging) { 
                         e.stopPropagation(); 
                         setActiveBlockId(block.id); 
+                        const target = e.target as HTMLElement;
+                        const isDirectEditorClick = Boolean(target.closest('.ProseMirror'));
                         const ed = editorMapRef.current.get(block.id);
-                        if (ed && !ed.isFocused) {
-                          ed.commands.focus('end');
+                        if (ed && !ed.isFocused && !isDirectEditorClick) {
+                          ed.commands.focus('end', { scrollIntoView: false });
                         }
                       } 
                     }}
@@ -1634,7 +1667,7 @@ export function MobilePage({
           
           {/* Tap Zone at bottom to append text */}
           <div 
-            className="flex-1 min-h-[160px] w-full cursor-text" 
+            className="flex-1 min-h-[40vh] w-full cursor-text" 
             onClick={addTextBlock}
           />
         </div>

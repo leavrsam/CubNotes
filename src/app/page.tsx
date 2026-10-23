@@ -761,6 +761,7 @@ export default function Home() {
               pageTitle={activePageTitle}
               pageCreatedAt={activePageCreatedAt}
               onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
+              currentUser={currentUser}
               headerControls={
                 <>
                   {!isNativeApp() && (

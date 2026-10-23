@@ -1,12 +1,12 @@
 {
-  "versionCode": 3,
-  "versionName": "1.0.2",
-  "version_code": 3,
-  "version_name": "1.0.2",
+  "versionCode": 4,
+  "versionName": "1.0.3",
+  "version_code": 4,
+  "version_name": "1.0.3",
   "apkUrl": "https://motif.wolfcubventures.com/Motif.apk",
   "apk_url": "https://motif.wolfcubventures.com/Motif.apk",
   "title": "Motif Update Available",
-  "description": "Live meeting recording controls, Table of Contents, continuous mobile text notes, and automatic in-app updates.",
-  "changelog": "• Live meeting audio pause & resume controls\n• Lock screen notification & background audio status\n• Table of contents for AI transcripts and notes\n• Smooth, jump-free note typing\n• Unified mobile text blocks\n• Automatic in-app updates",
+  "description": "Natural typing placement above the keyboard matching Google & Apple Notes, and automatic update delivery.",
+  "changelog": "• Natural typing positioning: Active line stays right above the keyboard without shooting to the top\n• Steady cursor placement: Text stays in-place when tapping or typing in the middle of notes\n• Smooth, jump-free typing across all long documents\n• Live meeting audio recording controls & lock screen notification\n• Table of contents for AI transcripts and notes",
   "releaseDate": "2026-10-23"
 }

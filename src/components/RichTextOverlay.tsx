@@ -25,6 +25,9 @@ interface RichTextOverlayProps {
   onAnnotate?: (id: string) => void;
   onTextDoubleClick?: (id: string) => void;
   onSelectTextNode?: (id: string) => void;
+  ydoc?: any;
+  provider?: any;
+  user?: { name: string; color: string };
 }
 
 export function RichTextOverlay({ 
@@ -44,7 +47,10 @@ export function RichTextOverlay({
   onBlurText,
   onAnnotate,
   onTextDoubleClick,
-  onSelectTextNode
+  onSelectTextNode,
+  ydoc,
+  provider,
+  user
 }: RichTextOverlayProps) {
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -301,6 +307,9 @@ export function RichTextOverlay({
               <TipTapEditor
                 id={node.id}
                 content={node.content}
+                ydoc={ydoc}
+                provider={provider}
+                user={user}
                 onChange={(content) => {
                   setTexts(prev => prev.map(t => t.id === node.id ? { ...t, content } : t));
                 }}

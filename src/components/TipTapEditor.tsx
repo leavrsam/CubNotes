@@ -18,6 +18,8 @@ import Underline from '@tiptap/extension-underline';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { Extension, Mark } from "@tiptap/core";
 import { 
   Trash2, Bold, Italic, Underline as UnderlineIcon, Strikethrough,
@@ -1516,15 +1518,18 @@ interface TipTapEditorProps {
   onBlurText?: (text: string) => void;
   showBubbleMenu?: boolean;
   onMountEditor?: (id: string, editor: Editor | null) => void;
+  ydoc?: any;
+  provider?: any;
+  user?: { name: string; color: string };
 }
 
-export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor, onEditorUpdate, onBlurText, showBubbleMenu = false, onMountEditor }: TipTapEditorProps) {
+export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor, onEditorUpdate, onBlurText, showBubbleMenu = false, onMountEditor, ydoc, provider, user }: TipTapEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeBubbleDropdown, setActiveBubbleDropdown] = useState<string | null>(null);
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      ydoc ? StarterKit.configure({ undoRedo: false }) : StarterKit,
       TextStyle,
       Color,
       FontFamily,
@@ -1553,8 +1558,40 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
         autolink: true,
         defaultProtocol: 'https',
       }),
+      ...(ydoc ? [
+        Collaboration.configure({
+          document: ydoc,
+          field: `text-${id}`,
+        }),
+        ...(provider?.awareness ? [
+          CollaborationCursor.configure({
+            provider: provider,
+            user: user || { name: "Collaborator", color: "#6366f1" },
+          })
+        ] : [])
+      ] : []),
     ],
-    content: content,
+    content: ydoc ? undefined : content,
+    editorProps: {
+      handleScrollToSelection: () => {
+        // Prevent ProseMirror from firing uncontrolled DOM scrollIntoView that shoots text to the top.
+        // We manage smooth, precise Apple Notes / Google Keep positioning in ensureCursorVisible.
+        return true;
+      },
+    },
+    onCreate: ({ editor }) => {
+      // If Yjs document field is empty but we have existing content from database, seed it!
+      if (ydoc && content) {
+        try {
+          const fragment = ydoc.getXmlFragment(`text-${id}`);
+          if (fragment.length === 0) {
+            editor.commands.setContent(content);
+          }
+        } catch (e) {
+          console.warn("Could not seed Yjs fragment:", e);
+        }
+      }
+    },
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
       onEditorUpdate?.();
@@ -1577,7 +1614,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
     onDestroy: () => {
       setActiveEditor?.(null);
     },
-  });
+  }, [id, ydoc, provider]);
 
   // Report editor instance on mount/unmount
   useEffect(() => {
@@ -1592,7 +1629,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
   // Focus on initial mount if empty template
   useEffect(() => {
     if (editor && content === "<p></p>") {
-      editor.commands.focus();
+      editor.commands.focus('end', { scrollIntoView: false });
     }
   }, [editor, content]);
 
