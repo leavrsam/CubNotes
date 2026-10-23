@@ -1514,9 +1514,11 @@ interface TipTapEditorProps {
   setActiveEditor?: (editor: Editor | null) => void;
   onEditorUpdate?: () => void;
   onBlurText?: (text: string) => void;
+  showBubbleMenu?: boolean;
+  onMountEditor?: (id: string, editor: Editor | null) => void;
 }
 
-export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor, onEditorUpdate, onBlurText }: TipTapEditorProps) {
+export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor, onEditorUpdate, onBlurText, showBubbleMenu = false, onMountEditor }: TipTapEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeBubbleDropdown, setActiveBubbleDropdown] = useState<string | null>(null);
 
@@ -1577,6 +1579,16 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
     },
   });
 
+  // Report editor instance on mount/unmount
+  useEffect(() => {
+    if (editor) {
+      onMountEditor?.(id, editor);
+    }
+    return () => {
+      onMountEditor?.(id, null);
+    };
+  }, [editor, id, onMountEditor]);
+
   // Focus on initial mount if empty template
   useEffect(() => {
     if (editor && content === "<p></p>") {
@@ -1607,7 +1619,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       </div>
 
       {/* Floating Microsoft Word / OneNote Style BubbleMenu */}
-      {editor && (
+      {showBubbleMenu && editor && (
         <BubbleMenu 
           editor={editor}
           appendTo={typeof document !== 'undefined' ? () => document.body : undefined}

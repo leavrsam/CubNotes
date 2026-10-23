@@ -11,6 +11,7 @@ import remarkGfm from "remark-gfm";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import type { AudioNode } from "./CustomCanvas";
+import { TranscriptionTableOfContents, extractMarkdownTOC, extractTranscriptTOC, slugify } from "./TranscriptionTableOfContents";
 
 interface MeetingWorkspaceProps {
   isOpen: boolean;
@@ -70,6 +71,46 @@ export function MeetingWorkspace({
 
   // Transcript search
   const [transcriptSearch, setTranscriptSearch] = useState("");
+  const summaryPaneRef = useRef<HTMLDivElement>(null);
+  const transcriptPaneRef = useRef<HTMLDivElement>(null);
+
+  const summaryTOC = React.useMemo(() => extractMarkdownTOC(activeAudioNode?.summary || ""), [activeAudioNode?.summary]);
+  const transcriptTOC = React.useMemo(() => extractTranscriptTOC(activeAudioNode?.transcript || ""), [activeAudioNode?.transcript]);
+
+  const markdownComponents = React.useMemo(() => {
+    const seenIds = new Map<string, number>();
+    const getId = (text: string) => {
+      const raw = String(text).replace(/[*_`#]/g, '').trim();
+      let base = slugify(raw);
+      if (!base) base = 'heading';
+      const count = seenIds.get(base) || 0;
+      seenIds.set(base, count + 1);
+      return count > 0 ? `${base}-${count}` : base;
+    };
+
+    return {
+      h1: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h1 id={id} className="scroll-mt-4 font-bold text-xl mt-6 mb-3 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h1>;
+      },
+      h2: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h2 id={id} className="scroll-mt-4 font-bold text-lg mt-5 mb-2 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h2>;
+      },
+      h3: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h3 id={id} className="scroll-mt-4 font-semibold text-base mt-4 mb-1.5 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h3>;
+      },
+      h4: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h4 id={id} className="scroll-mt-4 font-semibold text-sm mt-3 mb-1 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h4>;
+      },
+    };
+  }, [activeAudioNode?.summary]);
 
   // Keep notes in sync
   useEffect(() => {
@@ -510,10 +551,11 @@ export function MeetingWorkspace({
             )}
 
             {activeTab === "summary" && (
-              <div className="max-w-2xl mx-auto">
+              <div ref={summaryPaneRef} className="max-w-2xl mx-auto">
                 {currentSummary ? (
                   <div className="prose dark:prose-invert max-w-none text-sm space-y-4">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <TranscriptionTableOfContents items={summaryTOC} containerRef={summaryPaneRef} />
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                       {currentSummary}
                     </ReactMarkdown>
                   </div>
@@ -530,7 +572,7 @@ export function MeetingWorkspace({
             )}
 
             {activeTab === "transcript" && (
-              <div className="max-w-2xl mx-auto space-y-4">
+              <div ref={transcriptPaneRef} className="max-w-2xl mx-auto space-y-4">
                 <div className="relative flex items-center">
                   <Search size={14} className="absolute left-3 text-zinc-400" />
                   <input
@@ -543,13 +585,27 @@ export function MeetingWorkspace({
                 </div>
 
                 {currentTranscript ? (
-                  <div className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap font-mono text-xs p-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-100 dark:border-zinc-800 max-h-[600px] overflow-y-auto">
-                    {transcriptSearch ? (
-                      currentTranscript.split('\n').filter(line => line.toLowerCase().includes(transcriptSearch.toLowerCase())).join('\n') || "No matches found."
-                    ) : (
-                      currentTranscript
-                    )}
-                  </div>
+                  <>
+                    <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptPaneRef} title="Speakers & Timeline" />
+                    <div className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 font-mono text-xs p-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-100 dark:border-zinc-800 max-h-[600px] overflow-y-auto space-y-1">
+                      {currentTranscript.split('\n').map((line, idx) => {
+                        if (transcriptSearch && !line.toLowerCase().includes(transcriptSearch.toLowerCase())) {
+                          return null;
+                        }
+                        const trimmed = line.trim();
+                        const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
+                        return (
+                          <div 
+                            key={idx} 
+                            id={`transcript-line-${idx}`} 
+                            className={`scroll-mt-4 rounded px-1 transition-colors ${speakerMatch ? 'font-semibold text-zinc-900 dark:text-zinc-100 mt-2.5 bg-zinc-100/50 dark:bg-zinc-800/40' : ''}`}
+                          >
+                            {line}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 ) : (
                   <div className="py-24 text-center text-zinc-400 space-y-2">
                     <Clock size={32} className="mx-auto text-zinc-300 dark:text-zinc-600" />

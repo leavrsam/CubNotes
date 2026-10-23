@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import { processAudioTranscription } from "@/lib/transcribe";
 import type { AudioNode } from "./CustomCanvas";
 import { AudioPlayer } from "./AudioPlayer";
+import { TranscriptionTableOfContents, extractMarkdownTOC, extractTranscriptTOC, slugify } from "./TranscriptionTableOfContents";
 
 const supabase = createClient();
 
@@ -87,6 +88,50 @@ export function MobileAudioCard({
       setLiveTranscript(node.transcript);
     }
   }, [node.transcript, node.isLiveRecording]);
+
+  const summaryContainerRef = useRef<HTMLDivElement>(null);
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+  const enhancedContainerRef = useRef<HTMLDivElement>(null);
+
+  const summaryTOC = React.useMemo(() => extractMarkdownTOC(node.summary || ""), [node.summary]);
+  const enhancedTOC = React.useMemo(() => extractMarkdownTOC(node.enhancedNotes || ""), [node.enhancedNotes]);
+  const activeTranscriptText = node.isLiveRecording ? (liveTranscript || node.transcript || "") : (node.transcript || liveTranscript || "");
+  const transcriptTOC = React.useMemo(() => extractTranscriptTOC(activeTranscriptText), [activeTranscriptText]);
+
+  const markdownComponents = React.useMemo(() => {
+    const seenIds = new Map<string, number>();
+    const getId = (text: string) => {
+      const raw = String(text).replace(/[*_`#]/g, '').trim();
+      let base = slugify(raw);
+      if (!base) base = 'heading';
+      const count = seenIds.get(base) || 0;
+      seenIds.set(base, count + 1);
+      return count > 0 ? `${base}-${count}` : base;
+    };
+
+    return {
+      h1: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h1 id={id} className="scroll-mt-4 font-bold text-lg mt-4 mb-2 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h1>;
+      },
+      h2: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h2 id={id} className="scroll-mt-4 font-bold text-base mt-3 mb-1.5 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h2>;
+      },
+      h3: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h3 id={id} className="scroll-mt-4 font-semibold text-sm mt-2.5 mb-1 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h3>;
+      },
+      h4: ({ children, ...props }: any) => {
+        const text = Array.isArray(children) ? children.join('') : String(children);
+        const id = getId(text);
+        return <h4 id={id} className="scroll-mt-4 font-semibold text-xs mt-2 mb-1 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h4>;
+      },
+    };
+  }, [node.summary, node.enhancedNotes]);
 
   // When live recording is active, ensure we show the transcript tab and listen for streaming updates
   useEffect(() => {
@@ -629,7 +674,7 @@ export function MobileAudioCard({
 
           {/* Enhanced Notes Tab */}
           {activeTab === 'enhanced' && (
-            <div className="p-4 overflow-y-auto h-full custom-scrollbar">
+            <div ref={enhancedContainerRef} className="p-4 overflow-y-auto h-full custom-scrollbar">
               {!node.enhancedNotes && !isEnhancing ? (
                 <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3 text-center px-4">
                   <Sparkles size={32} className="opacity-20" />
@@ -641,16 +686,19 @@ export function MobileAudioCard({
                   <p className="text-sm font-medium">AI is polishing your notes...</p>
                 </div>
               ) : (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-zinc-800 dark:text-zinc-200">
-                  <ReactMarkdown>{node.enhancedNotes || ""}</ReactMarkdown>
-                </div>
+                <>
+                  <TranscriptionTableOfContents items={enhancedTOC} containerRef={enhancedContainerRef} />
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-zinc-800 dark:text-zinc-200">
+                    <ReactMarkdown components={markdownComponents}>{node.enhancedNotes || ""}</ReactMarkdown>
+                  </div>
+                </>
               )}
             </div>
           )}
 
           {/* Transcript Tab */}
           {activeTab === 'transcript' && (
-            <div className="p-4 overflow-y-auto h-full custom-scrollbar">
+            <div ref={transcriptContainerRef} className="p-4 overflow-y-auto h-full custom-scrollbar">
               {node.isLiveRecording && (
                 <div className="flex items-center justify-between mb-3 px-2.5 py-1.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400">
                   <div className="flex items-center gap-2">
@@ -660,13 +708,28 @@ export function MobileAudioCard({
                   <span className="text-[10px] text-zinc-400 font-normal">Streaming</span>
                 </div>
               )}
-              {(node.isLiveRecording ? (liveTranscript || node.transcript) : (node.transcript || liveTranscript)) ? (
-                <div className="text-[13px] font-mono leading-loose text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
-                  {node.isLiveRecording ? (liveTranscript || node.transcript) : (node.transcript || liveTranscript)}
-                  {node.isLiveRecording && (
-                    <span className="inline-block w-1.5 h-4 ml-1 bg-red-500 animate-pulse align-middle" />
-                  )}
-                </div>
+              {activeTranscriptText ? (
+                <>
+                  <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptContainerRef} title="Speakers & Timeline" />
+                  <div className="text-[13px] font-mono leading-loose text-zinc-800 dark:text-zinc-200 space-y-1">
+                    {activeTranscriptText.split('\n').map((line, idx) => {
+                      const trimmed = line.trim();
+                      const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
+                      return (
+                        <div 
+                          key={idx} 
+                          id={`transcript-line-${idx}`} 
+                          className={`scroll-mt-4 rounded px-1 transition-colors ${speakerMatch ? 'font-medium text-zinc-900 dark:text-zinc-100 mt-2 bg-zinc-100/40 dark:bg-zinc-800/30' : ''}`}
+                        >
+                          {line}
+                        </div>
+                      );
+                    })}
+                    {node.isLiveRecording && (
+                      <span className="inline-block w-1.5 h-4 ml-1 bg-red-500 animate-pulse align-middle" />
+                    )}
+                  </div>
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-zinc-400 text-sm py-8 text-center px-4">
                   {node.isLiveRecording ? (
@@ -696,9 +759,12 @@ export function MobileAudioCard({
 
           {/* Summary Tab */}
           {activeTab === 'summary' && (
-            <div className="p-4 overflow-y-auto h-full custom-scrollbar prose prose-sm dark:prose-invert max-w-none">
+            <div ref={summaryContainerRef} className="p-4 overflow-y-auto h-full custom-scrollbar prose prose-sm dark:prose-invert max-w-none">
               {node.summary ? (
-                <ReactMarkdown>{node.summary}</ReactMarkdown>
+                <>
+                  <TranscriptionTableOfContents items={summaryTOC} containerRef={summaryContainerRef} />
+                  <ReactMarkdown components={markdownComponents}>{node.summary}</ReactMarkdown>
+                </>
               ) : (
                 <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
                   No summary available.

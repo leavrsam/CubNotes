@@ -603,6 +603,7 @@ export function MobilePage({
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [mobileActiveEditor, setMobileActiveEditor] = useState<Editor | null>(null);
+  const editorMapRef = useRef<Map<string, Editor>>(new Map());
   const [editorUpdateTick, setEditorUpdateTick] = useState(0);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
   const [activeTray, setActiveTray] = useState<'none' | 'insert' | 'format'>('none');
@@ -627,7 +628,7 @@ export function MobilePage({
     toast.success("Audio input updated", { duration: 1500 });
   };
 
-  const autoScrollToCursor = useCallback(() => {
+  const ensureCursorVisible = useCallback(() => {
     if (!scrollContainerRef.current) return;
     
     requestAnimationFrame(() => {
@@ -637,7 +638,8 @@ export function MobilePage({
         
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
-        if (!rect || (rect.top === 0 && rect.bottom === 0)) return;
+        // Ignore unrendered, zero-dimension, or invalid bounding boxes
+        if (!rect || rect.height === 0 || rect.bottom <= 0 || rect.top <= 0) return;
 
         const container = scrollContainerRef.current;
         if (!container) return;
@@ -647,14 +649,13 @@ export function MobilePage({
           ? Math.max(keyboardOffset || 0, 280) + (activeTray !== 'none' ? 190 : 54) 
           : 90;
         const visibleBottom = window.innerHeight - bottomNavHeight - 24;
-        const visibleTop = 72; // below floating top bar
 
+        // Only scroll down if the cursor is actually obscured beneath the bottom keyboard/toolbar.
+        // Never scroll up while typing (prevents shooting to top of screen or bouncing).
         if (rect.bottom > visibleBottom) {
-          const scrollDiff = rect.bottom - visibleBottom + 32;
-          container.scrollBy({ top: scrollDiff, behavior: 'smooth' });
-        } else if (rect.top < visibleTop) {
-          const scrollDiff = rect.top - visibleTop - 24;
-          container.scrollBy({ top: scrollDiff, behavior: 'smooth' });
+          const scrollDiff = rect.bottom - visibleBottom + 24;
+          // 'auto' prevents conflicting queued physics animations during typing
+          container.scrollBy({ top: scrollDiff, behavior: 'auto' });
         }
       } catch {}
     });
@@ -994,6 +995,41 @@ export function MobilePage({
 
 
   const addTextBlock = () => {
+    // If the candidate adjacent block is already a text box, keep editing inside the SAME text box!
+    // This prevents creating multiple separate text boxes on top of each other.
+    const candidateBlock = isJournal ? sortedBlocks[0] : sortedBlocks[sortedBlocks.length - 1];
+    if (candidateBlock && candidateBlock.type === 'text') {
+      const existingEditor = editorMapRef.current.get(candidateBlock.id);
+      if (existingEditor) {
+        setActiveBlockId(candidateBlock.id);
+        existingEditor.commands.focus('end');
+        return;
+      }
+    }
+
+    // If there's an existing active text block, also keep typing in it:
+    if (activeBlockId) {
+      const activeTextNode = texts.find(t => t.id === activeBlockId);
+      if (activeTextNode) {
+        const ed = editorMapRef.current.get(activeTextNode.id);
+        if (ed) {
+          ed.commands.focus('end');
+          return;
+        }
+      }
+    }
+
+    // If there is only one text block on the page, default to continuing in it:
+    if (texts.length === 1) {
+      const singleText = texts[0];
+      const ed = editorMapRef.current.get(singleText.id);
+      if (ed) {
+        setActiveBlockId(singleText.id);
+        ed.commands.focus('end');
+        return;
+      }
+    }
+
     const targetY = isJournal 
       ? INITIAL_CONTENT_Y
       : Math.max(INITIAL_CONTENT_Y, bottomY);
@@ -1389,7 +1425,16 @@ export function MobilePage({
                         : undefined,
                       backgroundSize: backgroundStyle === 'ruled' ? '100% 32px' : undefined,
                     }}
-                    onClick={(e) => { if (!isRearranging) { e.stopPropagation(); setActiveBlockId(block.id); } }}
+                    onClick={(e) => { 
+                      if (!isRearranging) { 
+                        e.stopPropagation(); 
+                        setActiveBlockId(block.id); 
+                        const ed = editorMapRef.current.get(block.id);
+                        if (ed && !ed.isFocused) {
+                          ed.commands.focus('end');
+                        }
+                      } 
+                    }}
                   >
                     {isJournal && (
                       <div className="flex items-center gap-1.5 px-3 pt-2 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 select-none">
@@ -1402,21 +1447,28 @@ export function MobilePage({
                       content={block.content}
                       onChange={(content) => {
                         setTexts(prev => prev.map(t => t.id === block.id ? { ...t, content } : t));
-                        autoScrollToCursor();
                       }}
                       onDelete={() => {
+                        editorMapRef.current.delete(block.id);
                         setTexts(prev => prev.filter(t => t.id !== block.id));
+                      }}
+                      onMountEditor={(id, editor) => {
+                        if (editor) {
+                          editorMapRef.current.set(id, editor);
+                        } else {
+                          editorMapRef.current.delete(id);
+                        }
                       }}
                       setActiveEditor={(editor) => {
                         setMobileActiveEditor(editor);
                         if (editor) {
+                          editorMapRef.current.set(block.id, editor);
                           setIsKeyboardOpen(true);
-                          autoScrollToCursor();
+                          ensureCursorVisible();
                         }
                       }}
                       onEditorUpdate={() => {
                         setEditorUpdateTick(t => t + 1);
-                        autoScrollToCursor();
                       }}
                       onBlurText={() => {
                         setTimeout(() => {

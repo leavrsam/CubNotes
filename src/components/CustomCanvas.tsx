@@ -3490,7 +3490,25 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           tool={tool}
           selectedIds={selectedIds}
           setSelectedIds={setSelectedIds}
-          setActiveEditor={setActiveEditor}
+          setActiveEditor={(editor) => {
+            setActiveEditor(editor);
+            if (editor) {
+              setActiveTab("Home");
+              setTool("home");
+              setIsRibbonExpanded(true);
+            }
+          }}
+          onTextDoubleClick={(id) => {
+            setActiveTab("Home");
+            setTool("home");
+            setIsRibbonExpanded(true);
+            setSelectedIds([id]);
+          }}
+          onSelectTextNode={(id) => {
+            setActiveTab("Home");
+            setTool("home");
+            setIsRibbonExpanded(true);
+          }}
           onEditorUpdate={() => setEditorUpdateTick(t => t + 1)}
           onDragSelectionStart={handleDragSelectionStart}
           onDragSelectionMove={handleDragSelectionMove}

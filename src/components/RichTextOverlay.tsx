@@ -23,6 +23,8 @@ interface RichTextOverlayProps {
   onDragSelectionEnd?: () => void;
   onBlurText?: (id: string, text: string, x: number, y: number) => void;
   onAnnotate?: (id: string) => void;
+  onTextDoubleClick?: (id: string) => void;
+  onSelectTextNode?: (id: string) => void;
 }
 
 export function RichTextOverlay({ 
@@ -40,7 +42,9 @@ export function RichTextOverlay({
   onDragSelectionMove, 
   onDragSelectionEnd,
   onBlurText,
-  onAnnotate
+  onAnnotate,
+  onTextDoubleClick,
+  onSelectTextNode
 }: RichTextOverlayProps) {
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -161,7 +165,12 @@ export function RichTextOverlay({
                 if (tool === 'home') {
                   e.stopPropagation();
                   setSelectedIds?.([node.id]);
+                  onSelectTextNode?.(node.id);
                 }
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                onTextDoubleClick?.(node.id);
               }}
               // Stop canvas click from firing when clicking inside the text box container
               onClick={(e) => e.stopPropagation()}
