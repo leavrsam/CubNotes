@@ -31,7 +31,6 @@ import { uploadMediaFile } from "@/lib/storage";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 import { isNativeApp } from "@/lib/nativeAudio";
-import { AppUpdatePrompt } from "@/components/AppUpdatePrompt";
 
 export default function Home() {
   const { 
@@ -1001,8 +1000,6 @@ export default function Home() {
           currentUserEmail={userEmail}
         />
       )}
-
-      <AppUpdatePrompt />
     </main>
   );
 }

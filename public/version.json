@@ -1,8 +1,12 @@
 {
-  "versionCode": 2,
-  "versionName": "1.0.1",
+  "versionCode": 3,
+  "versionName": "1.0.2",
+  "version_code": 3,
+  "version_name": "1.0.2",
   "apkUrl": "https://motif.wolfcubventures.com/Motif.apk",
-  "title": "Motif Native Update Available",
-  "description": "Includes new background recording pause/play controls, lock screen notifications, and real-time transcription.",
-  "releaseDate": "2026-10-21"
+  "apk_url": "https://motif.wolfcubventures.com/Motif.apk",
+  "title": "Motif Update Available",
+  "description": "Live meeting recording controls, Table of Contents, continuous mobile text notes, and automatic in-app updates.",
+  "changelog": "• Live meeting audio pause & resume controls\n• Lock screen notification & background audio status\n• Table of contents for AI transcripts and notes\n• Smooth, jump-free note typing\n• Unified mobile text blocks\n• Automatic in-app updates",
+  "releaseDate": "2026-10-23"
 }

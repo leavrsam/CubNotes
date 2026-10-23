@@ -38,6 +38,7 @@ export const viewport: Viewport = {
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AccentProvider } from "@/components/AccentProvider";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { AppUpdatePrompt } from "@/components/AppUpdatePrompt";
 
 export default function RootLayout({
   children,
@@ -54,6 +55,7 @@ export default function RootLayout({
           <AccentProvider>
             <ServiceWorkerRegistration />
             {children}
+            <AppUpdatePrompt />
             <Toaster position="bottom-right" />
           </AccentProvider>
         </ThemeProvider>

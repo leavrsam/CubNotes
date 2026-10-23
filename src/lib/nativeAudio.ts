@@ -2,7 +2,14 @@ import { Capacitor } from '@capacitor/core';
 import { RecordingResult } from './audioRecorder';
 
 export const isNativeAndroid = () => {
-  return typeof window !== 'undefined' && Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+  if (typeof window === 'undefined') return false;
+  try {
+    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') return true;
+    const cap = (window as any).Capacitor;
+    if (cap && (cap.getPlatform?.() === 'android' || cap.platform === 'android')) return true;
+    if (cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'android') return true;
+  } catch {}
+  return false;
 };
 
 export const isNativeApp = (): boolean => {
