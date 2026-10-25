@@ -1,12 +1,12 @@
 {
-  "versionCode": 4,
-  "versionName": "1.0.3",
-  "version_code": 4,
-  "version_name": "1.0.3",
+  "versionCode": 5,
+  "versionName": "1.0.4",
+  "version_code": 5,
+  "version_name": "1.0.4",
   "apkUrl": "https://motif.wolfcubventures.com/Motif.apk",
   "apk_url": "https://motif.wolfcubventures.com/Motif.apk",
   "title": "Motif Update Available",
-  "description": "Natural typing placement above the keyboard matching Google & Apple Notes, and automatic update delivery.",
-  "changelog": "• Natural typing positioning: Active line stays right above the keyboard without shooting to the top\n• Steady cursor placement: Text stays in-place when tapping or typing in the middle of notes\n• Smooth, jump-free typing across all long documents\n• Live meeting audio recording controls & lock screen notification\n• Table of contents for AI transcripts and notes",
-  "releaseDate": "2026-10-23"
+  "description": "Real-time multiplayer collaboration with Yjs CRDTs, live collaborator presence cursors, and instant 0ms offline sync.",
+  "changelog": "• Real-time multiplayer editing: simultaneous collaborative editing without overwriting notes\n• Live collaborator presence: colored user cursors and active collaborator avatars\n• Instant 0ms offline sync: local IndexedDB persistence with automatic mathematical conflict resolution on reconnect\n• Natural typing positioning: Active line stays right above the keyboard\n• Live meeting recording controls with lock screen notification",
+  "releaseDate": "2026-10-24"
 }
