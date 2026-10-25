@@ -967,7 +967,7 @@ export function SettingsModal({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  downloadAndInstallApk(appUpdateStatus.serverInfo?.apkUrl);
+                                  downloadAndInstallApk(appUpdateStatus.serverInfo?.apkUrl, appUpdateStatus.serverInfo?.versionName);
                                   toast.success("Downloading update... Tap notification to install.");
                                 }}
                                 className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors"

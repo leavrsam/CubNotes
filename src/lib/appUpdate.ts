@@ -101,14 +101,14 @@ export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
   }
 }
 
-export async function downloadAndInstallApk(apkUrl: string = "https://motif.wolfcubventures.com/Motif.apk") {
+export async function downloadAndInstallApk(apkUrl: string = "https://motif.wolfcubventures.com/Motif.apk", versionName: string = "1.0.4") {
   const directApkUrl = apkUrl || "https://motif.wolfcubventures.com/Motif.apk";
 
   // 1. Try native auto-installer plugin method (available in updated APK builds)
   try {
     const { NativeAudioService } = (Capacitor as any).Plugins || {};
     if (NativeAudioService && typeof NativeAudioService.downloadAndInstallUpdate === 'function') {
-      const res = await NativeAudioService.downloadAndInstallUpdate({ url: directApkUrl, versionName: "1.0.2" });
+      const res = await NativeAudioService.downloadAndInstallUpdate({ url: directApkUrl, versionName: versionName || "1.0.4" });
       if (res && res.success) {
         return { success: true, method: 'native' };
       }

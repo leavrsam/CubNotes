@@ -98,7 +98,7 @@ export function AppUpdatePrompt() {
     toast.loading("Starting download of Motif update...", { id: "app-update" });
 
     try {
-      await downloadAndInstallApk(updateInfo.apkUrl);
+      await downloadAndInstallApk(updateInfo.apkUrl, updateInfo.versionName);
       toast.success("Download started! Check your notification bar to install.", {
         id: "app-update",
         duration: 7000,
