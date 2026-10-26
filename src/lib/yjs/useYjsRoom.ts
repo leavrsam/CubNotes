@@ -70,31 +70,54 @@ export function useYjsRoom(pageId: string | null | undefined, currentUser?: any)
     // 1. Initialize Y.Doc for this page
     const ydoc = new Y.Doc({ gc: true });
 
-    // 2. Attach local IndexedDB persistence for offline-first instant loading
-    const persistence = new IndexeddbPersistence(`cubnotes_yjs_${pageId}`, ydoc);
+    // 2. Attach local IndexedDB persistence for offline-first instant loading (defensive)
+    let persistence: IndexeddbPersistence | null = null;
+    try {
+      if (typeof window !== "undefined" && "indexedDB" in window) {
+        persistence = new IndexeddbPersistence(`cubnotes_yjs_${pageId}`, ydoc);
+      }
+    } catch (err) {
+      console.warn("IndexedDB persistence could not be initialized:", err);
+    }
 
-    // 3. Attach Supabase Realtime Provider for network synchronization
-    const yProvider = new SupabaseYjsProvider(supabase, pageId, ydoc, userPresence);
+    // 3. Attach Supabase Realtime Provider for network synchronization (defensive)
+    let yProvider: SupabaseYjsProvider | null = null;
+    try {
+      yProvider = new SupabaseYjsProvider(supabase, pageId, ydoc, userPresence);
+    } catch (err) {
+      console.warn("Supabase Yjs provider could not be initialized:", err);
+    }
 
     // 4. Track Active Collaborator Presence
     const updateActiveUsers = () => {
-      const states = Array.from(yProvider.awareness.getStates().values());
-      const users: UserPresence[] = states
-        .map((s: any) => s.user)
-        .filter((u): u is UserPresence => Boolean(u && u.name));
-      
-      // Deduplicate by name/email
-      const unique = Array.from(new Map(users.map(u => [u.email || u.name, u])).values());
-      setActiveUsers(unique);
+      if (!yProvider?.awareness) return;
+      try {
+        const states = Array.from(yProvider.awareness.getStates().values());
+        const users: UserPresence[] = states
+          .map((s: any) => s?.user)
+          .filter((u): u is UserPresence => Boolean(u && u.name));
+        
+        // Deduplicate by name/email
+        const unique = Array.from(new Map(users.map(u => [u.email || u.name, u])).values());
+        setActiveUsers(unique);
+      } catch (err) {
+        console.warn("Failed to update active users:", err);
+      }
     };
 
-    yProvider.awareness.on("change", updateActiveUsers);
+    if (yProvider) {
+      yProvider.awareness.on("change", updateActiveUsers);
+    }
 
     // 5. When local persistence is loaded from IndexedDB, mark room as ready
-    persistence.on("synced", () => {
+    if (persistence) {
+      persistence.on("synced", () => {
+        setIsReady(true);
+        updateActiveUsers();
+      });
+    } else {
       setIsReady(true);
-      updateActiveUsers();
-    });
+    }
 
     // Timeout safety fallback: If IndexedDB takes > 200ms, mark ready anyway
     const timer = setTimeout(() => {
@@ -106,10 +129,20 @@ export function useYjsRoom(pageId: string | null | undefined, currentUser?: any)
 
     return () => {
       clearTimeout(timer);
-      yProvider.awareness.off("change", updateActiveUsers);
-      yProvider.destroy();
-      persistence.destroy();
-      ydoc.destroy();
+      if (yProvider) {
+        try {
+          yProvider.awareness.off("change", updateActiveUsers);
+          yProvider.destroy();
+        } catch {}
+      }
+      if (persistence) {
+        try {
+          persistence.destroy();
+        } catch {}
+      }
+      try {
+        ydoc.destroy();
+      } catch {}
       setDoc(null);
       setProvider(null);
       setIsReady(false);

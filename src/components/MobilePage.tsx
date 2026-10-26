@@ -654,16 +654,17 @@ export function MobilePage({
         const toolbarEl = document.querySelector('[data-mobile-toolbar="true"]') as HTMLElement | null;
         let maxVisibleBottom: number;
 
+        const vpHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+
         if (toolbarEl) {
           const tbRect = toolbarEl.getBoundingClientRect();
-          if (tbRect.top > 0 && tbRect.top < window.innerHeight) {
-            // Keep the active typing line comfortably 20px above the accessory toolbar
-            maxVisibleBottom = tbRect.top - 20;
+          // The toolbar should legitimately sit in the bottom portion of the screen (top > 35% of viewport)
+          if (tbRect.top > vpHeight * 0.35 && tbRect.top < vpHeight) {
+            maxVisibleBottom = tbRect.top - 16;
           } else {
-            maxVisibleBottom = window.innerHeight - (activeTray !== 'none' ? 240 : 64);
+            maxVisibleBottom = vpHeight - (activeTray !== 'none' ? 240 : 64);
           }
         } else {
-          const vpHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
           const navOffset = isKeyboardOpen ? (activeTray !== 'none' ? 240 : 54) : 90;
           maxVisibleBottom = vpHeight - navOffset - 20;
         }
@@ -675,15 +676,19 @@ export function MobilePage({
           // Cursor is dipping below keyboard/toolbar line.
           // Scroll down just enough so the current line is placed comfortably above the keyboard!
           const scrollDiff = rect.bottom - maxVisibleBottom;
-          isScrollingRef.current = true;
-          container.scrollBy({ top: scrollDiff, behavior: 'auto' });
-          setTimeout(() => { isScrollingRef.current = false; }, 50);
-        } else if (rect.top < minVisibleTop) {
+          if (scrollDiff > 0 && scrollDiff < vpHeight) {
+            isScrollingRef.current = true;
+            container.scrollBy({ top: scrollDiff, behavior: 'auto' });
+            setTimeout(() => { isScrollingRef.current = false; }, 60);
+          }
+        } else if (rect.top < minVisibleTop && rect.top > 0) {
           // Cursor is hidden underneath floating top bar.
           const scrollDiff = rect.top - minVisibleTop - 12;
-          isScrollingRef.current = true;
-          container.scrollBy({ top: scrollDiff, behavior: 'auto' });
-          setTimeout(() => { isScrollingRef.current = false; }, 50);
+          if (Math.abs(scrollDiff) < vpHeight * 0.5) {
+            isScrollingRef.current = true;
+            container.scrollBy({ top: scrollDiff, behavior: 'auto' });
+            setTimeout(() => { isScrollingRef.current = false; }, 60);
+          }
         }
         // When between minVisibleTop and maxVisibleBottom:
         // Do NOT scroll at all! The text remains exactly where the user put it.
@@ -1530,7 +1535,7 @@ export function MobilePage({
                         }
                       }}
                       setActiveEditor={(editor) => {
-                        setMobileActiveEditor(editor);
+                        setMobileActiveEditor(prev => prev === editor ? prev : editor);
                         if (editor) {
                           editorMapRef.current.set(block.id, editor);
                           setIsKeyboardOpen(true);

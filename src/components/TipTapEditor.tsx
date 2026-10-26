@@ -19,7 +19,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
+import { yCursorPlugin, defaultCursorBuilder } from '@tiptap/y-tiptap';
 import { Extension, Mark } from "@tiptap/core";
 import { 
   Trash2, Bold, Italic, Underline as UnderlineIcon, Strikethrough,
@@ -29,6 +29,42 @@ import {
   Subscript as SubscriptIcon, Superscript as SuperscriptIcon,
   RemoveFormatting, Quote, Code, Minus, Link2, Unlink
 } from "lucide-react";
+
+// ==========================================
+// Custom Collaboration Cursor Extension
+// Built natively with @tiptap/y-tiptap to share ySyncPluginKey
+// ==========================================
+export const CollaborationCursor = Extension.create({
+  name: 'collaborationCursor',
+  addOptions() {
+    return {
+      provider: null as any,
+      user: {
+        name: 'Collaborator',
+        color: '#6366f1',
+      },
+      render: defaultCursorBuilder,
+    };
+  },
+  addProseMirrorPlugins() {
+    const awareness = this.options.provider?.awareness;
+    if (!awareness) return [];
+
+    try {
+      if (this.options.user) {
+        awareness.setLocalStateField('user', this.options.user);
+      }
+    } catch (e) {
+      console.warn('Failed to set local awareness user:', e);
+    }
+
+    return [
+      yCursorPlugin(awareness, {
+        cursorBuilder: this.options.render || defaultCursorBuilder,
+      }),
+    ];
+  },
+});
 
 // ==========================================
 // Custom TipTap Extensions (Word / OneNote)
@@ -1584,7 +1620,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       if (ydoc && content) {
         try {
           const fragment = ydoc.getXmlFragment(`text-${id}`);
-          if (fragment.length === 0) {
+          if (fragment.length === 0 && !editor.getText().trim()) {
             editor.commands.setContent(content);
           }
         } catch (e) {
@@ -1597,7 +1633,6 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       onEditorUpdate?.();
     },
     onSelectionUpdate: ({ editor }) => {
-      setActiveEditor?.(editor);
       onEditorUpdate?.();
     },
     onFocus: ({ editor }) => {

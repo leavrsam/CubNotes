@@ -139,7 +139,8 @@ ul[data-type="taskList"] li > div {
 }
 
 /* Yjs Collaborative Cursors */
-.collaboration-cursor__caret {
+.collaboration-cursor__caret,
+.ProseMirror-yjs-cursor {
   position: relative;
   margin-left: -1px;
   margin-right: -1px;
@@ -149,7 +150,8 @@ ul[data-type="taskList"] li > div {
   pointer-events: none;
 }
 
-.collaboration-cursor__label {
+.collaboration-cursor__label,
+.ProseMirror-yjs-cursor > div {
   position: absolute;
   top: -1.4em;
   left: -1px;
