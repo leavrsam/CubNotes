@@ -27,8 +27,9 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Highlighter, ChevronDown, Indent as IndentIcon, Outdent as OutdentIcon,
   Subscript as SubscriptIcon, Superscript as SuperscriptIcon,
-  RemoveFormatting, Quote, Code, Minus, Link2, Unlink
+  RemoveFormatting, Quote, Code, Minus, Link2, Unlink, PaintRoller
 } from "lucide-react";
+import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 
 // ==========================================
 // Custom Collaboration Cursor Extension
@@ -1562,6 +1563,7 @@ interface TipTapEditorProps {
 export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor, onEditorUpdate, onBlurText, showBubbleMenu = false, onMountEditor, ydoc, provider, user }: TipTapEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeBubbleDropdown, setActiveBubbleDropdown] = useState<string | null>(null);
+  const { isActive: isPainterActive } = useFormatPainter();
 
   const editor = useEditor({
     extensions: [
@@ -1614,6 +1616,21 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
         // We manage smooth, precise Apple Notes / Google Keep positioning in ensureCursorVisible.
         return true;
       },
+      handleKeyDown: (view, event) => {
+        // Cmd/Ctrl+Shift+C: Copy format
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'c') {
+          event.preventDefault();
+          formatPainterStore.copy(view as any, false);
+          return true;
+        }
+        // Cmd/Ctrl+Shift+V: Apply format
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
+          event.preventDefault();
+          formatPainterStore.apply(view as any);
+          return true;
+        }
+        return false;
+      },
     },
     onCreate: ({ editor }) => {
       // If Yjs document field is empty but we have existing content from database, seed it!
@@ -1634,6 +1651,10 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
     },
     onSelectionUpdate: ({ editor }) => {
       onEditorUpdate?.();
+      // If Format Painter is active and user dragged/selected text, apply format to that selection!
+      if (formatPainterStore.getState().isActive && !editor.state.selection.empty) {
+        formatPainterStore.apply(editor);
+      }
     },
     onFocus: ({ editor }) => {
       setActiveEditor?.(editor);
@@ -1686,7 +1707,14 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
   return (
     <div className="group relative w-full h-full bg-transparent">
       {/* Editor Content with Word / OneNote Typography styles */}
-      <div className="p-0 prose dark:prose-invert max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:text-[16px] [&_.ProseMirror]:leading-[32px] [&_.ProseMirror_p]:text-[16px] [&_.ProseMirror_p]:leading-[32px] [&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:min-h-[32px] [&_.ProseMirror_li]:text-[16px] [&_.ProseMirror_li]:leading-[32px] [&_.ProseMirror_li]:m-0 [&_.ProseMirror_h1]:text-[24px] [&_.ProseMirror_h1]:leading-[64px] [&_.ProseMirror_h1]:m-0 [&_.ProseMirror_h2]:text-[20px] [&_.ProseMirror_h2]:leading-[56px] [&_.ProseMirror_h2]:m-0 [&_.ProseMirror_h3]:text-[18px] [&_.ProseMirror_h3]:leading-[48px] [&_.ProseMirror_h3]:m-0 [&_.ProseMirror_blockquote]:border-l-4 [&_.ProseMirror_blockquote]:border-primary-500 [&_.ProseMirror_blockquote]:pl-3 [&_.ProseMirror_blockquote]:italic [&_.ProseMirror_blockquote]:my-1 [&_.ProseMirror_pre]:bg-zinc-100 dark:[&_.ProseMirror_pre]:bg-zinc-800/80 [&_.ProseMirror_pre]:p-2.5 [&_.ProseMirror_pre]:rounded-md [&_.ProseMirror_pre]:font-mono [&_.ProseMirror_pre]:text-sm [&_.ProseMirror_code]:bg-zinc-100 dark:[&_.ProseMirror_code]:bg-zinc-800 [&_.ProseMirror_code]:px-1.5 [&_.ProseMirror_code]:py-0.5 [&_.ProseMirror_code]:rounded [&_.ProseMirror_code]:text-sm [&_.ProseMirror_code]:font-mono [&_.ProseMirror_sub]:text-[0.75em] [&_.ProseMirror_sub]:align-sub [&_.ProseMirror_sup]:text-[0.75em] [&_.ProseMirror_sup]:align-super [&_.ProseMirror_s]:line-through [&_.ProseMirror_del]:line-through [&_.ProseMirror_strike]:line-through [&_.ProseMirror_hr]:border-t-2 [&_.ProseMirror_hr]:border-zinc-300 dark:[&_.ProseMirror_hr]:border-zinc-700 [&_.ProseMirror_hr]:my-3 [&_.ProseMirror_a]:text-primary-600 dark:[&_.ProseMirror_a]:text-primary-400 [&_.ProseMirror_a]:underline prose-p:my-0 prose-p:leading-[32px] prose-p:whitespace-pre-wrap prose-li:marker:text-inherit">
+      <div 
+        onClick={() => {
+          if (formatPainterStore.getState().isActive && editor) {
+            formatPainterStore.apply(editor);
+          }
+        }}
+        className={`p-0 prose dark:prose-invert max-w-none focus:outline-none ${isPainterActive ? 'cursor-copy' : ''} [&_.ProseMirror]:outline-none [&_.ProseMirror]:text-[16px] [&_.ProseMirror]:leading-[32px] [&_.ProseMirror_p]:text-[16px] [&_.ProseMirror_p]:leading-[32px] [&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:min-h-[32px] [&_.ProseMirror_li]:text-[16px] [&_.ProseMirror_li]:leading-[32px] [&_.ProseMirror_li]:m-0 [&_.ProseMirror_h1]:text-[24px] [&_.ProseMirror_h1]:leading-[64px] [&_.ProseMirror_h1]:m-0 [&_.ProseMirror_h2]:text-[20px] [&_.ProseMirror_h2]:leading-[56px] [&_.ProseMirror_h2]:m-0 [&_.ProseMirror_h3]:text-[18px] [&_.ProseMirror_h3]:leading-[48px] [&_.ProseMirror_h3]:m-0 [&_.ProseMirror_blockquote]:border-l-4 [&_.ProseMirror_blockquote]:border-primary-500 [&_.ProseMirror_blockquote]:pl-3 [&_.ProseMirror_blockquote]:italic [&_.ProseMirror_blockquote]:my-1 [&_.ProseMirror_pre]:bg-zinc-100 dark:[&_.ProseMirror_pre]:bg-zinc-800/80 [&_.ProseMirror_pre]:p-2.5 [&_.ProseMirror_pre]:rounded-md [&_.ProseMirror_pre]:font-mono [&_.ProseMirror_pre]:text-sm [&_.ProseMirror_code]:bg-zinc-100 dark:[&_.ProseMirror_code]:bg-zinc-800 [&_.ProseMirror_code]:px-1.5 [&_.ProseMirror_code]:py-0.5 [&_.ProseMirror_code]:rounded [&_.ProseMirror_code]:text-sm [&_.ProseMirror_code]:font-mono [&_.ProseMirror_sub]:text-[0.75em] [&_.ProseMirror_sub]:align-sub [&_.ProseMirror_sup]:text-[0.75em] [&_.ProseMirror_sup]:align-super [&_.ProseMirror_s]:line-through [&_.ProseMirror_del]:line-through [&_.ProseMirror_strike]:line-through [&_.ProseMirror_hr]:border-t-2 [&_.ProseMirror_hr]:border-zinc-300 dark:[&_.ProseMirror_hr]:border-zinc-700 [&_.ProseMirror_hr]:my-3 [&_.ProseMirror_a]:text-primary-600 dark:[&_.ProseMirror_a]:text-primary-400 [&_.ProseMirror_a]:underline prose-p:my-0 prose-p:leading-[32px] prose-p:whitespace-pre-wrap prose-li:marker:text-inherit`}
+      >
         <EditorContent editor={editor} />
       </div>
 
@@ -1805,6 +1833,27 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
             title="Clear Formatting"
           >
             <RemoveFormatting size={13} />
+          </button>
+
+          {/* Format Painter */}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              formatPainterStore.toggle(editor);
+            }}
+            onDoubleClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              formatPainterStore.lock(editor);
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              isPainterActive ? 'bg-primary-600 text-white shadow-xs' : 'hover:bg-zinc-800 text-zinc-300 hover:text-white'
+            }`}
+            title="Format Painter (Single click to apply once, double click to lock)"
+          >
+            <PaintRoller size={13} className={isPainterActive ? "animate-pulse" : ""} />
           </button>
 
           <div className="w-px h-5 bg-zinc-700/80 self-center mx-0.5" />

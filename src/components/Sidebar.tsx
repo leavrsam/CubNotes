@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download, Monitor, Smartphone } from "lucide-react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download, Monitor, Smartphone, Sparkles } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { isNativeApp } from "@/lib/nativeAudio";
@@ -25,6 +25,7 @@ interface SidebarProps {
   onOpenTrash?: () => void;
   trashCount?: number;
   onOpenCommandPalette?: () => void;
+  onOpenAskAI?: (initialQuery?: string) => void;
   onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
   onShareItem?: (type: 'notebook' | 'section' | 'page', id: string, title: string) => void;
   user?: any;
@@ -147,6 +148,22 @@ export function Sidebar(props: SidebarProps) {
             )}
           </div>
         </div>
+
+        {props.onOpenAskAI && (
+          <button
+            onClick={() => props.onOpenAskAI?.()}
+            className="flex items-center justify-between w-full mt-2.5 px-3 py-2 rounded-xl bg-gradient-to-r from-primary-600/20 via-indigo-600/20 to-purple-600/20 hover:from-primary-600/30 hover:to-purple-600/30 border border-primary-500/30 text-xs font-semibold text-primary-300 transition-all shadow-xs group active:scale-[0.98]"
+            title="Ask AI across notes & meetings (Cmd+J)"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles size={14} className="text-primary-400 group-hover:scale-110 transition-transform animate-pulse" />
+              <span>Ask Motif AI</span>
+            </span>
+            <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-primary-500/20 border border-primary-500/40 text-primary-300 font-mono">
+              ⌘J
+            </kbd>
+          </button>
+        )}
 
         {props.onOpenCommandPalette && (
           <button

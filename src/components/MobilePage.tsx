@@ -5,7 +5,7 @@ import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor, LineSpacingDropdown, executeIndent, executeOutdent } from "./TipTapEditor";
 import type { Editor } from "@tiptap/react";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2, History, RotateCcw, X } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2, History, RotateCcw, X, PaintRoller, Bot } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -17,6 +17,7 @@ import { uploadMediaFile } from "@/lib/storage";
 import { getAvailableAudioInputs, setPreferredAudioInput } from "@/lib/audioRecorder";
 import type { Stroke, TextNode, ImageNode, AudioNode, FileNode, VideoNode } from "./CustomCanvas";
 import { useYjsRoom } from "@/lib/yjs/useYjsRoom";
+import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 
 function getStrokeBoundingBox(stroke: Stroke) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -247,6 +248,7 @@ interface MobilePageProps {
   onToggleMeeting?: () => void;
   onOpenSettings?: () => void;
   onOpenShare?: () => void;
+  onOpenAskAI?: () => void;
   isJournal?: boolean;
 }
 
@@ -265,6 +267,7 @@ export function MobilePage({
   onToggleMeeting, 
   onOpenSettings, 
   onOpenShare, 
+  onOpenAskAI,
   isJournal 
 }: MobilePageProps) {
   const {
@@ -611,6 +614,7 @@ export function MobilePage({
   const [editorUpdateTick, setEditorUpdateTick] = useState(0);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
   const [activeTray, setActiveTray] = useState<'none' | 'insert' | 'format'>('none');
+  const { isActive: isPainterActive } = useFormatPainter();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isTopMenuOpen, setIsTopMenuOpen] = useState(false);
   const [audioInputs, setAudioInputs] = useState<Array<{ deviceId: string; label: string }>>([]);
@@ -1272,6 +1276,19 @@ export function MobilePage({
             <div className="pointer-events-auto flex items-center gap-1.5 p-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all">
             {isTopMenuOpen && (
               <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-2 duration-150">
+                {onOpenAskAI && (
+                  <button 
+                    onClick={() => {
+                      setIsTopMenuOpen(false);
+                      onOpenAskAI();
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-primary-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+                    title="Ask Motif AI"
+                  >
+                    <Bot size={16} />
+                  </button>
+                )}
+
                 {onOpenShare && (
                   <button 
                     onClick={() => {
@@ -1326,6 +1343,16 @@ export function MobilePage({
 
                 <div className="w-px h-4 bg-zinc-300 dark:bg-zinc-700 mx-0.5" />
               </div>
+            )}
+
+            {!isTopMenuOpen && onOpenAskAI && (
+              <button 
+                onClick={() => onOpenAskAI()}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-primary-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
+                title="Ask Motif AI"
+              >
+                <Bot size={16} />
+              </button>
             )}
 
             <button 
@@ -1972,6 +1999,32 @@ export function MobilePage({
                     <IndentIcon size={18} />
                   </button>
                 </div>
+
+                <div className="w-px h-5 bg-zinc-700 mx-1" />
+
+                {/* Format Painter */}
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (formatPainterStore.isActive()) {
+                      formatPainterStore.clear();
+                      toast.success("Format painter cancelled", { id: "painter" });
+                    } else if (mobileActiveEditor) {
+                      formatPainterStore.copy(mobileActiveEditor, false);
+                      toast.success("Format copied! Tap or highlight text to apply", { id: "painter" });
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                    isPainterActive
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 ring-1 ring-amber-400'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
+                  }`}
+                  title="Format Painter (Copy style & tap another selection to apply)"
+                >
+                  <PaintRoller size={14} className={isPainterActive ? "text-amber-400 animate-pulse" : ""} />
+                  <span>Painter</span>
+                </button>
               </div>
             </div>
           )}

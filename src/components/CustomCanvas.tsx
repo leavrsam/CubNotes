@@ -6,7 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2 } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller } from "lucide-react";
+import toast from "react-hot-toast";
+import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
 import { 
   STYLE_OPTIONS, 
@@ -191,7 +193,6 @@ export type DocumentState = {
 
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { useMinimapSettings } from "@/hooks/useMinimapSettings";
-import toast from "react-hot-toast";
 
 const FONT_OPTIONS = [
   { value: "", label: "Font" },
@@ -557,6 +558,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [isRibbonExpanded, setIsRibbonExpanded] = useState(true);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [editorUpdateTick, setEditorUpdateTick] = useState(0);
+  const { isActive: isPainterActive, isPersistent: isPainterPersistent } = useFormatPainter();
 
   const isEditorUsable = useCallback((editor: Editor | null | undefined): editor is Editor => {
     if (!editor || editor.isDestroyed) return false;
@@ -2483,6 +2485,46 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 >
                   <MousePointer2 size={16} strokeWidth={2} />
                   <span className="text-[9px] font-medium mt-0.5">Select</span>
+                </button>
+
+                {/* 1b. Format Painter Tool */}
+                <button
+                  onClick={() => {
+                    if (activeEditor) {
+                      formatPainterStore.toggle(activeEditor);
+                    } else if (isPainterActive) {
+                      formatPainterStore.clear();
+                    } else {
+                      toast("Click inside a text box first to copy its format", { icon: "🎨" });
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    if (activeEditor) {
+                      formatPainterStore.lock(activeEditor);
+                    }
+                  }}
+                  className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-all ${
+                    isPainterActive
+                      ? 'bg-primary-500/20 text-primary-600 dark:text-primary-400 ring-1 ring-primary-500/50 shadow-xs'
+                      : !activeEditor
+                      ? 'opacity-40 cursor-not-allowed text-zinc-400'
+                      : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                  }`}
+                  title={
+                    isPainterActive
+                      ? (isPainterPersistent 
+                          ? "Format Painter Locked (Double-click active, Esc to cancel)" 
+                          : "Format Painter Active (Click or select text to apply once, Esc to cancel)")
+                      : "Format Painter (Single-click to apply once, double-click to lock across multiple texts)"
+                  }
+                >
+                  <div className="relative">
+                    <PaintRoller size={16} strokeWidth={2} className={isPainterActive ? "animate-pulse" : ""} />
+                    {isPainterPersistent && (
+                      <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-primary-500 ring-1 ring-white dark:ring-zinc-900" />
+                    )}
+                  </div>
+                  <span className="text-[9px] font-medium mt-0.5">Painter</span>
                 </button>
                 
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1 flex-shrink-0" />

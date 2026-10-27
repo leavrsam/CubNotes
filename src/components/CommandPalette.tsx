@@ -21,6 +21,7 @@ interface CommandPaletteProps {
   onToggleFullscreen?: () => void;
   onToggleSidebar?: () => void;
   onOpenSettings?: () => void;
+  onOpenAskAI?: (query?: string) => void;
 }
 
 interface PaletteItem {
@@ -47,6 +48,7 @@ export function CommandPalette({
   onToggleFullscreen,
   onToggleSidebar,
   onOpenSettings,
+  onOpenAskAI,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -101,6 +103,18 @@ export function CommandPalette({
 
     // 2. Action Commands
     const actionItems: PaletteItem[] = [
+      {
+        id: 'action-ask-ai',
+        type: 'action',
+        title: query.trim() ? `Ask AI: "${query.trim()}"` : 'Ask Motif AI',
+        subtitle: 'Search, analyze, and synthesize across all notes & meetings (Cmd+J)',
+        icon: <Sparkles size={16} className="text-primary-400 animate-pulse" />,
+        action: () => {
+          onOpenAskAI?.(query.trim());
+          onClose();
+        },
+        badge: 'AI Assistant',
+      },
       {
         id: 'action-new-page',
         type: 'action',

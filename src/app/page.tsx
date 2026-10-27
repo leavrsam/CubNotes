@@ -19,7 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2, Download } from "lucide-react";
+import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2, Download, Bot } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -27,6 +27,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { TrashModal } from "@/components/TrashModal";
 import { EmergencyRecoveryModal } from "@/components/EmergencyRecoveryModal";
 import { ShareModal } from "@/components/ShareModal";
+import { AskAIModal } from "@/components/AskAIModal";
 import { uploadMediaFile } from "@/lib/storage";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
@@ -54,6 +55,14 @@ export default function Home() {
     resourceId: string;
     resourceTitle: string;
   } | null>(null);
+
+  const [isAskAIOpen, setIsAskAIOpen] = useState(false);
+  const [askAIInitialQuery, setAskAIInitialQuery] = useState("");
+
+  const handleOpenAskAI = (query = "") => {
+    setAskAIInitialQuery(query);
+    setIsAskAIOpen(true);
+  };
 
   const handleOpenShare = (resourceType: 'notebook' | 'section' | 'page', resourceId: string, resourceTitle: string) => {
     setShareModalState({
@@ -234,12 +243,16 @@ export default function Home() {
     }
   };
 
-  // Universal Keyboard Shortcuts (Cmd+K for Command Palette, Cmd+B for Sidebar)
+  // Universal Keyboard Shortcuts (Cmd+K for Command Palette, Cmd+J for Ask AI, Cmd+B for Sidebar)
   useEffect(() => {
     const handleGlobalShortcuts = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen(prev => !prev);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setIsAskAIOpen(prev => !prev);
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
@@ -712,6 +725,7 @@ export default function Home() {
             onOpenTrash={() => setIsTrashOpen(true)}
             trashCount={trash.length}
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            onOpenAskAI={() => handleOpenAskAI()}
             onShareItem={handleOpenShare}
             user={currentUser}
           />
@@ -774,6 +788,15 @@ export default function Home() {
                       <span>Download App</span>
                     </a>
                   )}
+                  <button
+                    onClick={() => handleOpenAskAI()}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-primary-600/15 to-purple-600/15 hover:from-primary-600/25 hover:to-purple-600/25 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-all shrink-0 shadow-xs"
+                    title="Ask Motif AI across all notes & meetings (Cmd+J)"
+                  >
+                    <Bot size={14} className="text-primary-400" />
+                    <span>Ask AI</span>
+                    <kbd className="hidden sm:inline-block ml-0.5 px-1 py-0.2 bg-zinc-800/80 rounded text-[10px] text-zinc-400 font-mono">⌘J</kbd>
+                  </button>
                   <button
                     onClick={() => handleOpenShare('page', selectedPageId, activePageTitle)}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary-600/10 hover:bg-primary-600/20 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"
@@ -878,6 +901,7 @@ export default function Home() {
                 onToggleMeeting={handleToggleMeeting}
                 onOpenSettings={handleOpenSettings}
                 onOpenShare={() => handleOpenShare('page', selectedPageId, activePageTitle)}
+                onOpenAskAI={() => handleOpenAskAI()}
                 isJournal={isActiveJournal}
               />
             </div>
@@ -989,6 +1013,18 @@ export default function Home() {
         onToggleFullscreen={handleToggleFullscreen}
         onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
         onOpenSettings={handleOpenSettings}
+        onOpenAskAI={handleOpenAskAI}
+      />
+
+      <AskAIModal
+        isOpen={isAskAIOpen}
+        onClose={() => setIsAskAIOpen(false)}
+        notebooks={notebooks}
+        onSelectPage={(pageId) => {
+          setSelectedPageId(pageId);
+          if (window.innerWidth < 768) setIsSidebarOpen(false);
+        }}
+        initialQuery={askAIInitialQuery}
       />
 
       {shareModalState?.isOpen && (
