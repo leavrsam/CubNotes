@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -638,6 +638,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   const [connectorRouting, setConnectorRouting] = useState<ConnectorRouting>('curved'); // User default: curved bezier!
   const [isAiFlowchartModalOpen, setIsAiFlowchartModalOpen] = useState(false);
   const [aiFlowchartPrompt, setAiFlowchartPrompt] = useState("");
+  const [aiFlowchartMode, setAiFlowchartMode] = useState<'auto' | 'todo' | 'workflow' | 'decision'>('auto');
   const [isGeneratingFlowchart, setIsGeneratingFlowchart] = useState(false);
 
   // Quick insert helper for flowchart shapes
@@ -720,9 +721,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
   }, [pan, zoom, setShapes, setConnectors, setSelectedShapeId]);
 
   // AI Flowchart Generator caller
-  const handleGenerateAiFlowchart = async (customPrompt?: string, useMeetingNotes?: boolean) => {
+  const handleGenerateAiFlowchart = async (customPrompt?: string, useMeetingNotes?: boolean, customMode?: string) => {
     setIsGeneratingFlowchart(true);
-    const toastId = toast.loading("Generating flowchart with Gemini 3.8 Flash...");
+    const targetMode = customMode || aiFlowchartMode;
+    const modeLabel = targetMode === 'todo' ? 'categorized list flowchart' : 'flowchart';
+    const toastId = toast.loading(`Organizing ${modeLabel} with Gemini 3.8 Flash...`);
 
     try {
       const centerX = (-pan.x + (typeof window !== 'undefined' ? window.innerWidth / 3 : 300)) / zoom;
@@ -752,6 +755,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         body: JSON.stringify({
           prompt: customPrompt || aiFlowchartPrompt,
           notes: notesContent,
+          mode: targetMode,
           startX: Math.round(centerX),
           startY: Math.round(centerY),
           apiKey: customKey || undefined
@@ -768,7 +772,8 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         if (data.connectors && Array.isArray(data.connectors)) {
           setConnectors(prev => [...prev, ...data.connectors]);
         }
-        toast.success(`Generated flowchart with ${data.shapes.length} steps!`, { id: toastId });
+        const isCat = data.diagramType === 'categorized_list';
+        toast.success(`Generated ${isCat ? 'categorized to-do flowchart' : 'flowchart'} with ${data.shapes.length} items!`, { id: toastId });
         setIsAiFlowchartModalOpen(false);
         setAiFlowchartPrompt("");
       }
@@ -3273,9 +3278,24 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
 
                 {/* AI Flowchart Generator (gemini-3.8-flash) */}
-                <div className="flex items-center h-full">
+                <div className="flex items-center gap-1.5 h-full">
                   <button
-                    onClick={() => setIsAiFlowchartModalOpen(true)}
+                    onClick={() => {
+                      setAiFlowchartMode('todo');
+                      setIsAiFlowchartModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium text-xs shadow-xs transition-transform active:scale-95"
+                    title="Organize To-Do List into a categorized flowchart with Gemini 3.8 Flash"
+                  >
+                    <ListTodo size={14} className="text-blue-600 dark:text-blue-400" />
+                    <span>To-Do Flowchart</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setAiFlowchartMode('auto');
+                      setIsAiFlowchartModalOpen(true);
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium text-xs shadow-xs transition-transform active:scale-95"
                     title="Generate Flowchart with Gemini 3.8 Flash"
                   >
@@ -3754,6 +3774,33 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 </>
               )}
 
+              {/* Turn List / Selected Text into Flowchart */}
+              {texts.some(t => selectedIds.includes(t.id)) && (
+                <>
+                  <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 my-auto" />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const selectedTexts = texts.filter(t => selectedIds.includes(t.id));
+                      const textSnippet = selectedTexts
+                        .map(t => t.content.replace(/<[^>]*>?/gm, ' ').replace(/&nbsp;/g, ' ').trim())
+                        .filter(Boolean)
+                        .join('\n');
+                      if (textSnippet) {
+                        setAiFlowchartPrompt(textSnippet);
+                        setAiFlowchartMode('todo');
+                      }
+                      setIsAiFlowchartModalOpen(true);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-full shadow-xs transition-all active:scale-95"
+                    title="Turn selected list into an organized flowchart"
+                  >
+                    <ListTodo size={13} />
+                    <span>Flowchart</span>
+                  </button>
+                </>
+              )}
+
               <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 my-auto" />
 
               {/* Deselect / Close Button */}
@@ -3956,7 +4003,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
         pageTitle={pageTitle}
       />
 
-      {/* AI Flowchart Generator Modal (Powered by Gemini 3.8 Flash) */}
+      {/* AI Flowchart & List Organizer Modal (Powered by Gemini 3.8 Flash) */}
       {isAiFlowchartModalOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 pointer-events-auto animate-in fade-in duration-150"
@@ -3969,11 +4016,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
                   <Workflow size={20} />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-base">AI Flowchart Generator</h3>
+                  <h3 className="font-semibold text-base">AI Flowchart & List Organizer</h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">Powered by Google Gemini 3.8 Flash</p>
                 </div>
               </div>
@@ -3986,18 +4033,107 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
               </button>
             </div>
 
+            {/* Mode Selector */}
+            <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl text-xs font-medium">
+              <button
+                type="button"
+                disabled={isGeneratingFlowchart}
+                onClick={() => setAiFlowchartMode('auto')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg transition-all ${
+                  aiFlowchartMode === 'auto'
+                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-semibold'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <span>Auto-Detect</span>
+              </button>
+              <button
+                type="button"
+                disabled={isGeneratingFlowchart}
+                onClick={() => setAiFlowchartMode('todo')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg transition-all ${
+                  aiFlowchartMode === 'todo'
+                    ? 'bg-blue-600 text-white shadow-xs font-semibold'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400'
+                }`}
+              >
+                <ListTodo size={13} />
+                <span>To-Do List</span>
+              </button>
+              <button
+                type="button"
+                disabled={isGeneratingFlowchart}
+                onClick={() => setAiFlowchartMode('workflow')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg transition-all ${
+                  aiFlowchartMode === 'workflow'
+                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-semibold'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <GitBranch size={13} />
+                <span>Process</span>
+              </button>
+              <button
+                type="button"
+                disabled={isGeneratingFlowchart}
+                onClick={() => setAiFlowchartMode('decision')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg transition-all ${
+                  aiFlowchartMode === 'decision'
+                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-semibold'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <Diamond size={13} />
+                <span>Decision</span>
+              </button>
+            </div>
+
             {/* Prompt input */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Describe the workflow, decision tree, or process:
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  {aiFlowchartMode === 'todo' 
+                    ? "Paste or list the tasks/chores to organize by category:" 
+                    : aiFlowchartMode === 'workflow' 
+                    ? "Describe the sequential process or workflow:" 
+                    : aiFlowchartMode === 'decision'
+                    ? "Describe the conditions and decision paths:"
+                    : "Describe a to-do list, workflow, or process:"}
+                </label>
+                {texts.some(t => selectedIds.includes(t.id)) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const selectedTexts = texts.filter(t => selectedIds.includes(t.id));
+                      const cleanContent = selectedTexts
+                        .map(t => t.content.replace(/<[^>]*>?/gm, ' ').replace(/&nbsp;/g, ' ').trim())
+                        .filter(Boolean)
+                        .join('\n');
+                      if (cleanContent) {
+                        setAiFlowchartPrompt(cleanContent);
+                        setAiFlowchartMode('todo');
+                        toast.success("Loaded selected note into prompt!", { duration: 1500 });
+                      }
+                    }}
+                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                  >
+                    Paste Selected Note Text
+                  </button>
+                )}
+              </div>
               <textarea
                 autoFocus
                 disabled={isGeneratingFlowchart}
                 rows={4}
                 value={aiFlowchartPrompt}
                 onChange={(e) => setAiFlowchartPrompt(e.target.value)}
-                placeholder="e.g. User onboarding flow: Sign up, verify email, if verified take to dashboard, else send reminder and allow resend..."
+                placeholder={
+                  aiFlowchartMode === 'todo'
+                    ? "e.g. Clean kitchen, do laundry, repair faucet, review PR #42, team sync with engineering, prepare client demo slides, research database migration, write unit tests for auth module..."
+                    : aiFlowchartMode === 'workflow'
+                    ? "e.g. User onboarding flow: Sign up, verify email, if verified take to dashboard, else send reminder and allow resend..."
+                    : "e.g. Paste a to-do list (e.g. household chores, work tasks, project tasks) or describe any workflow..."
+                }
                 className="w-full text-xs p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100 resize-none"
               />
             </div>
@@ -4006,20 +4142,33 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
             <div className="flex flex-col gap-1.5">
               <span className="text-[11px] text-zinc-500 font-medium">Quick Suggestions:</span>
               <div className="flex flex-wrap gap-1.5">
-                {[
-                  "User Sign-Up & Verification",
-                  "Customer Refund Decision Tree",
-                  "Bug Triage & Resolution Cycle",
-                  "Product Launch Roadmap"
-                ].map((sug) => (
+                {(aiFlowchartMode === 'todo'
+                  ? [
+                      { label: "Chores, Work & Projects", text: "Household chores: laundry, clean kitchen, fix sink, grocery run. Work tasks: review PR #42, engineering sync, prep slide deck. Project tasks: database migration schema, auth prototype, API tests." },
+                      { label: "Weekly Chores & Errands", text: "Household: mow lawn, take out recycling, wash car. Errands: buy groceries, pick up dry cleaning, return library books. Personal: schedule dentist appointment, pay electric bill." },
+                      { label: "Sprint Backlog", text: "Engineering: fix session refresh bug, add dark mode toggle, write API docs. QA: run end-to-end suite, verify mobile layout. DevOps: configure deployment pipeline, monitor error rates." },
+                      { label: "Health & Routines", text: "Morning routine: 5k jog, drink 1L water, 10-min stretch. Nutrition: meal prep for week, buy vitamins. Wellness: 8 hours sleep, evening meditation, read 20 pages." }
+                    ]
+                  : [
+                      { label: "Chores, Work & Projects", text: "Household chores: laundry, clean kitchen, fix sink. Work tasks: review PR #42, engineering sync. Project tasks: database schema, auth prototype." },
+                      { label: "User Sign-Up & Verification", text: "User Sign-Up flow: Fill registration form, validate password strength, send email verification link. If verified, initialize profile and route to dashboard. If not verified within 24h, send reminder email." },
+                      { label: "Customer Refund Decision Tree", text: "Customer requests refund: check if within 30-day window. If no, deny refund and offer store credit. If yes, check item condition. If opened, deduct restocking fee. If unopened, grant full refund." },
+                      { label: "Bug Triage & Resolution", text: "Bug reported: reproduce issue. If reproducible, assign severity. Critical bugs bypass triage straight to hotfix and deploy. Low-severity bugs are scheduled for next sprint." }
+                    ]
+                ).map((sug) => (
                   <button
-                    key={sug}
+                    key={sug.label}
                     type="button"
                     disabled={isGeneratingFlowchart}
-                    onClick={() => setAiFlowchartPrompt(sug)}
+                    onClick={() => {
+                      setAiFlowchartPrompt(sug.text);
+                      if (aiFlowchartMode !== 'todo' && sug.label.includes('Chores')) {
+                        setAiFlowchartMode('todo');
+                      }
+                    }}
                     className="text-[11px] px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 border border-transparent hover:border-blue-400 transition-colors"
                   >
-                    {sug}
+                    {sug.label}
                   </button>
                 ))}
               </div>
@@ -4062,12 +4211,12 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 {isGeneratingFlowchart ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Generating with Gemini 3.8 Flash...</span>
+                    <span>Organizing with Gemini 3.8 Flash...</span>
                   </>
                 ) : (
                   <>
-                    <Workflow size={14} />
-                    <span>Generate Flowchart</span>
+                    {aiFlowchartMode === 'todo' ? <ListTodo size={14} /> : <Workflow size={14} />}
+                    <span>{aiFlowchartMode === 'todo' ? 'Organize into Flowchart' : 'Generate Flowchart'}</span>
                   </>
                 )}
               </button>
