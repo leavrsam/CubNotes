@@ -19,7 +19,39 @@ import java.io.File;
 public class UpdateManager {
     private static final String TAG = "UpdateManager";
 
+    public static boolean hasInstallPermission(Context context) {
+        try {
+            android.content.pm.PackageInfo info = context.getPackageManager().getPackageInfo(
+                context.getPackageName(),
+                android.content.pm.PackageManager.GET_PERMISSIONS
+            );
+            if (info.requestedPermissions != null) {
+                for (String p : info.requestedPermissions) {
+                    if ("android.permission.REQUEST_INSTALL_PACKAGES".equals(p)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     public static void startDownloadAndInstall(Context context, String apkUrl, String versionName) {
+        // If app does not have REQUEST_INSTALL_PACKAGES (Google Play Store build),
+        // redirect to Google Play Store / download page instead of attempting sideloading.
+        if (!hasInstallPermission(context)) {
+            try {
+                Intent playIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + context.getPackageName()));
+                playIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(playIntent);
+            } catch (Exception e) {
+                Intent webIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://motif.wolfcubventures.com/download"));
+                webIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(webIntent);
+            }
+            return;
+        }
+
         if (apkUrl == null || apkUrl.trim().isEmpty()) {
             Toast.makeText(context, "Update URL is not configured", Toast.LENGTH_SHORT).show();
             return;

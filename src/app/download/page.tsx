@@ -405,8 +405,15 @@ export default function DownloadPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 w-full py-8 border-t border-zinc-900 text-center text-xs text-zinc-600">
+      <footer className="relative z-10 w-full py-8 border-t border-zinc-900 text-center text-xs text-zinc-500 space-y-2">
         <p>&copy; {new Date().getFullYear()} Motif • Wolf Cub Ventures. All rights reserved.</p>
+        <div className="flex items-center justify-center gap-4 text-zinc-400">
+          <Link href="/terms" className="hover:text-zinc-200 transition-colors">Terms of Service</Link>
+          <span>•</span>
+          <Link href="/privacy" className="hover:text-zinc-200 transition-colors">Privacy Policy</Link>
+          <span>•</span>
+          <Link href="/delete-account" className="hover:text-zinc-200 transition-colors">Delete Account</Link>
+        </div>
       </footer>
     </div>
   );

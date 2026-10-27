@@ -20,6 +20,20 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    flavorDimensions "distribution"
+
+    productFlavors {
+        play {
+            dimension "distribution"
+            // Google Play Store distribution - clean, no self-updating APK permissions
+        }
+        standalone {
+            dimension "distribution"
+            // Direct website distribution - self-updating APK with REQUEST_INSTALL_PACKAGES
         }
     }
 }

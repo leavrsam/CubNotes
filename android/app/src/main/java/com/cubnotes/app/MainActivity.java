@@ -17,7 +17,13 @@ public class MainActivity extends BridgeActivity {
                 getBridge().getWebView().setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
                     try {
                         if (url != null && (url.contains(".apk") || (mimetype != null && mimetype.contains("android.package-archive")))) {
-                            UpdateManager.startDownloadAndInstall(this, url, "latest");
+                            if (UpdateManager.hasInstallPermission(this)) {
+                                UpdateManager.startDownloadAndInstall(this, url, "latest");
+                            } else {
+                                Intent i = new Intent(Intent.ACTION_VIEW);
+                                i.setData(Uri.parse(url));
+                                startActivity(i);
+                            }
                         } else {
                             Intent i = new Intent(Intent.ACTION_VIEW);
                             i.setData(Uri.parse(url));

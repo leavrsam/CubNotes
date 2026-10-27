@@ -898,15 +898,52 @@ export function SettingsModal({
                 <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
                   <h3 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">Danger Zone</h3>
                   <button
-                    onClick={() => {
-                      if(window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-                         toast.error("Account deletion requires admin privileges or contact support.");
+                    onClick={async () => {
+                      const confirmed = window.confirm(
+                        "Are you sure you want to permanently delete your account and all associated notes? This action CANNOT be undone."
+                      );
+                      if (!confirmed) return;
+                      const promptConfirm = window.prompt("Type DELETE to confirm permanent account deletion:");
+                      if (promptConfirm !== "DELETE") {
+                        toast.error("Deletion canceled. You must type DELETE to confirm.");
+                        return;
+                      }
+
+                      const toastId = toast.loading("Deleting account and purging data...");
+                      try {
+                        const res = await fetch("/api/user/delete", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" }
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Failed to delete account");
+                        toast.success("Account deleted. Signing out...", { id: toastId });
+                        setTimeout(() => {
+                          onSignOut();
+                          window.location.href = "/login";
+                        }, 1200);
+                      } catch (err: any) {
+                        toast.error(err.message || "Failed to delete account", { id: toastId });
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors font-medium text-sm mb-6"
+                    className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors font-medium text-sm mb-4"
                   >
-                    <Trash2 size={16} /> Delete Account
+                    <Trash2 size={16} /> Delete Account &amp; Data
                   </button>
+
+                  <div className="flex items-center gap-2.5 mb-6 text-xs text-zinc-500 dark:text-zinc-400">
+                    <a href="/privacy" target="_blank" className="hover:underline hover:text-zinc-700 dark:hover:text-zinc-200">
+                      Privacy Policy
+                    </a>
+                    <span>•</span>
+                    <a href="/terms" target="_blank" className="hover:underline hover:text-zinc-700 dark:hover:text-zinc-200">
+                      Terms of Service
+                    </a>
+                    <span>•</span>
+                    <a href="/delete-account" target="_blank" className="hover:underline hover:text-zinc-700 dark:hover:text-zinc-200">
+                      Web Deletion Portal
+                    </a>
+                  </div>
 
                   <button
                     onClick={onSignOut}

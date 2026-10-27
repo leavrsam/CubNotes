@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { acceptCollaborationInvite } from '@/lib/collaborations';
@@ -520,6 +521,14 @@ function LoginForm() {
             </p>
           )}
         </div>
+
+        {/* Terms & Privacy Agreement */}
+        <p className="text-[11px] text-zinc-500 text-center pt-1">
+          By continuing, you agree to our{' '}
+          <Link href="/terms" className="text-zinc-400 hover:text-primary-400 underline">Terms of Service</Link>{' '}
+          and{' '}
+          <Link href="/privacy" className="text-zinc-400 hover:text-primary-400 underline">Privacy Policy</Link>.
+        </p>
 
         {/* Native Apps Download Section */}
         <div className="mt-5 pt-4 border-t border-zinc-800/60 flex flex-col items-center gap-2.5">
