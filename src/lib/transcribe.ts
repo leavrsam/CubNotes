@@ -370,10 +370,70 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
     } else {
       const errJson = await apiRes.json().catch(() => null);
       const errMsg = errJson?.error || `HTTP ${apiRes.status}: ${apiRes.statusText}`;
+
+      // AUTOMATIC RESCUE FALLBACK (Granola-style on-device rescue):
+      // If serverless audio transcription timed out (504) or failed, but real-time on-device speech was captured:
+      if (params.liveTranscript && params.liveTranscript.trim().length > 30) {
+        console.warn(`[transcribe] Serverless audio route returned ${apiRes.status}. Automatically rescuing meeting using captured on-device speech transcript...`);
+        const fallbackRes = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
+          },
+          body: JSON.stringify({
+            liveTranscript: params.liveTranscript,
+            isJournal: Boolean(params.isJournal),
+            apiKey: customKey || undefined,
+          }),
+        });
+        if (fallbackRes.ok) {
+          const fallbackData = await fallbackRes.json();
+          if (fallbackData.success) {
+            return {
+              transcript: fallbackData.transcript || params.liveTranscript,
+              summary: fallbackData.summary || 'Summary generated from live on-device transcript.',
+              source: 'api',
+            };
+          }
+        }
+      }
+
       throw new Error(errMsg);
     }
   } catch (apiErr: any) {
     console.error("API route transcription error:", apiErr);
+
+    // AUTOMATIC RESCUE FALLBACK on network or timeout exceptions:
+    if (params.liveTranscript && params.liveTranscript.trim().length > 30) {
+      console.warn("[transcribe] Network exception during audio processing. Rescuing meeting using captured on-device transcript...");
+      try {
+        const fallbackRes = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
+          },
+          body: JSON.stringify({
+            liveTranscript: params.liveTranscript,
+            isJournal: Boolean(params.isJournal),
+            apiKey: customKey || undefined,
+          }),
+        });
+        if (fallbackRes.ok) {
+          const fallbackData = await fallbackRes.json();
+          if (fallbackData.success) {
+            return {
+              transcript: fallbackData.transcript || params.liveTranscript,
+              summary: fallbackData.summary || 'Summary generated from live on-device transcript.',
+              source: 'api',
+            };
+          }
+        }
+      } catch (rescueErr) {
+        console.warn("Rescue transcript fallback also failed:", rescueErr);
+      }
+    }
 
     const message = apiErr?.message || String(apiErr);
     if (message.includes('API key is not configured') || message.includes('API_KEY')) {

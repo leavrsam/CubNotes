@@ -14,12 +14,20 @@ const MobilePage = dynamic(() => import('@/components/MobilePage').then(mod => m
   ssr: false,
   loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading mobile page...</div>
 });
+const TagHubView = dynamic(() => import('@/components/TagHubView').then(mod => mod.TagHubView), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading Tag Hub...</div>
+});
+const GlobalMindMapView = dynamic(() => import('@/components/GlobalMindMapView').then(mod => mod.GlobalMindMapView), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500">Loading Knowledge Graph...</div>
+});
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2, Download, Bot } from "lucide-react";
+import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2, Download, Bot, Hash } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -43,6 +51,8 @@ export default function Home() {
     refreshNotebooks
   } = useNotebooks();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [activeWorkspaceView, setActiveWorkspaceView] = useState<'canvas' | 'tag-hub' | 'mind-map'>('canvas');
+  const [targetJumpCoordinates, setTargetJumpCoordinates] = useState<{ x: number; y: number } | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [userEmail, setUserEmail] = useState<string>("");
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -726,6 +736,13 @@ export default function Home() {
             trashCount={trash.length}
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             onOpenAskAI={() => handleOpenAskAI()}
+            onOpenTagHub={() => setActiveWorkspaceView('tag-hub')}
+            onOpenMindMap={() => setActiveWorkspaceView('mind-map')}
+            onJumpToCoordinates={(pageId, x, y) => {
+              setSelectedPageId(pageId);
+              setTargetJumpCoordinates({ x, y });
+              setActiveWorkspaceView('canvas');
+            }}
             onShareItem={handleOpenShare}
             user={currentUser}
           />
@@ -768,7 +785,37 @@ export default function Home() {
             </div>
           )}
 
-          {selectedPageId ? (
+          {activeWorkspaceView === 'tag-hub' ? (
+            <TagHubView
+              notebooks={notebooks}
+              onSelectPage={(pageId) => {
+                setSelectedPageId(pageId);
+                setActiveWorkspaceView('canvas');
+              }}
+              onJumpToCoordinates={(pageId, x, y) => {
+                setSelectedPageId(pageId);
+                setTargetJumpCoordinates({ x, y });
+                setActiveWorkspaceView('canvas');
+              }}
+              onClose={() => setActiveWorkspaceView('canvas')}
+              onOpenMindMap={() => setActiveWorkspaceView('mind-map')}
+            />
+          ) : activeWorkspaceView === 'mind-map' ? (
+            <GlobalMindMapView
+              notebooks={notebooks}
+              onSelectPage={(pageId) => {
+                setSelectedPageId(pageId);
+                setActiveWorkspaceView('canvas');
+              }}
+              onJumpToCoordinates={(pageId, x, y) => {
+                setSelectedPageId(pageId);
+                setTargetJumpCoordinates({ x, y });
+                setActiveWorkspaceView('canvas');
+              }}
+              onClose={() => setActiveWorkspaceView('canvas')}
+              onOpenTagHub={() => setActiveWorkspaceView('tag-hub')}
+            />
+          ) : selectedPageId ? (
             <CustomCanvas 
               key={selectedPageId}
               pageId={selectedPageId} 
@@ -776,8 +823,26 @@ export default function Home() {
               pageCreatedAt={activePageCreatedAt}
               onUpdatePageTitle={(title) => updatePage(selectedPageId, title)}
               currentUser={currentUser}
+              targetJumpCoordinates={targetJumpCoordinates}
+              onClearTargetJump={() => setTargetJumpCoordinates(null)}
               headerControls={
                 <>
+                  <button
+                    onClick={() => setActiveWorkspaceView('tag-hub')}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"
+                    title="Open Tag Place (All tagged notes, blocks & pins)"
+                  >
+                    <Hash size={13} />
+                    <span>Tags</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveWorkspaceView('mind-map')}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"
+                    title="Open Knowledge Graph Mind Map"
+                  >
+                    <span>🧠</span>
+                    <span>Mind Map</span>
+                  </button>
                   {!isNativeApp() && (
                     <a
                       href="/download"

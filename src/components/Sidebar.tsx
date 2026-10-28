@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download, Monitor, Smartphone, Sparkles } from "lucide-react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download, Monitor, Smartphone, Sparkles, Hash, Network } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { isNativeApp } from "@/lib/nativeAudio";
@@ -26,6 +26,8 @@ interface SidebarProps {
   trashCount?: number;
   onOpenCommandPalette?: () => void;
   onOpenAskAI?: (initialQuery?: string) => void;
+  onOpenTagHub?: () => void;
+  onOpenMindMap?: () => void;
   onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
   onShareItem?: (type: 'notebook' | 'section' | 'page', id: string, title: string) => void;
   user?: any;
@@ -180,6 +182,31 @@ export function Sidebar(props: SidebarProps) {
             </kbd>
           </button>
         )}
+
+        {/* Tag Place & Knowledge Graph Mind Map Nav */}
+        <div className="grid grid-cols-2 gap-1.5 mt-2">
+          {props.onOpenTagHub && (
+            <button
+              onClick={props.onOpenTagHub}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white transition-colors group"
+              title="Open Tag Place (All tagged notes, blocks & pins)"
+            >
+              <Hash size={13} className="text-purple-400 group-hover:scale-110 transition-transform" />
+              <span>Tags</span>
+            </button>
+          )}
+
+          {props.onOpenMindMap && (
+            <button
+              onClick={props.onOpenMindMap}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white transition-colors group"
+              title="Open Knowledge Graph Mind Map"
+            >
+              <Network size={13} className="text-blue-400 group-hover:scale-110 transition-transform" />
+              <span>Mind Map</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {searchResults.length > 0 && (

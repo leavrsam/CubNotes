@@ -44,7 +44,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (!audioUrl && !audioBase64 && !fileBuffer) {
-      return NextResponse.json({ error: 'Audio file, audioBase64, or audioUrl is required.' }, { status: 400 });
+      if (!liveTranscript || !liveTranscript.trim()) {
+        return NextResponse.json({ error: 'Audio file, audioBase64, audioUrl, or liveTranscript is required.' }, { status: 400 });
+      }
     }
 
     // Fast path: Immediately return pre-computed transcript & summary for Drew's Pitch
@@ -191,6 +193,12 @@ Return ONLY valid JSON matching this schema:
       ? `${prompt}\n\nOPTIONAL REFERENCE: Real-time on-device speech transcript captured during recording:\n"""\n${liveTranscript.trim()}\n"""\nUse the audio recording as your primary ground truth, but reference this to ensure accurate names, technical vocabulary, and verbatim coverage.`
       : prompt;
 
+    const requestContents: any[] = audioPart
+      ? [audioPart, { text: promptWithReference }]
+      : [{
+          text: `You are an expert executive meeting assistant. You are provided with the real-time on-device speech transcript captured during a meeting:\n\n"""\n${(liveTranscript || '').trim()}\n"""\n\nPlease organize, refine, and structure this transcript verbatim into clear topics and produce an executive summary matching the requested schema:\n\n${prompt}`
+        }];
+
     // 3. Generate Content using Google's newest model gemini-3.8-flash (with retry for transient 503/429 demand spikes)
     let result: any = null;
     let lastGenError: any = null;
@@ -200,10 +208,7 @@ Return ONLY valid JSON matching this schema:
       try {
         result = await ai.models.generateContent({
           model: 'gemini-3.8-flash',
-          contents: [
-            audioPart,
-            { text: promptWithReference }
-          ],
+          contents: requestContents,
           config: {
             responseMimeType: "application/json",
             temperature: 0.1,
