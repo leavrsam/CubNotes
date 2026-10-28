@@ -33,10 +33,20 @@ import {
   Split,
   Database,
   StickyNote,
-  ChevronDown
+  ChevronDown,
+  GitFork,
+  Sparkles,
+  LayoutGrid,
+  Loader2
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import toast from "react-hot-toast";
+import { 
+  autoLayoutMindMap, 
+  createChildMindMapNode, 
+  createSiblingMindMapNode, 
+  getDescendantNodeIds 
+} from "@/lib/mindmapLayout";
 
 interface FlowchartOverlayProps {
   shapes: ShapeNode[];
@@ -185,6 +195,22 @@ export function FlowchartOverlay({
   // Color dropdown popover state
   const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false);
 
+  // Mind Map expansion & folding state
+  const [isExpandingAI, setIsExpandingAI] = useState(false);
+  const [collapsedSubtrees, setCollapsedSubtrees] = useState<Set<string>>(new Set());
+
+  // Set of all hidden shape IDs due to folded subtrees
+  const hiddenShapeIds = useMemo(() => {
+    const hidden = new Set<string>();
+    for (const collapsedId of collapsedSubtrees) {
+      const descendants = getDescendantNodeIds(collapsedId, connectors);
+      for (const d of descendants) {
+        hidden.add(d);
+      }
+    }
+    return hidden;
+  }, [collapsedSubtrees, connectors]);
+
   // Copied shapes clipboard ref
   const copiedShapesRef = useRef<ShapeNode[]>([]);
 
@@ -217,6 +243,93 @@ export function FlowchartOverlay({
 
   // Track hover anchor for magnetic snap
   const [hoverAnchor, setHoverAnchor] = useState<{ shapeId: string; anchor: AnchorPosition } | null>(null);
+
+  // Mind Map Actions
+  const handleAddChild = useCallback((sourceShape: ShapeNode) => {
+    const { newShape, newConnector, updatedShapes } = createChildMindMapNode(sourceShape, shapes, connectors);
+    setShapes([...updatedShapes, newShape]);
+    setConnectors(prev => [...prev, newConnector]);
+    setSelectedShapeId(newShape.id);
+    setSelectedIds?.([newShape.id]);
+    setEditingShapeId(newShape.id);
+    toast.success("Added child branch (Tab)", { duration: 1000 });
+  }, [shapes, connectors, setShapes, setConnectors, setSelectedShapeId, setSelectedIds]);
+
+  const handleAddSibling = useCallback((sourceShape: ShapeNode) => {
+    const res = createSiblingMindMapNode(sourceShape, shapes, connectors);
+    if (res) {
+      setShapes([...res.updatedShapes, res.newShape]);
+      if (res.newConnector) {
+        const conn = res.newConnector;
+        setConnectors(prev => [...prev, conn]);
+      }
+      setSelectedShapeId(res.newShape.id);
+      setSelectedIds?.([res.newShape.id]);
+      setEditingShapeId(res.newShape.id);
+      toast.success("Added sibling branch (Enter)", { duration: 1000 });
+    }
+  }, [shapes, connectors, setShapes, setConnectors, setSelectedShapeId, setSelectedIds]);
+
+  const handleAutoLayout = useCallback((rootShapeId?: string) => {
+    const tidyShapes = autoLayoutMindMap(shapes, connectors, rootShapeId || selectedShapeId || undefined);
+    setShapes(tidyShapes);
+    toast.success("Mind map layout organized", { duration: 1200 });
+  }, [shapes, connectors, selectedShapeId, setShapes]);
+
+  const handleAIExpand = useCallback(async (sourceShape: ShapeNode) => {
+    setIsExpandingAI(true);
+    try {
+      const res = await fetch('/api/expand-mindmap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: sourceShape.text || "Central Idea",
+          count: 4
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.subtopics) || data.subtopics.length === 0) {
+        throw new Error(data.error || "No subtopics generated");
+      }
+
+      let curShapes = [...shapes];
+      let curConnectors = [...connectors];
+
+      for (const subtopic of data.subtopics) {
+        const { newShape, newConnector, updatedShapes } = createChildMindMapNode(
+          sourceShape,
+          curShapes,
+          curConnectors,
+          'right-tree'
+        );
+        newShape.text = subtopic;
+        curShapes = [...updatedShapes, newShape];
+        curConnectors = [...curConnectors, newConnector];
+      }
+
+      const tidy = autoLayoutMindMap(curShapes, curConnectors, sourceShape.id);
+      setShapes(tidy);
+      setConnectors(curConnectors);
+      toast.success(`Generated ${data.subtopics.length} mind map branches`, { duration: 1500 });
+    } catch (err: any) {
+      console.error("AI Expand failed:", err);
+      toast.error(err.message || "Failed to brainstorm branches");
+    } finally {
+      setIsExpandingAI(false);
+    }
+  }, [shapes, connectors, setShapes, setConnectors]);
+
+  const toggleSubtreeCollapse = (shapeId: string) => {
+    setCollapsedSubtrees(prev => {
+      const next = new Set(prev);
+      if (next.has(shapeId)) {
+        next.delete(shapeId);
+      } else {
+        next.add(shapeId);
+      }
+      return next;
+    });
+  };
 
   // Handle shape dragging and multi-selection (Shift+Click)
   const handleShapePointerDown = (e: React.PointerEvent, shape: ShapeNode) => {
@@ -509,6 +622,28 @@ export function FlowchartOverlay({
         }
       }
 
+      // Mind Map Keyboard Navigation & Branching (Tab for Child, Enter for Sibling)
+      if (selectedShapeId && !editingShapeId) {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          e.stopPropagation();
+          const target = shapes.find(s => s.id === selectedShapeId);
+          if (target) {
+            handleAddChild(target);
+            return;
+          }
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          const target = shapes.find(s => s.id === selectedShapeId);
+          if (target) {
+            handleAddSibling(target);
+            return;
+          }
+        }
+      }
+
       if (e.key === "Escape") {
         setSelectedShapeId(null);
         setSelectedIds?.([]);
@@ -522,7 +657,7 @@ export function FlowchartOverlay({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedShapeId, selectedConnectorId, selectedIds, shapes, setShapes, setConnectors, setSelectedShapeId, setSelectedConnectorId, setSelectedIds]);
+  }, [selectedShapeId, selectedConnectorId, selectedIds, shapes, setShapes, setConnectors, setSelectedShapeId, setSelectedConnectorId, setSelectedIds, editingShapeId, handleAddChild, handleAddSibling]);
 
   // Click outside listener to easily deselect connector or shape
   useEffect(() => {
@@ -808,6 +943,9 @@ export function FlowchartOverlay({
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
           {/* Existing Connectors */}
           {connectors.map(connector => {
+            if ((connector.fromShapeId && hiddenShapeIds.has(connector.fromShapeId)) || (connector.toShapeId && hiddenShapeIds.has(connector.toShapeId))) {
+              return null;
+            }
             const route = generateConnectorRoute(connector, shapes);
             if (!route) return null;
 
@@ -967,6 +1105,9 @@ export function FlowchartOverlay({
 
       {/* 2. HTML SHAPES LAYER */}
       {shapes.map(shape => {
+        if (hiddenShapeIds.has(shape.id)) return null;
+        const hasChildren = connectors.some(c => (c.fromShapeId || (c as any).fromId) === shape.id);
+        const isCollapsed = collapsedSubtrees.has(shape.id);
         const isSelected = selectedShapeId === shape.id || (selectedIds ? selectedIds.includes(shape.id) : false);
         const isSingleSelected = isSelected && (!selectedIds || selectedIds.length <= 1);
         const isEditing = editingShapeId === shape.id;
@@ -1189,6 +1330,25 @@ export function FlowchartOverlay({
                 />
               </>
             )}
+
+            {/* Mind Map Branch Collapse / Expand Toggle */}
+            {hasChildren && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSubtreeCollapse(shape.id);
+                }}
+                className={`absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border shadow-sm flex items-center justify-center text-[11px] font-bold transition-transform hover:scale-115 z-40 pointer-events-auto ${
+                  isCollapsed 
+                    ? 'bg-amber-500 text-white border-amber-600 animate-pulse' 
+                    : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-300 dark:border-zinc-600'
+                }`}
+                title={isCollapsed ? "Expand branch" : "Collapse branch"}
+              >
+                {isCollapsed ? "+" : "−"}
+              </button>
+            )}
           </div>
         );
       })}
@@ -1343,6 +1503,53 @@ export function FlowchartOverlay({
           >
             <Copy size={13} />
           </button>
+
+          {/* Mind Map Actions: Add Child, Auto-Layout, AI Expand, Delete */}
+          <div className="flex items-center gap-1 pl-1.5 border-l border-zinc-200 dark:border-zinc-700">
+            <button
+              type="button"
+              onClick={() => handleAddChild(activeSingleShape)}
+              className="flex items-center gap-1 px-1.5 py-1 text-xs font-semibold rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400"
+              title="Add Child Branch (Tab)"
+            >
+              <GitFork size={13} className="rotate-90" />
+              <span className="hidden sm:inline">Child</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAutoLayout(activeSingleShape.id)}
+              className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+              title="Auto-Layout Mind Map"
+            >
+              <LayoutGrid size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAIExpand(activeSingleShape)}
+              disabled={isExpandingAI}
+              className="flex items-center gap-1 px-1.5 py-1 text-xs font-semibold rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400 transition-colors"
+              title="Brainstorm 4 Subtopics with Gemini AI"
+            >
+              {isExpandingAI ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Sparkles size={13} className="text-amber-500 animate-pulse" />
+              )}
+              <span className="hidden sm:inline">AI Expand</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShapes(prev => prev.filter(s => s.id !== activeSingleShape.id));
+                setSelectedShapeId(null);
+                setSelectedIds?.([]);
+              }}
+              className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 hover:text-red-600 transition-colors"
+              title="Delete Shape (Backspace)"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
           </div>
         );
       })()}

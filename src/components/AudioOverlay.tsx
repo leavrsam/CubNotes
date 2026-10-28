@@ -739,7 +739,11 @@ function AudioNodeCard({
         >
           {/* Notes Tab */}
           {activeTab === 'notes' && (
-            <div className="flex flex-col h-full bg-zinc-50/30 dark:bg-zinc-900/30">
+            <div 
+              className="flex flex-col h-full bg-zinc-50/30 dark:bg-zinc-900/30 overscroll-contain"
+              style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
+              onWheel={(e) => e.stopPropagation()}
+            >
               <textarea 
                 value={node.notes || ""}
                 onChange={(e) => updateAudioField(node.id, 'notes', e.target.value)}
@@ -760,7 +764,12 @@ function AudioNodeCard({
 
           {/* Enhanced Notes Tab */}
           {activeTab === 'enhanced' && (
-            <div ref={enhancedContainerRef} className="p-5 overflow-y-auto h-full custom-scrollbar">
+            <div 
+              ref={enhancedContainerRef} 
+              className="p-5 overflow-y-auto h-full custom-scrollbar overscroll-contain"
+              style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
+              onWheel={(e) => e.stopPropagation()}
+            >
               {!node.enhancedNotes && !isEnhancing ? (
                 <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3">
                   <Sparkles size={32} className="opacity-20" />
@@ -784,7 +793,12 @@ function AudioNodeCard({
 
           {/* Transcript Tab */}
           {activeTab === 'transcript' && (
-            <div ref={transcriptContainerRef} className="p-5 overflow-y-auto h-full custom-scrollbar">
+            <div 
+              ref={transcriptContainerRef} 
+              className="p-5 overflow-y-auto h-full custom-scrollbar overscroll-contain"
+              style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
+              onWheel={(e) => e.stopPropagation()}
+            >
               {node.isLiveRecording && (
                 <div className="flex items-center justify-between mb-3 px-2.5 py-1.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400">
                   <div className="flex items-center gap-2">
@@ -796,16 +810,48 @@ function AudioNodeCard({
               )}
               {activeTranscriptText ? (
                 <>
-                  <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptContainerRef} title="Speakers & Timeline" />
+                  <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptContainerRef} title="Topics & Speakers" />
                   <div className="text-[13px] font-mono leading-loose text-zinc-800 dark:text-zinc-200 space-y-1">
                     {activeTranscriptText.split('\n').map((line, idx) => {
                       const trimmed = line.trim();
+                      if (!trimmed) {
+                        return <div key={idx} className="h-2" />;
+                      }
+
+                      // Check for Topic Heading (e.g. "### [00:00] Meeting Kickoff" or "### Topic Title")
+                      const headingMatch = trimmed.match(/^#{2,4}\s+(.+)$/);
+                      if (headingMatch) {
+                        const rawHeading = headingMatch[1].trim();
+                        const tsMatch = rawHeading.match(/\[(\d{1,2}:\d{2})\]/);
+                        const cleanTitle = rawHeading.replace(/\[\d{1,2}:\d{2}\]/, '').replace(/[*_`#]/g, '').trim();
+
+                        return (
+                          <div 
+                            key={idx}
+                            id={`transcript-line-${idx}`}
+                            className="pt-4 pb-2 mb-2 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between scroll-mt-3 select-none"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Bookmark size={13} className="text-primary-600 dark:text-primary-400 shrink-0" />
+                              <span className="font-sans font-semibold text-xs tracking-tight text-zinc-900 dark:text-zinc-100">
+                                {cleanTitle}
+                              </span>
+                            </div>
+                            {tsMatch && (
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-100/60 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium">
+                                {tsMatch[1]}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
                       const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
                       return (
                         <div 
                           key={idx} 
                           id={`transcript-line-${idx}`} 
-                          className={`scroll-mt-4 rounded px-1 transition-colors ${speakerMatch ? 'font-medium text-zinc-900 dark:text-zinc-100 mt-2 bg-zinc-100/40 dark:bg-zinc-800/30' : ''}`}
+                          className={`scroll-mt-4 rounded px-1.5 py-0.5 transition-colors ${speakerMatch ? 'font-medium text-zinc-900 dark:text-zinc-100 mt-2 bg-zinc-100/60 dark:bg-zinc-800/40 border-l-2 border-primary-500/50' : ''}`}
                         >
                           {line}
                         </div>
@@ -845,7 +891,12 @@ function AudioNodeCard({
 
           {/* Summary Tab */}
           {activeTab === 'summary' && (
-            <div ref={summaryContainerRef} className="p-5 overflow-y-auto h-full custom-scrollbar prose prose-sm dark:prose-invert max-w-none">
+            <div 
+              ref={summaryContainerRef} 
+              className="p-5 overflow-y-auto h-full custom-scrollbar overscroll-contain prose prose-sm dark:prose-invert max-w-none"
+              style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
+              onWheel={(e) => e.stopPropagation()}
+            >
               {node.summary ? (
                 <>
                   <TranscriptionTableOfContents items={summaryTOC} containerRef={summaryContainerRef} />

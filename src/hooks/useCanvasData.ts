@@ -13,6 +13,7 @@ import {
   CachedPageRecord
 } from "@/lib/offlineStore";
 import { Stroke, TextNode, AudioNode, ImageNode, FileNode, VideoNode, ShapeNode, ConnectorNode, DocumentState } from "@/components/CustomCanvas";
+import { TagPinNode } from "@/lib/tags";
 
 export function useCanvasData(pageId: string) {
   const [loading, setLoading] = useState(true);
@@ -26,6 +27,8 @@ export function useCanvasData(pageId: string) {
   const [videos, setVideos] = useState<VideoNode[]>([]);
   const [shapes, setShapes] = useState<ShapeNode[]>([]);
   const [connectors, setConnectors] = useState<ConnectorNode[]>([]);
+  const [pageTags, setPageTags] = useState<string[]>([]);
+  const [tagPins, setTagPins] = useState<TagPinNode[]>([]);
 
   // History state
   const [past, setPast] = useState<DocumentState[]>([]);
@@ -48,12 +51,14 @@ export function useCanvasData(pageId: string) {
     files: [],
     videos: [],
     shapes: [],
-    connectors: []
+    connectors: [],
+    pageTags: [],
+    tagPins: []
   });
 
   useEffect(() => {
-    currentStateRef.current = { strokes, texts, audios, images, files, videos, shapes, connectors };
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
+    currentStateRef.current = { strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins };
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins]);
 
 
   // Load state: Instant local cache first, then sync with DB
@@ -80,6 +85,8 @@ export function useCanvasData(pageId: string) {
           setVideos(cached.videos || []);
           setShapes(cached.shapes || []);
           setConnectors(cached.connectors || []);
+          setPageTags(cached.pageTags || []);
+          setTagPins(cached.tagPins || []);
           currentStateRef.current = cached;
           lastSavedStateRef.current = cached;
           lastSnapshotHashRef.current = JSON.stringify(cached);
@@ -157,6 +164,8 @@ export function useCanvasData(pageId: string) {
             setVideos(remoteState.videos || []);
             setShapes(remoteState.shapes || []);
             setConnectors(remoteState.connectors || []);
+            setPageTags(remoteState.pageTags || []);
+            setTagPins(remoteState.tagPins || []);
             currentStateRef.current = remoteState;
             lastSavedStateRef.current = remoteState;
             lastSnapshotHashRef.current = JSON.stringify(remoteState);
@@ -189,7 +198,7 @@ export function useCanvasData(pageId: string) {
     }
     
     const timeoutId = setTimeout(() => {
-      const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
+      const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins };
       
       if (!lastSavedStateRef.current) {
         lastSavedStateRef.current = currentState;
@@ -207,7 +216,7 @@ export function useCanvasData(pageId: string) {
     }, 300);
     
     return () => clearTimeout(timeoutId);
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins, loading]);
 
   // Debounced network sync to Supabase (1500ms) to avoid saturating HTTP connection while typing
   const debouncedSyncToSupabase = useCallback(
@@ -395,13 +404,13 @@ export function useCanvasData(pageId: string) {
   // Manual checkpoint snapshot
   const saveManualSnapshot = useCallback(async (): Promise<boolean> => {
     const state: DocumentState = { 
-      strokes, texts, audios, images, files, videos, shapes, connectors 
+      strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins 
     };
 
     if (
       strokes.length === 0 && texts.length === 0 && images.length === 0 && 
       files.length === 0 && videos.length === 0 && audios.length === 0 &&
-      shapes.length === 0 && connectors.length === 0
+      shapes.length === 0 && connectors.length === 0 && pageTags.length === 0 && tagPins.length === 0
     ) {
       return false;
     }
@@ -449,6 +458,8 @@ export function useCanvasData(pageId: string) {
       videos,
       shapes,
       connectors,
+      pageTags,
+      tagPins,
       _clientUpdatedAt: now
     } as any;
 
@@ -462,7 +473,7 @@ export function useCanvasData(pageId: string) {
 
     // 3. Version snapshot
     saveVersionToSupabase(strokes, texts, audios, images, files, videos, shapes, connectors);
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors, loading, debouncedSyncToSupabase, saveVersionToSupabase, pageId]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins, loading, debouncedSyncToSupabase, saveVersionToSupabase, pageId]);
 
   // Lifecycle listeners to flush immediately on background/screen-off/unmount
   useEffect(() => {
@@ -549,6 +560,8 @@ export function useCanvasData(pageId: string) {
           setVideos(remoteState.videos || []);
           setShapes(remoteState.shapes || []);
           setConnectors(remoteState.connectors || []);
+          setPageTags(remoteState.pageTags || []);
+          setTagPins(remoteState.tagPins || []);
           setCachedPageState(pageId, remoteState, false);
         }
       )
@@ -561,7 +574,7 @@ export function useCanvasData(pageId: string) {
 
   const restoreVersion = useCallback((versionState: DocumentState) => {
     // Push current state to past before restoring, so we can undo the restore
-    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
+    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins };
     pastRef.current.push(currentState);
     if (pastRef.current.length > 50) pastRef.current.shift();
     setPast([...pastRef.current]);
@@ -577,12 +590,14 @@ export function useCanvasData(pageId: string) {
     setVideos(versionState.videos || []);
     setShapes(versionState.shapes || []);
     setConnectors(versionState.connectors || []);
+    setPageTags(versionState.pageTags || []);
+    setTagPins(versionState.tagPins || []);
     
     isUndoingRef.current = true;
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins]);
 
   const undo = useCallback(() => {
-    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
+    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins };
     const isUncommitted = lastSavedStateRef.current && JSON.stringify(currentState) !== JSON.stringify(lastSavedStateRef.current);
     
     if (isUncommitted && lastSavedStateRef.current) {
@@ -609,14 +624,16 @@ export function useCanvasData(pageId: string) {
     setVideos(stateToRestore.videos || []);
     setShapes(stateToRestore.shapes || []);
     setConnectors(stateToRestore.connectors || []);
+    setPageTags(stateToRestore.pageTags || []);
+    setTagPins(stateToRestore.tagPins || []);
     
     isUndoingRef.current = true;
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins]);
 
   const redo = useCallback(() => {
     if (futureRef.current.length === 0) return;
     
-    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors };
+    const currentState: DocumentState = { strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins };
     const stateToRestore = futureRef.current.shift()!;
     
     pastRef.current.push(lastSavedStateRef.current || currentState);
@@ -634,9 +651,11 @@ export function useCanvasData(pageId: string) {
     setVideos(stateToRestore.videos || []);
     setShapes(stateToRestore.shapes || []);
     setConnectors(stateToRestore.connectors || []);
+    setPageTags(stateToRestore.pageTags || []);
+    setTagPins(stateToRestore.tagPins || []);
     
     isUndoingRef.current = true;
-  }, [strokes, texts, audios, images, files, videos, shapes, connectors]);
+  }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins]);
 
   return {
     loading,
@@ -648,8 +667,10 @@ export function useCanvasData(pageId: string) {
     videos, setVideos,
     shapes, setShapes,
     connectors, setConnectors,
+    pageTags, setPageTags,
+    tagPins, setTagPins,
     undo, redo,
-    canUndo: past.length > 0 || (lastSavedStateRef.current !== null && JSON.stringify({ strokes, texts, audios, images, files, videos, shapes, connectors }) !== JSON.stringify(lastSavedStateRef.current)),
+    canUndo: past.length > 0 || (lastSavedStateRef.current !== null && JSON.stringify({ strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins }) !== JSON.stringify(lastSavedStateRef.current)),
     canRedo: future.length > 0,
     pageVersions,
     fetchVersions,

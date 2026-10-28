@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { formatGeminiErrorMessage } from '@/lib/geminiRetry';
-
+import { normalizeGeminiAudioMimeType } from '@/lib/geminiMime';
 import { DREWS_PITCH_AUDIO_ID, DREWS_PITCH_SUMMARY, DREWS_PITCH_TRANSCRIPT } from '@/lib/drewsPitchData';
 
 export const maxDuration = 60; // Allow Vercel functions to run up to 60 seconds for long transcripts
@@ -11,11 +11,40 @@ export async function POST(req: NextRequest) {
   let ai: GoogleGenAI | null = null;
 
   try {
-    const body = await req.json();
-    const { audioUrl, audioBase64, mimeType = 'audio/webm', isJournal = false, liveTranscript, apiKey: clientApiKey } = body;
+    const contentType = req.headers.get('content-type') || '';
+    let audioUrl = '';
+    let audioBase64 = '';
+    let rawMimeType = 'audio/webm';
+    let isJournal = false;
+    let liveTranscript = '';
+    let clientApiKey = '';
+    let fileBuffer: Buffer | null = null;
 
-    if (!audioUrl && !audioBase64) {
-      return NextResponse.json({ error: 'Either audioUrl or audioBase64 is required.' }, { status: 400 });
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const file = formData.get('file') as Blob | File | null;
+      audioUrl = (formData.get('audioUrl') as string) || '';
+      rawMimeType = (formData.get('mimeType') as string) || file?.type || 'audio/webm';
+      isJournal = formData.get('isJournal') === 'true';
+      liveTranscript = (formData.get('liveTranscript') as string) || '';
+      clientApiKey = (formData.get('apiKey') as string) || '';
+
+      if (file) {
+        const arrayBuffer = await file.arrayBuffer();
+        fileBuffer = Buffer.from(arrayBuffer);
+      }
+    } else {
+      const body = await req.json();
+      audioUrl = body.audioUrl || '';
+      audioBase64 = body.audioBase64 || '';
+      rawMimeType = body.mimeType || 'audio/webm';
+      isJournal = Boolean(body.isJournal);
+      liveTranscript = body.liveTranscript || '';
+      clientApiKey = body.apiKey || '';
+    }
+
+    if (!audioUrl && !audioBase64 && !fileBuffer) {
+      return NextResponse.json({ error: 'Audio file, audioBase64, or audioUrl is required.' }, { status: 400 });
     }
 
     // Fast path: Immediately return pre-computed transcript & summary for Drew's Pitch
@@ -36,14 +65,30 @@ export async function POST(req: NextRequest) {
 
     ai = new GoogleGenAI({ apiKey });
 
-    // Clean MIME type (remove codecs parameter for Gemini)
-    const cleanMimeType = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
+    // Clean and normalize MIME type for Gemini (handles .m4a, .mp4, .wav, .webm without unsupported parameters)
+    const cleanMimeType = normalizeGeminiAudioMimeType(rawMimeType, audioUrl);
 
     // 1. Prepare Audio Part for Gemini
     let audioPart: any = null;
 
-    if (audioBase64 && typeof audioBase64 === 'string') {
-      // Direct base64 inline audio (fastest, no disk I/O, no network latency)
+    if (fileBuffer && fileBuffer.length > 0) {
+      if (fileBuffer.length <= 18 * 1024 * 1024) {
+        audioPart = {
+          inlineData: {
+            mimeType: cleanMimeType,
+            data: fileBuffer.toString('base64'),
+          },
+        };
+      } else {
+        const blob = new Blob([new Uint8Array(fileBuffer)], { type: cleanMimeType });
+        const uploadResult = await ai.files.upload({
+          file: blob,
+          mimeType: cleanMimeType,
+        } as any);
+        uploadedGeminiFileName = uploadResult?.name || null;
+        audioPart = uploadResult;
+      }
+    } else if (audioBase64 && typeof audioBase64 === 'string') {
       audioPart = {
         inlineData: {
           mimeType: cleanMimeType,
@@ -52,31 +97,41 @@ export async function POST(req: NextRequest) {
       };
     } else if (audioUrl) {
       if (typeof audioUrl === 'string' && audioUrl.startsWith('blob:')) {
-        return NextResponse.json({ error: 'Local blob URLs cannot be fetched on the server. Please provide audioBase64.' }, { status: 400 });
+        return NextResponse.json({ error: 'Local blob URLs cannot be fetched on the server. Please provide audio file or audioBase64.' }, { status: 400 });
       }
-      // Download audio file from storage URL
-      const response = await fetch(audioUrl);
+
+      // Download audio file from storage URL with 25s timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      let response: Response;
+      try {
+        response = await fetch(audioUrl, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
       if (!response.ok) {
-        throw new Error(`Failed to fetch audio file from storage: ${response.statusText}`);
+        throw new Error(`Failed to fetch audio file from storage (HTTP ${response.status}): ${response.statusText}`);
       }
+
+      const storageContentType = response.headers.get('content-type');
+      const resolvedMime = normalizeGeminiAudioMimeType(storageContentType || cleanMimeType, audioUrl);
 
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
-      // Inline data limit is 20MB in Gemini
-      if (buffer.length <= 15 * 1024 * 1024) {
+      if (buffer.length <= 18 * 1024 * 1024) {
         audioPart = {
           inlineData: {
-            mimeType: cleanMimeType,
+            mimeType: resolvedMime,
             data: buffer.toString('base64'),
           },
         };
       } else {
-        // For very large recordings (> 15MB), upload in-memory Blob to Gemini Files API
-        const blob = new Blob([buffer], { type: cleanMimeType });
+        const blob = new Blob([buffer], { type: resolvedMime });
         const uploadResult = await ai.files.upload({
           file: blob,
-          mimeType: cleanMimeType,
+          mimeType: resolvedMime,
         } as any);
 
         uploadedGeminiFileName = uploadResult?.name || null;
@@ -84,14 +139,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Strict Grounding and Anti-Hallucination Prompt
+    // 2. Strict Grounding, Topic Organization, and Anti-Hallucination Prompt
     const prompt = isJournal
       ? `You are an expert personal reflection and journal chronicler. I am providing you with a personal voice recording/diary audio.
 
 CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
 - Transcribe ONLY the human speech that is clearly audible in this audio.
 - DO NOT invent, hallucinate, assume, or extrapolate words, reflections, or topics not directly spoken in the audio.
-- DO NOT pull in phrases, stories, or content from outside sources, podcasts, videos, or templates.
 - If the audio is silent, inaudible, mostly static/noise, or contains no decipherable human speech, you MUST return:
   "summary": "No speech detected in this recording.",
   "transcript": ""
@@ -101,30 +155,36 @@ CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
      - "### Key Insights & Lessons" (notable takeaways or realizations)
      - "### Notable Memories & Highlights" (any specific events or details mentioned)
      Do NOT use emojis anywhere.
-  2. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections.
+  2. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections. Divide into chronological topic sections with headers: "### [MM:SS] Topic Name".
 
 Return ONLY valid JSON matching this schema:
 {
   "summary": "### Daily Reflection\\n...",
-  "transcript": "..."
+  "transcript": "### [00:00] Morning Thoughts\\n..."
 }`
       : `You are an expert executive meeting assistant. I am providing you with an audio recording of a meeting.
 
 CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
 - Transcribe ONLY the actual human speech that is clearly audible in this audio recording.
 - DO NOT invent, hallucinate, assume, or extrapolate dialogue, attendees, decisions, or topics not directly spoken in the audio.
-- DO NOT pull in phrases, meetings, or transcripts from external training data, YouTube, or generic templates.
 - If the audio is silent, inaudible, mostly background static, or contains no decipherable human speech, you MUST return:
   "summary": "No speech detected in this recording.",
   "transcript": ""
 - If valid speech is present, provide:
-  1. "summary": A rich, comprehensive executive meeting summary in Markdown. Include sections: "# Executive Summary", "## Key Decisions", and "## Action Items" (checkbox checklist "- [ ] Owner: Task"). Do NOT use emojis.
-  2. "transcript": A highly accurate verbatim transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
+  1. "summary": A rich, comprehensive executive meeting summary in Markdown. Include sections:
+     - "# Executive Summary" (high-level synopsis)
+     - "## Key Topics Discussed" (bulleted list of all agenda topics covered)
+     - "## Key Decisions" (numbered list of finalized decisions)
+     - "## Action Items" (checkbox checklist in exact format: "- [ ] Owner: Task description")
+     Do NOT use emojis anywhere.
+  2. "transcript": A highly accurate verbatim transcript. Organize into distinct TOPICAL SECTIONS corresponding to the agenda using Markdown headings with timestamps:
+     ### [MM:SS] Topic Title (e.g. "### [00:00] Meeting Kickoff & Goals", "### [02:30] Q3 Performance Review", "### [07:15] Action Items & Wrap-Up")
+     Under each topic heading, provide verbatim dialogue labeled by speaker (e.g. "Speaker 1: ...\\nSpeaker 2: ...").
 
 Return ONLY valid JSON matching this schema:
 {
   "summary": "# Executive Summary\\n...",
-  "transcript": "Speaker 1: ...\\nSpeaker 2: ..."
+  "transcript": "### [00:00] Meeting Kickoff\\nSpeaker 1: Hello everyone...\\n\\n### [03:15] Product Updates\\nSpeaker 2: Let's discuss..."
 }`;
 
     const promptWithReference = (liveTranscript && typeof liveTranscript === 'string' && liveTranscript.trim().length > 0)
@@ -134,7 +194,7 @@ Return ONLY valid JSON matching this schema:
     // 3. Generate Content using Google's newest model gemini-3.8-flash (with retry for transient 503/429 demand spikes)
     let result: any = null;
     let lastGenError: any = null;
-    const maxAttempts = 3;
+    const maxAttempts = 4;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -155,10 +215,10 @@ Return ONLY valid JSON matching this schema:
       } catch (genErr: any) {
         lastGenError = genErr;
         const errMsg = String(genErr?.message || genErr);
-        const isTransient = errMsg.includes('503') || errMsg.includes('429') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
+        const isTransient = errMsg.includes('503') || errMsg.includes('429') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand') || errMsg.includes('overloaded');
         
         if (isTransient && attempt < maxAttempts) {
-          const delayMs = attempt * 2000;
+          const delayMs = attempt * 1500;
           console.warn(`[transcribe API] Gemini temporary load spike (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           continue;
@@ -167,7 +227,7 @@ Return ONLY valid JSON matching this schema:
         if (isTransient) {
           return NextResponse.json({
             success: false,
-            error: "Google Gemini is currently experiencing high demand. Please try again in a few moments."
+            error: "Google Gemini is currently experiencing temporary high demand. Please try again in a few moments."
           }, { status: 503 });
         }
 
@@ -209,7 +269,7 @@ Return ONLY valid JSON matching this schema:
         parsedTranscript = parsed.transcript || '';
       } catch {}
 
-      // 3. Robust regex fallback (handles truncation gracefully)
+      // 3. Robust regex fallback
       if (!parsedSummary) {
         const summaryMatch = cleanJson.match(/"summary"\s*:\s*"([\s\S]*?)(?=(?:",\s*"transcript"|"(?:\s*})|$))/);
         if (summaryMatch) {
@@ -241,14 +301,12 @@ Return ONLY valid JSON matching this schema:
 
   } catch (error: any) {
     console.error('Transcription error:', error);
-    const errMsg = String(error?.message || error);
-    const isTransient = errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand');
     const friendlyError = formatGeminiErrorMessage(error, 'Failed to process audio recording.');
 
     return NextResponse.json({ 
-      success: false,
+      success: false, 
       error: friendlyError 
-    }, { status: isTransient ? 503 : 500 });
+    }, { status: 500 });
   } finally {
     // Clean up uploaded Gemini File if created
     if (ai && uploadedGeminiFileName) {

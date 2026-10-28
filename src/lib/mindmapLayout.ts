@@ -293,3 +293,29 @@ export function createSiblingMindMapNode(
     updatedShapes: [...existingShapes, newShape]
   };
 }
+
+/**
+ * Traverses all child connections to collect descendant node IDs
+ */
+export function getDescendantNodeIds(
+  rootId: string, 
+  connectors: ConnectorNode[]
+): Set<string> {
+  const descendants = new Set<string>();
+  const queue = [rootId];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const c of connectors) {
+      const from = c.fromShapeId || (c as any).fromId;
+      const to = c.toShapeId || (c as any).toId;
+      if (from === current && to && !descendants.has(to)) {
+        descendants.add(to);
+        queue.push(to);
+      }
+    }
+  }
+
+  return descendants;
+}
+

@@ -1,5 +1,6 @@
 import { DREWS_PITCH_AUDIO_ID, DREWS_PITCH_SUMMARY, DREWS_PITCH_TRANSCRIPT } from './drewsPitchData';
 import { formatGeminiErrorMessage } from './geminiRetry';
+import { normalizeGeminiAudioMimeType } from './geminiMime';
 
 export interface TranscribeParams {
   audioBlob?: Blob;
@@ -121,12 +122,12 @@ CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
      - "### Key Insights & Lessons"
      - "### Notable Memories & Highlights"
      Do NOT use emojis anywhere.
-  2. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections.
+  2. "transcript": A highly accurate, verbatim transcript of the spoken thoughts and reflections. Divide into chronological topic sections with headers: "### [MM:SS] Topic Name".
 
 Return ONLY valid JSON matching this schema:
 {
   "summary": "### Daily Reflection\\n...",
-  "transcript": "..."
+  "transcript": "### [00:00] Morning Reflection\\n..."
 }`
     : `You are an expert executive meeting assistant. I am providing you with an audio recording of a meeting.
 
@@ -137,13 +138,20 @@ CRITICAL ACCURACY & GROUNDING INSTRUCTIONS:
   "summary": "No speech detected in this recording.",
   "transcript": ""
 - If valid speech is present, provide:
-  1. "summary": A rich, professional executive meeting summary in Markdown. Include sections: "# Executive Summary", "## Key Decisions", and "## Action Items" (with checkbox checklist format "- [ ] Owner: Task"). Do NOT use emojis.
-  2. "transcript": A highly accurate transcript. Label distinct speakers as "Speaker 1", "Speaker 2", etc.
+  1. "summary": A rich, professional executive meeting summary in Markdown. Include sections:
+     - "# Executive Summary"
+     - "## Key Topics Discussed"
+     - "## Key Decisions"
+     - "## Action Items" (checkbox checklist: "- [ ] Owner: Task")
+     Do NOT use emojis anywhere.
+  2. "transcript": A highly accurate transcript. Organize into distinct TOPICAL SECTIONS corresponding to the agenda using Markdown headings with timestamps:
+     ### [MM:SS] Topic Title (e.g. "### [00:00] Meeting Kickoff & Goals", "### [02:30] Q3 Performance Review", "### [07:15] Action Items & Wrap-Up")
+     Under each topic heading, provide verbatim dialogue labeled by speaker (e.g. "Speaker 1: ...\\nSpeaker 2: ...").
 
 Return ONLY valid JSON matching this schema:
 {
   "summary": "# Executive Summary\\n...",
-  "transcript": "Speaker 1: ...\\nSpeaker 2: ..."
+  "transcript": "### [00:00] Meeting Kickoff\\nSpeaker 1: ...\\n\\n### [03:15] Updates\\nSpeaker 2: ..."
 }`;
 
   if (liveTranscript && liveTranscript.trim().length > 0) {
@@ -212,26 +220,26 @@ async function callGeminiDirect(
       const isTransient = statusCode === 503 || statusCode === 429 || statusCode === 500 || errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('unavailable');
 
       if (isTransient && attempt < maxRetries) {
-        const delayMs = attempt * 2000;
+        const delayMs = attempt * 1500;
         console.warn(`[Direct Gemini] Model load spike ${statusCode} (attempt ${attempt}/${maxRetries}). Retrying in ${delayMs}ms...`);
         await new Promise((res) => setTimeout(res, delayMs));
         continue;
       }
 
       lastError = isTransient 
-        ? new Error("Google Gemini is currently experiencing high demand. Please try again in a few moments.")
+        ? new Error("Google Gemini is currently experiencing temporary high demand. Please try again in a few moments.")
         : new Error(errMsg);
     } catch (e: any) {
       const errMsg = e?.message || String(e);
       const isTransient = errMsg.includes('503') || errMsg.includes('429') || errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('unavailable');
       if (isTransient && attempt < maxRetries) {
-        const delayMs = attempt * 2000;
+        const delayMs = attempt * 1500;
         console.warn(`[Direct Gemini] Transient exception (attempt ${attempt}/${maxRetries}). Retrying in ${delayMs}ms...`);
         await new Promise((res) => setTimeout(res, delayMs));
         continue;
       }
       lastError = isTransient
-        ? new Error("Google Gemini is currently experiencing high demand. Please try again in a few moments.")
+        ? new Error("Google Gemini is currently experiencing temporary high demand. Please try again in a few moments.")
         : e;
     }
   }
@@ -241,9 +249,9 @@ async function callGeminiDirect(
 
 /**
  * Universal Audio Transcription Engine:
- * 1. Resolves audio to Base64 in browser if needed (works for blob: URLs, R2, and Supabase).
- * 2. If client has custom Gemini API key in Settings, calls Google Gemini API directly (no Vercel timeout/body limits).
- * 3. Falls back to Next.js API route (/api/transcribe).
+ * 1. Automatically normalizes audio MIME types (e.g. Android AAC/MP4 vs WebM vs WAV).
+ * 2. If client has custom Gemini API key in Settings, calls Google Gemini API directly (no Vercel limits).
+ * 3. Falls back to Next.js API route (/api/transcribe) supporting both multipart FormData and JSON.
  */
 export async function processAudioTranscription(params: TranscribeParams): Promise<TranscribeResult> {
   // Fast path: Immediately fulfill Drew's Pitch if matching audio URL
@@ -255,10 +263,10 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
     };
   }
 
-  const cleanMimeType = (params.mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
+  const cleanMimeType = normalizeGeminiAudioMimeType(params.mimeType, params.audioUrl);
   
   // 1. Resolve audio URL & Base64
-  const isBlobUrl = params.audioUrl?.startsWith('blob:');
+  const isBlobUrl = Boolean(params.audioUrl?.startsWith('blob:'));
   const safeAudioUrl = isBlobUrl ? undefined : params.audioUrl;
   let audioBase64 = params.audioBase64;
   
@@ -302,34 +310,51 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
 
   // 3. Next.js API Route (/api/transcribe) Fallback
   try {
-    // CRITICAL: If audioBase64 is available and under 3.5 MB (Vercel payload limit is 4.5 MB),
-    // send audioBase64 directly! This avoids the serverless function having to download the audio
-    // from Supabase Storage over the network, cutting latency by 10+ seconds and preventing HTTP 504 Gateway Timeouts.
-    const isBase64SafeSize = Boolean(audioBase64 && audioBase64.length < 3.5 * 1024 * 1024);
-    const payloadBase64 = isBase64SafeSize ? audioBase64 : undefined;
+    let apiRes: Response;
 
-    if (!safeAudioUrl && !payloadBase64) {
-      // Audio is too large to send directly through Vercel serverless payload limit without cloud storage
-      if (!customKey) {
-        throw new Error("This recording is too long to process without cloud storage or an API key. Please add your Google Gemini API key in Motif Settings > AI to transcribe long recordings directly without limits.");
+    // PREFER MULTIPART FORMDATA when audioBlob is available (avoids 33% base64 overhead!)
+    if (params.audioBlob && params.audioBlob.size <= 4.5 * 1024 * 1024) {
+      const formData = new FormData();
+      formData.append('file', params.audioBlob, `audio_${Date.now()}.${cleanMimeType.includes('mp4') ? 'm4a' : 'webm'}`);
+      if (safeAudioUrl) formData.append('audioUrl', safeAudioUrl);
+      formData.append('mimeType', cleanMimeType);
+      formData.append('isJournal', String(Boolean(params.isJournal)));
+      if (params.liveTranscript) formData.append('liveTranscript', params.liveTranscript);
+      if (customKey) formData.append('apiKey', customKey);
+
+      apiRes = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: {
+          ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
+        },
+        body: formData,
+      });
+    } else {
+      // JSON payload fallback
+      const payloadBase64 = (audioBase64 && audioBase64.length < 3.8 * 1024 * 1024) ? audioBase64 : undefined;
+
+      if (!safeAudioUrl && !payloadBase64 && !audioBase64) {
+        if (!customKey) {
+          throw new Error("No audio data was captured. Please check microphone permissions and try again.");
+        }
       }
-    }
 
-    const apiRes = await fetch('/api/transcribe', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
-      },
-      body: JSON.stringify({
-        audioBase64: payloadBase64,
-        audioUrl: payloadBase64 ? undefined : safeAudioUrl,
-        mimeType: cleanMimeType,
-        isJournal: Boolean(params.isJournal),
-        liveTranscript: params.liveTranscript,
-        apiKey: customKey || undefined,
-      }),
-    });
+      apiRes = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
+        },
+        body: JSON.stringify({
+          audioBase64: payloadBase64 || audioBase64,
+          audioUrl: payloadBase64 ? undefined : safeAudioUrl,
+          mimeType: cleanMimeType,
+          isJournal: Boolean(params.isJournal),
+          liveTranscript: params.liveTranscript,
+          apiKey: customKey || undefined,
+        }),
+      });
+    }
 
     if (apiRes.ok) {
       const data = await apiRes.json();

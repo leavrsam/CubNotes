@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Mic, Square, Sparkles, Bot, Send, User, Copy, Check, Download, 
   ArrowLeft, FileText, CheckSquare, Clock, Search, HelpCircle, 
-  Compass, ExternalLink, RefreshCw, Layers, ChevronRight, MessageSquare, Flag
+  Compass, ExternalLink, RefreshCw, Layers, ChevronRight, MessageSquare, Flag, Bookmark
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -617,19 +617,55 @@ export function MeetingWorkspace({
 
                 {currentTranscript ? (
                   <>
-                    <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptPaneRef} title="Speakers & Timeline" />
-                    <div className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 font-mono text-xs p-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-100 dark:border-zinc-800 max-h-[600px] overflow-y-auto space-y-1">
+                    <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptPaneRef} title="Topics & Speakers" />
+                    <div 
+                      ref={transcriptPaneRef}
+                      className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 font-mono text-xs p-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-100 dark:border-zinc-800 max-h-[600px] overflow-y-auto space-y-1 overscroll-contain"
+                      style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
+                    >
                       {currentTranscript.split('\n').map((line, idx) => {
                         if (transcriptSearch && !line.toLowerCase().includes(transcriptSearch.toLowerCase())) {
                           return null;
                         }
                         const trimmed = line.trim();
+                        if (!trimmed) {
+                          return <div key={idx} className="h-2" />;
+                        }
+
+                        // Check for Topic Heading (e.g. "### [00:00] Meeting Kickoff" or "### Topic Title")
+                        const headingMatch = trimmed.match(/^#{2,4}\s+(.+)$/);
+                        if (headingMatch) {
+                          const rawHeading = headingMatch[1].trim();
+                          const tsMatch = rawHeading.match(/\[(\d{1,2}:\d{2})\]/);
+                          const cleanTitle = rawHeading.replace(/\[\d{1,2}:\d{2}\]/, '').replace(/[*_`#]/g, '').trim();
+
+                          return (
+                            <div 
+                              key={idx}
+                              id={`transcript-line-${idx}`}
+                              className="pt-4 pb-2 mb-2 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between scroll-mt-3 select-none"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Bookmark size={13} className="text-primary-600 dark:text-primary-400 shrink-0" />
+                                <span className="font-sans font-semibold text-xs tracking-tight text-zinc-900 dark:text-zinc-100">
+                                  {cleanTitle}
+                                </span>
+                              </div>
+                              {tsMatch && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-100/60 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium">
+                                  {tsMatch[1]}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }
+
                         const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
                         return (
                           <div 
                             key={idx} 
                             id={`transcript-line-${idx}`} 
-                            className={`scroll-mt-4 rounded px-1 transition-colors ${speakerMatch ? 'font-semibold text-zinc-900 dark:text-zinc-100 mt-2.5 bg-zinc-100/50 dark:bg-zinc-800/40' : ''}`}
+                            className={`scroll-mt-4 rounded px-1.5 py-0.5 transition-colors ${speakerMatch ? 'font-semibold text-zinc-900 dark:text-zinc-100 mt-2.5 bg-zinc-100/60 dark:bg-zinc-800/40 border-l-2 border-primary-500/50' : ''}`}
                           >
                             {line}
                           </div>

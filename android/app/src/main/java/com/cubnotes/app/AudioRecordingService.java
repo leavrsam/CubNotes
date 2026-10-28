@@ -123,7 +123,7 @@ public class AudioRecordingService extends Service {
             mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
             mediaRecorder.setAudioSamplingRate(44100);
-            mediaRecorder.setAudioEncodingBitRate(96000);
+            mediaRecorder.setAudioEncodingBitRate(48000); // 48kbps high-efficiency AAC voice standard (cuts upload size in half with pristine voice clarity)
             mediaRecorder.setOutputFile(currentAudioPath);
             mediaRecorder.prepare();
             mediaRecorder.start();

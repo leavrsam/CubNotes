@@ -28,6 +28,7 @@ import { AudioOverlay } from "./AudioOverlay";
 import { MediaOverlay } from "./MediaOverlay";
 import { FlowchartOverlay } from "./FlowchartOverlay";
 import { Minimap } from "./Minimap";
+import { TagPinNode } from "@/lib/tags";
 import { MeetingWorkspace } from "./MeetingWorkspace";
 import { uploadMediaFile } from "@/lib/storage";
 import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
@@ -68,6 +69,7 @@ export type TextNode = {
   y: number;
   content: string;
   width: number;
+  tags?: string[];
 };
 
 export type AudioNode = {
@@ -77,6 +79,7 @@ export type AudioNode = {
   width?: number;
   url: string;
   title?: string;
+  tags?: string[];
   summary?: string;
   transcript?: string;
   notes?: string;
@@ -189,6 +192,8 @@ export type DocumentState = {
   videos?: VideoNode[];
   shapes?: ShapeNode[];
   connectors?: ConnectorNode[];
+  pageTags?: string[];
+  tagPins?: TagPinNode[];
 };
 
 import { useCanvasData } from "@/hooks/useCanvasData";
@@ -1920,6 +1925,22 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
       const editorEl = target?.closest('.ProseMirror') as HTMLElement | null;
       if (editorEl && !e.ctrlKey && !e.metaKey && editorEl.scrollHeight > editorEl.clientHeight) {
         return;
+      }
+
+      // If scrolling inside an audio card or any card/container with its own scrollable overflow, let it scroll naturally
+      if (!e.ctrlKey && !e.metaKey) {
+        let el = target as HTMLElement | null;
+        while (el && el !== container) {
+          const style = window.getComputedStyle(el);
+          const overflowY = style.overflowY;
+          if (
+            (overflowY === 'auto' || overflowY === 'scroll') &&
+            el.scrollHeight > el.clientHeight
+          ) {
+            return; // Allow native inner container scrolling!
+          }
+          el = el.parentElement;
+        }
       }
 
       // Block native browser page zoom and document scroll
