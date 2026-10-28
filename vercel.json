@@ -1,6 +1,12 @@
 {
   "functions": {
-    "src/app/api/transcribe/route.ts": {
+    "src/app/api/**/*": {
+      "maxDuration": 60
+    },
+    "app/api/**/*": {
+      "maxDuration": 60
+    },
+    "api/**/*": {
       "maxDuration": 60
     }
   },
