@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -28,7 +28,8 @@ import { AudioOverlay } from "./AudioOverlay";
 import { MediaOverlay } from "./MediaOverlay";
 import { FlowchartOverlay } from "./FlowchartOverlay";
 import { Minimap } from "./Minimap";
-import { TagPinNode } from "@/lib/tags";
+import { TagPinNode, normalizeTagId, getTagColor } from "@/lib/tags";
+import { TagPickerPopover } from "./TagPickerPopover";
 import { MeetingWorkspace } from "./MeetingWorkspace";
 import { uploadMediaFile } from "@/lib/storage";
 import { WebAudioRecorder, RecordingResult } from "@/lib/audioRecorder";
@@ -37,7 +38,7 @@ import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 import { useYjsRoom } from "@/lib/yjs/useYjsRoom";
 
-interface CustomCanvasProps {
+export interface CustomCanvasProps {
   pageId: string;
   pageTitle: string;
   pageCreatedAt: string;
@@ -45,6 +46,8 @@ interface CustomCanvasProps {
   headerControls?: React.ReactNode;
   isJournal?: boolean;
   currentUser?: any;
+  targetJumpCoordinates?: { x: number; y: number } | null;
+  onClearTargetJump?: () => void;
 }
 
 export type Stroke = {
@@ -333,7 +336,17 @@ function getSvgPathFromStroke(stroke: number[][]) {
   return d.join(" ");
 }
 
-export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTitle, headerControls, isJournal, currentUser }: CustomCanvasProps) {
+export function CustomCanvas({ 
+  pageId, 
+  pageTitle, 
+  pageCreatedAt, 
+  onUpdatePageTitle, 
+  headerControls, 
+  isJournal, 
+  currentUser,
+  targetJumpCoordinates,
+  onClearTargetJump
+}: CustomCanvasProps) {
   // Real-time Yjs CRDT Collaboration Room
   const { doc: ydoc, provider: yProvider, activeUsers, currentUser: yCurrentUser } = useYjsRoom(pageId, currentUser);
 
@@ -341,6 +354,7 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
     images, setImages, files, setFiles, videos, setVideos,
     shapes, setShapes, connectors, setConnectors,
+    pageTags, setPageTags, tagPins, setTagPins,
     undo, redo, canUndo, canRedo,
     pageVersions, fetchVersions, restoreVersion, saveManualSnapshot
   } = useCanvasData(pageId);
@@ -673,6 +687,71 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
     setTool("home");
     toast.success(`Inserted ${label}`);
   }, [pan, zoom, setShapes, setSelectedShapeId, setSelectedConnectorId, setTool]);
+
+  // Tag Pin & Mind Map state & handlers
+  const [editingPinId, setEditingPinId] = useState<string | null>(null);
+  const [jumpPulseCoords, setJumpPulseCoords] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (targetJumpCoordinates) {
+      const screenW = typeof window !== 'undefined' ? window.innerWidth : 1200;
+      const screenH = typeof window !== 'undefined' ? window.innerHeight : 800;
+      setPan({
+        x: screenW / 2 - targetJumpCoordinates.x * zoom,
+        y: screenH / 2 - targetJumpCoordinates.y * zoom
+      });
+      setJumpPulseCoords(targetJumpCoordinates);
+      const timer = setTimeout(() => {
+        setJumpPulseCoords(null);
+        onClearTargetJump?.();
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [targetJumpCoordinates, zoom, onClearTargetJump]);
+
+  const handleInsertTagPin = useCallback(() => {
+    const screenW = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const screenH = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const worldX = Math.round((-pan.x + screenW / 2) / zoom);
+    const worldY = Math.round((-pan.y + screenH / 2) / zoom);
+    const newPin: TagPinNode = {
+      id: uuidv4(),
+      x: worldX,
+      y: worldY,
+      tags: ["important"],
+      label: "Pin",
+      createdAt: Date.now()
+    };
+    setTagPins(prev => [...prev, newPin]);
+    toast.success("Dropped tag pin on canvas", { duration: 1200 });
+  }, [pan, zoom, setTagPins]);
+
+  const handleInsertMindMapRoot = useCallback(() => {
+    const screenW = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const screenH = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const worldX = Math.round((-pan.x + screenW / 2) / zoom - 90);
+    const worldY = Math.round((-pan.y + screenH / 2) / zoom - 25);
+    const rootShape: ShapeNode = {
+      id: uuidv4(),
+      type: 'rounded',
+      x: worldX,
+      y: worldY,
+      width: 180,
+      height: 52,
+      text: "Central Idea",
+      fillColor: "rgba(59, 130, 246, 0.12)",
+      strokeColor: "#3b82f6",
+      strokeWidth: 2.5,
+      fontSize: 14,
+      textAlign: 'center'
+    };
+    setShapes(prev => [...prev, rootShape]);
+    setSelectedShapeId(rootShape.id);
+    setSelectedIds?.([rootShape.id]);
+    setTool("home");
+    setActiveTab("Flowchart");
+    toast.success("Created Mind Map Root. Press Tab to add child branches!", { duration: 2500 });
+  }, [pan, zoom, setShapes, setSelectedShapeId, setSelectedIds, setTool]);
 
   // Quick preset workflows
   const handleInsertPresetWorkflow = useCallback((preset: 'decision' | 'linear') => {
@@ -3020,6 +3099,28 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
 
+                {/* Spatial Tags & Mind Mapping */}
+                <div className="flex items-center h-full">
+                  <button
+                    onClick={handleInsertTagPin}
+                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-purple-600 dark:text-purple-400"
+                    title="Drop a spatial tag pin on canvas"
+                  >
+                    <MapPin size={16} strokeWidth={2} />
+                    <span className="text-[10px] font-medium mt-0.5">Tag Pin</span>
+                  </button>
+                  <button
+                    onClick={handleInsertMindMapRoot}
+                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-blue-600 dark:text-blue-400"
+                    title="Create Mind Map Root Node"
+                  >
+                    <GitBranch size={16} strokeWidth={2} />
+                    <span className="text-[10px] font-medium mt-0.5">Mind Map</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+
                 <div className="flex items-center h-full">
                   <button
                     onMouseDown={(e) => e.preventDefault()}
@@ -3298,6 +3399,20 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
 
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
 
+                {/* Mind Map Quick Start */}
+                <div className="flex items-center gap-1 h-full">
+                  <button
+                    onClick={handleInsertMindMapRoot}
+                    className="flex flex-col items-center justify-center h-full px-2.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-purple-600 dark:text-purple-400 transition-colors"
+                    title="Insert Central Mind Map Topic"
+                  >
+                    <GitBranch size={15} />
+                    <span className="text-[10px] font-medium leading-none mt-1">Mind Map</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
                 {/* AI Flowchart Generator (gemini-3.8-flash) */}
                 <div className="flex items-center h-full">
                   <button
@@ -3562,6 +3677,15 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
             )}
           </div>
         )}
+
+        {/* Page-Level Tags Bar */}
+        <div className="mt-2.5 flex items-center gap-1.5 flex-wrap max-w-[600px] pointer-events-auto">
+          <TagPickerPopover
+            tags={pageTags || []}
+            onChange={(newTags: string[]) => setPageTags(newTags)}
+            placeholder="+ Add page tag..."
+          />
+        </div>
       </div>
 
       <div className="absolute inset-0" style={{ zIndex: tool === "pen" || tool === "pan" ? 30 : 10, pointerEvents: "auto" }}>
@@ -3698,6 +3822,113 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
           selectedIds={selectedIds}
           setSelectedIds={setSelectedIds}
         />
+
+        {/* Canvas Tag Pins Layer */}
+        {(tagPins || []).map(pin => {
+          const screenX = pin.x * zoom + pan.x;
+          const screenY = pin.y * zoom + pan.y;
+          return (
+            <div
+              key={pin.id}
+              className="absolute z-30 pointer-events-auto group cursor-pointer"
+              style={{
+                left: `${screenX}px`,
+                top: `${screenY}px`,
+                transform: 'translate(-50%, -100%)',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingPinId(pin.id === editingPinId ? null : pin.id);
+              }}
+            >
+              {(() => {
+                const firstTag = (pin.tags && pin.tags.length > 0) ? pin.tags[0] : 'tag';
+                const tagTheme = getTagColor(firstTag);
+                return (
+                  <div 
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shadow-lg border text-xs font-semibold backdrop-blur-md transition-all hover:scale-105 active:scale-95"
+                    style={{
+                      backgroundColor: tagTheme.bg,
+                      borderColor: tagTheme.border,
+                      color: tagTheme.text
+                    }}
+                  >
+                    <MapPin size={13} className="shrink-0 fill-current" />
+                    <span>#{firstTag}</span>
+                    {pin.tags && pin.tags.length > 1 && (
+                      <span className="text-[10px] px-1 bg-black/10 dark:bg-white/10 rounded-full font-bold">
+                        +{pin.tags.length - 1}
+                      </span>
+                    )}
+                    {pin.label && (
+                      <span className="text-[11px] font-normal text-zinc-600 dark:text-zinc-300 ml-0.5">
+                        · {pin.label}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Editing popover when clicked */}
+              {editingPinId === pin.id && (
+                <div 
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-3 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 min-w-[240px] z-50 text-zinc-800 dark:text-zinc-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-200 dark:border-zinc-700">
+                    <span className="text-xs font-bold">Edit Tag Pin</span>
+                    <button
+                      onClick={() => setTagPins(prev => prev.filter(p => p.id !== pin.id))}
+                      className="p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30"
+                      title="Delete Tag Pin"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[10px] font-semibold text-zinc-500 uppercase block mb-1">Tags</label>
+                      <TagPickerPopover
+                        tags={pin.tags || []}
+                        onChange={(newTags: string[]) => {
+                          setTagPins(prev => prev.map(p => p.id === pin.id ? { ...p, tags: newTags } : p));
+                        }}
+                        placeholder="+ add tag"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-zinc-500 uppercase block mb-1">Label (optional)</label>
+                      <input
+                        type="text"
+                        value={pin.label || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTagPins(prev => prev.map(p => p.id === pin.id ? { ...p, label: val } : p));
+                        }}
+                        className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900"
+                        placeholder="Spot description"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Coordinate Jump Pulse Animation */}
+        {jumpPulseCoords && (
+          <div
+            className="absolute z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2"
+            style={{
+              left: `${jumpPulseCoords.x * zoom + pan.x}px`,
+              top: `${jumpPulseCoords.y * zoom + pan.y}px`,
+            }}
+          >
+            <div className="w-16 h-16 rounded-full border-4 border-purple-500 animate-ping opacity-75" />
+            <div className="w-8 h-8 rounded-full bg-purple-500/40 border-2 border-purple-400 absolute inset-0 m-auto animate-pulse" />
+          </div>
+        )}
       </div>
 
       {selectedIds.length > 1 && getSelectionBounds() && (() => {

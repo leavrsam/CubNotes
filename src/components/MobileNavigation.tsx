@@ -53,6 +53,8 @@ interface MobileNavigationProps {
   onOpenSettings?: () => void;
   onOpenTrash?: () => void;
   trashCount?: number;
+  onOpenTagHub?: () => void;
+  onOpenMindMap?: () => void;
   onShareItem?: (type: 'notebook' | 'section' | 'page', id: string, title: string) => void;
   onRefresh?: () => void;
   userEmail?: string;

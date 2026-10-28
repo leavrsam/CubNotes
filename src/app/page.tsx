@@ -909,7 +909,37 @@ export default function Home() {
       {/* --- MOBILE LAYOUT --- */}
       {isMobile && (
         <div className="w-full h-full relative overflow-hidden bg-white dark:bg-black">
-          {!selectedPageId ? (
+          {activeWorkspaceView === 'tag-hub' ? (
+            <TagHubView
+              notebooks={notebooks}
+              onSelectPage={(pageId) => {
+                setSelectedPageId(pageId);
+                setActiveWorkspaceView('canvas');
+              }}
+              onJumpToCoordinates={(pageId, x, y) => {
+                setSelectedPageId(pageId);
+                setTargetJumpCoordinates({ x, y });
+                setActiveWorkspaceView('canvas');
+              }}
+              onClose={() => setActiveWorkspaceView('canvas')}
+              onOpenMindMap={() => setActiveWorkspaceView('mind-map')}
+            />
+          ) : activeWorkspaceView === 'mind-map' ? (
+            <GlobalMindMapView
+              notebooks={notebooks}
+              onSelectPage={(pageId) => {
+                setSelectedPageId(pageId);
+                setActiveWorkspaceView('canvas');
+              }}
+              onJumpToCoordinates={(pageId, x, y) => {
+                setSelectedPageId(pageId);
+                setTargetJumpCoordinates({ x, y });
+                setActiveWorkspaceView('canvas');
+              }}
+              onClose={() => setActiveWorkspaceView('canvas')}
+              onOpenTagHub={() => setActiveWorkspaceView('tag-hub')}
+            />
+          ) : !selectedPageId ? (
             <MobileNavigation
               notebooks={notebooks}
               view={mobileView}
@@ -917,6 +947,8 @@ export default function Home() {
               onSelectSection={handleSelectSection}
               onSelectPage={handleSelectPage}
               onBackToFolders={handleBackFromNotes}
+              onOpenTagHub={() => setActiveWorkspaceView('tag-hub')}
+              onOpenMindMap={() => setActiveWorkspaceView('mind-map')}
               onAddNotebook={async (title, isJournal) => {
                 const res = await addNotebook(title || "New Notebook", isJournal);
                 return res;
