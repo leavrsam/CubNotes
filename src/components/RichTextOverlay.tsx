@@ -6,6 +6,7 @@ import type { TextNode, ToolType } from "./CustomCanvas";
 import { TipTapEditor } from "./TipTapEditor";
 import { GripVertical, Trash2 } from "lucide-react";
 import { Editor } from '@tiptap/react';
+import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 
 interface RichTextOverlayProps {
   texts: TextNode[];
@@ -64,6 +65,7 @@ export function RichTextOverlay({
   const rafRef = useRef<number | null>(null);
   const latestMoveRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const latestResizeRef = useRef<number | null>(null);
+  const mountedEditorsRef = useRef<Map<string, Editor>>(new Map());
   
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
     if (e.target !== e.currentTarget) return;
@@ -207,6 +209,14 @@ export function RichTextOverlay({
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      if (formatPainterStore.getState().isActive) {
+                        const ed = mountedEditorsRef.current.get(node.id);
+                        if (ed && !ed.isDestroyed) {
+                          ed.commands.selectAll();
+                          formatPainterStore.apply(ed);
+                          return;
+                        }
+                      }
                       // Blur any active editor so keyboard Delete/Backspace targets the whole textbox
                       if (typeof document !== 'undefined' && document.activeElement) {
                         (document.activeElement as HTMLElement)?.blur?.();
@@ -321,6 +331,10 @@ export function RichTextOverlay({
                 isFocused={selectedIds.includes(node.id)}
                 setActiveEditor={setActiveEditor}
                 onEditorUpdate={onEditorUpdate}
+                onMountEditor={(nodeId, ed) => {
+                  if (ed) mountedEditorsRef.current.set(nodeId, ed);
+                  else mountedEditorsRef.current.delete(nodeId);
+                }}
               />
             </div>
           );

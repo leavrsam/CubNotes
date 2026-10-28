@@ -19,6 +19,34 @@ export interface CopiedFormat {
   headingLevel?: number | null; // 0 or null for normal paragraph, 1-6 for headings
 }
 
+export function getWordRangeAtPos(doc: any, pos: number): { from: number; to: number } | null {
+  try {
+    const $pos = doc.resolve(pos);
+    const parentText = $pos.parent.textBetween(0, $pos.parent.content.size, undefined, "\ufffc");
+    const offset = $pos.parentOffset;
+
+    if (!parentText) return null;
+
+    let start = offset;
+    while (start > 0 && /\S/.test(parentText[start - 1])) {
+      start--;
+    }
+
+    let end = offset;
+    while (end < parentText.length && /\S/.test(parentText[end])) {
+      end++;
+    }
+
+    if (start < end) {
+      const parentStart = $pos.start();
+      return { from: parentStart + start, to: parentStart + end };
+    }
+  } catch (e) {
+    console.warn("Could not resolve word range at pos:", e);
+  }
+  return null;
+}
+
 interface FormatPainterState {
   isActive: boolean;
   isPersistent: boolean;
@@ -50,6 +78,7 @@ class FormatPainterStore {
     if (!editor || editor.isDestroyed) return false;
 
     try {
+      const { $from, empty } = editor.state.selection;
       const textStyleAttrs = editor.getAttributes("textStyle") || {};
       const highlightAttrs = editor.getAttributes("highlight") || {};
       const paragraphAttrs = editor.getAttributes("paragraph") || {};
@@ -63,6 +92,31 @@ class FormatPainterStore {
         }
       }
 
+      // Robust extraction of highlight and colors even when cursor is between letters
+      let highlightColor = highlightAttrs.color;
+      if (!highlightColor && editor.isActive("highlight") && $from) {
+        const mark = $from.marks().find((m: any) => m.type.name === "highlight");
+        highlightColor = mark?.attrs?.color || "#fef08a";
+      }
+
+      let textColor = textStyleAttrs.color;
+      if (!textColor && $from) {
+        const mark = $from.marks().find((m: any) => m.type.name === "textStyle");
+        if (mark?.attrs?.color) textColor = mark.attrs.color;
+      }
+
+      let fontSize = textStyleAttrs.fontSize;
+      if (!fontSize && $from) {
+        const mark = $from.marks().find((m: any) => m.type.name === "textStyle");
+        if (mark?.attrs?.fontSize) fontSize = mark.attrs.fontSize;
+      }
+
+      let fontFamily = textStyleAttrs.fontFamily;
+      if (!fontFamily && $from) {
+        const mark = $from.marks().find((m: any) => m.type.name === "textStyle");
+        if (mark?.attrs?.fontFamily) fontFamily = mark.attrs.fontFamily;
+      }
+
       const format: CopiedFormat = {
         bold: editor.isActive("bold"),
         italic: editor.isActive("italic"),
@@ -70,10 +124,10 @@ class FormatPainterStore {
         strike: editor.isActive("strike"),
         subscript: (editor as any).isActive?.("subscript") || false,
         superscript: (editor as any).isActive?.("superscript") || false,
-        fontFamily: textStyleAttrs.fontFamily || undefined,
-        fontSize: textStyleAttrs.fontSize || undefined,
-        color: textStyleAttrs.color || undefined,
-        highlight: highlightAttrs.color || undefined,
+        fontFamily,
+        fontSize,
+        color: textColor,
+        highlight: highlightColor,
         textAlign: paragraphAttrs.textAlign || headingAttrs.textAlign || undefined,
         lineHeight: paragraphAttrs.lineHeight || headingAttrs.lineHeight || undefined,
         spaceAfter: paragraphAttrs.spaceAfter || headingAttrs.spaceAfter || undefined,
@@ -94,7 +148,7 @@ class FormatPainterStore {
           duration: 3500,
         });
       } else {
-        toast.success("Format copied! Click or select text to apply once.", {
+        toast.success("Format copied! Click a word or drag text to apply.", {
           id: "format-painter",
           duration: 2500,
         });
@@ -107,13 +161,26 @@ class FormatPainterStore {
     }
   }
 
-  apply(editor: Editor): boolean {
+  apply(editor: Editor, targetRange?: { from: number; to: number }): boolean {
     if (!this.state.isActive || !this.state.format || !editor || editor.isDestroyed) {
       return false;
     }
 
     try {
       const f = this.state.format;
+
+      // 1. If explicit range supplied, select it
+      if (targetRange && targetRange.from < targetRange.to) {
+        editor.commands.setTextSelection(targetRange);
+      } else if (editor.state.selection.empty) {
+        // 2. If single-click with empty selection, expand to whole word under cursor (Word / Google Docs behavior)
+        const { from } = editor.state.selection;
+        const wordRange = getWordRangeAtPos(editor.state.doc, from);
+        if (wordRange && wordRange.from < wordRange.to) {
+          editor.commands.setTextSelection(wordRange);
+        }
+      }
+
       let chain = editor.chain().focus();
 
       // Bold
@@ -190,7 +257,7 @@ class FormatPainterStore {
 
       chain.run();
 
-      // If not persistent, deactivate after 1 application
+      // If not persistent, deactivate after 1 successful application
       if (!this.state.isPersistent) {
         this.clear();
       }

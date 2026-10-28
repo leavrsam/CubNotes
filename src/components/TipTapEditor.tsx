@@ -566,15 +566,31 @@ export const STYLE_OPTIONS = [
   { value: "codeBlock", label: "Code Block" },
 ];
 
+export const LIGHT_HIGHLIGHT_COLORS = [
+  { color: "#fef08a", label: "Light Yellow" },
+  { color: "#bbf7d0", label: "Light Green" },
+  { color: "#bae6fd", label: "Light Cyan" },
+  { color: "#fbcfe8", label: "Light Pink" },
+  { color: "#fed7aa", label: "Light Orange" },
+  { color: "#e9d5ff", label: "Light Purple" },
+  { color: "#fecaca", label: "Light Red" },
+  { color: "#e4e4e7", label: "Light Gray" },
+];
+
+export const DARK_HIGHLIGHT_COLORS = [
+  { color: "#854d0e", label: "Dark Amber" },
+  { color: "#166534", label: "Dark Green" },
+  { color: "#0e7490", label: "Dark Cyan" },
+  { color: "#9d174d", label: "Dark Pink" },
+  { color: "#9a3412", label: "Dark Orange" },
+  { color: "#6b21a8", label: "Dark Purple" },
+  { color: "#991b1b", label: "Dark Red" },
+  { color: "#3f3f46", label: "Dark Slate" },
+];
+
 export const HIGHLIGHT_COLORS = [
-  { color: "#fef08a", label: "Yellow" },
-  { color: "#bbf7d0", label: "Green" },
-  { color: "#bae6fd", label: "Cyan" },
-  { color: "#fbcfe8", label: "Pink" },
-  { color: "#fed7aa", label: "Orange" },
-  { color: "#e9d5ff", label: "Purple" },
-  { color: "#fecaca", label: "Red" },
-  { color: "#e4e4e7", label: "Gray" },
+  ...LIGHT_HIGHLIGHT_COLORS,
+  ...DARK_HIGHLIGHT_COLORS,
   { color: "none", label: "No Color" },
 ];
 
@@ -1289,20 +1305,21 @@ export function HighlightDropdown({
             bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
             left: `${coords.left}px`,
             maxHeight: coords.maxHeight !== undefined ? `${coords.maxHeight}px` : undefined,
-            width: '168px',
+            width: '184px',
             zIndex: 999999,
           }}
-          className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-2.5 text-white font-sans text-xs"
+          className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-2.5 text-white font-sans text-xs"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
           }}
         >
-          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 px-0.5">
-            Highlight Color
+          {/* Light Palette */}
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5 px-0.5">
+            Light Mode
           </div>
-          <div className="grid grid-cols-4 gap-1.5 mb-2">
-            {HIGHLIGHT_COLORS.filter(c => c.color !== 'none').map((c) => (
+          <div className="grid grid-cols-4 gap-1.5 mb-2.5">
+            {LIGHT_HIGHLIGHT_COLORS.map((c) => (
               <button
                 key={c.color}
                 type="button"
@@ -1313,7 +1330,7 @@ export function HighlightDropdown({
                   setLastHighlightColor(c.color);
                   handleClose();
                 }}
-                className="w-7 h-7 rounded border border-zinc-700 hover:scale-110 active:scale-95 transition-transform flex items-center justify-center shadow-xs"
+                className="w-7 h-7 rounded-md border border-zinc-700 hover:scale-110 active:scale-95 transition-transform flex items-center justify-center shadow-xs"
                 style={{ backgroundColor: c.color }}
                 title={c.label}
               >
@@ -1324,19 +1341,48 @@ export function HighlightDropdown({
             ))}
           </div>
 
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              editor.chain().focus().unsetHighlight().run();
-              handleClose();
-            }}
-            className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded transition-colors"
-          >
-            <span className="w-4 h-4 rounded border border-dashed border-zinc-500 flex items-center justify-center text-[10px] text-red-400">✕</span>
-            <span>No Color</span>
-          </button>
+          {/* Dark Palette */}
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5 px-0.5">
+            Dark Mode
+          </div>
+          <div className="grid grid-cols-4 gap-1.5 mb-2.5">
+            {DARK_HIGHLIGHT_COLORS.map((c) => (
+              <button
+                key={c.color}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  editor.chain().focus().setHighlight({ color: c.color }).run();
+                  setLastHighlightColor(c.color);
+                  handleClose();
+                }}
+                className="w-7 h-7 rounded-md border border-zinc-700 hover:scale-110 active:scale-95 transition-transform flex items-center justify-center shadow-xs"
+                style={{ backgroundColor: c.color }}
+                title={c.label}
+              >
+                {activeHighlight === c.color && (
+                  <span className="text-white text-xs font-bold">✓</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="border-t border-zinc-800 pt-1.5">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                editor.chain().focus().unsetHighlight().run();
+                handleClose();
+              }}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              <span className="w-4 h-4 rounded border border-dashed border-zinc-500 flex items-center justify-center text-[10px] text-red-400">✕</span>
+              <span>No Color</span>
+            </button>
+          </div>
         </div>,
         document.body
       )}
@@ -1564,6 +1610,7 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeBubbleDropdown, setActiveBubbleDropdown] = useState<string | null>(null);
   const { isActive: isPainterActive } = useFormatPainter();
+  const editorRef = useRef<Editor | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -1631,6 +1678,19 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
         }
         return false;
       },
+      handleDOMEvents: {
+        mouseup: () => {
+          if (!formatPainterStore.getState().isActive) return false;
+          // Apply format on mouseup once user finishes their click or drag-selection
+          setTimeout(() => {
+            const ed = editorRef.current;
+            if (formatPainterStore.getState().isActive && ed && !ed.isDestroyed) {
+              formatPainterStore.apply(ed);
+            }
+          }, 15);
+          return false;
+        },
+      },
     },
     onCreate: ({ editor }) => {
       // If Yjs document field is empty but we have existing content from database, seed it!
@@ -1649,12 +1709,8 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       onChange(editor.getHTML());
       onEditorUpdate?.();
     },
-    onSelectionUpdate: ({ editor }) => {
+    onSelectionUpdate: () => {
       onEditorUpdate?.();
-      // If Format Painter is active and user dragged/selected text, apply format to that selection!
-      if (formatPainterStore.getState().isActive && !editor.state.selection.empty) {
-        formatPainterStore.apply(editor);
-      }
     },
     onFocus: ({ editor }) => {
       setActiveEditor?.(editor);
@@ -1671,6 +1727,8 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
       setActiveEditor?.(null);
     },
   }, [id, ydoc, provider]);
+
+  editorRef.current = editor;
 
   // Report editor instance on mount/unmount
   useEffect(() => {
@@ -1708,11 +1766,6 @@ export function TipTapEditor({ id, content, onChange, onDelete, setActiveEditor,
     <div className="group relative w-full h-full bg-transparent">
       {/* Editor Content with Word / OneNote Typography styles */}
       <div 
-        onClick={() => {
-          if (formatPainterStore.getState().isActive && editor) {
-            formatPainterStore.apply(editor);
-          }
-        }}
         className={`p-0 prose dark:prose-invert max-w-none focus:outline-none ${isPainterActive ? 'cursor-copy' : ''} [&_.ProseMirror]:outline-none [&_.ProseMirror]:text-[16px] [&_.ProseMirror]:leading-[32px] [&_.ProseMirror_p]:text-[16px] [&_.ProseMirror_p]:leading-[32px] [&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:min-h-[32px] [&_.ProseMirror_li]:text-[16px] [&_.ProseMirror_li]:leading-[32px] [&_.ProseMirror_li]:m-0 [&_.ProseMirror_h1]:text-[24px] [&_.ProseMirror_h1]:leading-[64px] [&_.ProseMirror_h1]:m-0 [&_.ProseMirror_h2]:text-[20px] [&_.ProseMirror_h2]:leading-[56px] [&_.ProseMirror_h2]:m-0 [&_.ProseMirror_h3]:text-[18px] [&_.ProseMirror_h3]:leading-[48px] [&_.ProseMirror_h3]:m-0 [&_.ProseMirror_blockquote]:border-l-4 [&_.ProseMirror_blockquote]:border-primary-500 [&_.ProseMirror_blockquote]:pl-3 [&_.ProseMirror_blockquote]:italic [&_.ProseMirror_blockquote]:my-1 [&_.ProseMirror_pre]:bg-zinc-100 dark:[&_.ProseMirror_pre]:bg-zinc-800/80 [&_.ProseMirror_pre]:p-2.5 [&_.ProseMirror_pre]:rounded-md [&_.ProseMirror_pre]:font-mono [&_.ProseMirror_pre]:text-sm [&_.ProseMirror_code]:bg-zinc-100 dark:[&_.ProseMirror_code]:bg-zinc-800 [&_.ProseMirror_code]:px-1.5 [&_.ProseMirror_code]:py-0.5 [&_.ProseMirror_code]:rounded [&_.ProseMirror_code]:text-sm [&_.ProseMirror_code]:font-mono [&_.ProseMirror_sub]:text-[0.75em] [&_.ProseMirror_sub]:align-sub [&_.ProseMirror_sup]:text-[0.75em] [&_.ProseMirror_sup]:align-super [&_.ProseMirror_s]:line-through [&_.ProseMirror_del]:line-through [&_.ProseMirror_strike]:line-through [&_.ProseMirror_hr]:border-t-2 [&_.ProseMirror_hr]:border-zinc-300 dark:[&_.ProseMirror_hr]:border-zinc-700 [&_.ProseMirror_hr]:my-3 [&_.ProseMirror_a]:text-primary-600 dark:[&_.ProseMirror_a]:text-primary-400 [&_.ProseMirror_a]:underline prose-p:my-0 prose-p:leading-[32px] prose-p:whitespace-pre-wrap prose-li:marker:text-inherit`}
       >
         <EditorContent editor={editor} />

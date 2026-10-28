@@ -402,14 +402,12 @@ export function CustomCanvas({
 
   // Comprehensive Auto-Resolve for Canvas Collisions on Desktop:
   // 1. Clears Title Header Zone (ensures no content overlaps title/date at x < 720, y < 240)
-  // 2. Clears Element-to-Element vertical overlaps in the same column (maintains clean >= 32px spacing)
+  // 2. Clears Element-to-Element vertical overlaps in the same column (maintains clean spacing without restricting canvas placement)
   const resolveCanvasCollisions = useCallback(() => {
     if (loading) return;
     if (originalSelectionRef.current !== null) return; // Do not run while user is dragging
 
-    const SAFE_TITLE_TOP_Y = 240;
-    const TITLE_COLUMN_MAX_X = 720;
-    const GAP = 32;
+    const GAP = 20;
 
     const getItemHeight = (item: { id: string; type: string; height?: number; content?: string; isCollapsed?: boolean }) => {
       if (typeof document !== 'undefined') {
@@ -484,18 +482,15 @@ export function CustomCanvas({
     for (const cluster of clusters) {
       cluster.sort((a, b) => a.y - b.y);
 
-      const inTitleColumn = cluster.some(item => item.x < TITLE_COLUMN_MAX_X);
-      let runningY = inTitleColumn ? SAFE_TITLE_TOP_Y : cluster[0].y;
+      // Start runningY at the top-most item's actual dropped position (allows placing above title or anywhere on canvas)
+      let runningY = cluster[0].y;
 
       for (let i = 0; i < cluster.length; i++) {
         const item = cluster[i];
         let targetY = item.y;
 
-        if (inTitleColumn && targetY < SAFE_TITLE_TOP_Y) {
-          targetY = SAFE_TITLE_TOP_Y;
-        }
-
-        if (targetY < runningY) {
+        // Only push down if there is an actual physical overlap with preceding item
+        if (i > 0 && targetY < runningY) {
           targetY = runningY;
         }
 
@@ -505,7 +500,7 @@ export function CustomCanvas({
           item.y = targetY;
         }
 
-        runningY = item.y + item.height + GAP;
+        runningY = Math.max(runningY, item.y + item.height + GAP);
       }
     }
 

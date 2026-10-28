@@ -169,3 +169,82 @@ ul[data-type="taskList"] li > div {
   z-index: 10;
 }
 
+/* TipTap Highlight Mark Contrast & Styling */
+.ProseMirror mark {
+  border-radius: 3px;
+  padding: 1px 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* 
+ * Dark Mode: Ensure high-contrast dark text (#09090b) on all light pastel highlight colors
+ * (Fixes white text on pastel yellow/green/cyan/pink being unreadable in dark mode)
+ */
+.dark .ProseMirror mark,
+.dark .ProseMirror mark[data-color="#fef08a"],
+.dark .ProseMirror mark[data-color="#bbf7d0"],
+.dark .ProseMirror mark[data-color="#bae6fd"],
+.dark .ProseMirror mark[data-color="#fbcfe8"],
+.dark .ProseMirror mark[data-color="#fed7aa"],
+.dark .ProseMirror mark[data-color="#e9d5ff"],
+.dark .ProseMirror mark[data-color="#fecaca"],
+.dark .ProseMirror mark[data-color="#e4e4e7"],
+.dark .ProseMirror mark[style*="background-color: #fef08a"],
+.dark .ProseMirror mark[style*="background-color: #bbf7d0"],
+.dark .ProseMirror mark[style*="background-color: #bae6fd"],
+.dark .ProseMirror mark[style*="background-color: #fbcfe8"],
+.dark .ProseMirror mark[style*="background-color: #fed7aa"],
+.dark .ProseMirror mark[style*="background-color: #e9d5ff"],
+.dark .ProseMirror mark[style*="background-color: #fecaca"],
+.dark .ProseMirror mark[style*="background-color: #e4e4e7"],
+.dark .ProseMirror mark[style*="background-color: rgb(254, 240, 138)"],
+.dark .ProseMirror mark[style*="background-color: rgb(187, 247, 208)"],
+.dark .ProseMirror mark[style*="background-color: rgb(186, 230, 253)"],
+.dark .ProseMirror mark[style*="background-color: rgb(251, 207, 232)"],
+.dark .ProseMirror mark[style*="background-color: rgb(254, 215, 170)"],
+.dark .ProseMirror mark[style*="background-color: rgb(233, 213, 255)"],
+.dark .ProseMirror mark[style*="background-color: rgb(254, 202, 202)"],
+.dark .ProseMirror mark[style*="background-color: rgb(228, 228, 231)"] {
+  color: #09090b !important;
+}
+
+/* 
+ * Dark Mode Highlights: Rich deep tones with crisp white/light text in both themes
+ */
+.ProseMirror mark[data-color="#854d0e"],
+.ProseMirror mark[data-color="#166534"],
+.ProseMirror mark[data-color="#0e7490"],
+.ProseMirror mark[data-color="#9d174d"],
+.ProseMirror mark[data-color="#9a3412"],
+.ProseMirror mark[data-color="#6b21a8"],
+.ProseMirror mark[data-color="#991b1b"],
+.ProseMirror mark[data-color="#3f3f46"],
+.ProseMirror mark[style*="background-color: #854d0e"],
+.ProseMirror mark[style*="background-color: #166534"],
+.ProseMirror mark[style*="background-color: #0e7490"],
+.ProseMirror mark[style*="background-color: #9d174d"],
+.ProseMirror mark[style*="background-color: #9a3412"],
+.ProseMirror mark[style*="background-color: #6b21a8"],
+.ProseMirror mark[style*="background-color: #991b1b"],
+.ProseMirror mark[style*="background-color: #3f3f46"],
+.dark .ProseMirror mark[data-color="#854d0e"],
+.dark .ProseMirror mark[data-color="#166534"],
+.dark .ProseMirror mark[data-color="#0e7490"],
+.dark .ProseMirror mark[data-color="#9d174d"],
+.dark .ProseMirror mark[data-color="#9a3412"],
+.dark .ProseMirror mark[data-color="#6b21a8"],
+.dark .ProseMirror mark[data-color="#991b1b"],
+.dark .ProseMirror mark[data-color="#3f3f46"],
+.dark .ProseMirror mark[style*="background-color: #854d0e"],
+.dark .ProseMirror mark[style*="background-color: #166534"],
+.dark .ProseMirror mark[style*="background-color: #0e7490"],
+.dark .ProseMirror mark[style*="background-color: #9d174d"],
+.dark .ProseMirror mark[style*="background-color: #9a3412"],
+.dark .ProseMirror mark[style*="background-color: #6b21a8"],
+.dark .ProseMirror mark[style*="background-color: #991b1b"],
+.dark .ProseMirror mark[style*="background-color: #3f3f46"] {
+  color: #f8fafc !important;
+}
+
+
