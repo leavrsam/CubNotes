@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -48,6 +48,8 @@ export interface CustomCanvasProps {
   currentUser?: any;
   targetJumpCoordinates?: { x: number; y: number } | null;
   onClearTargetJump?: () => void;
+  onSharePage?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export type Stroke = {
@@ -345,10 +347,26 @@ export function CustomCanvas({
   isJournal, 
   currentUser,
   targetJumpCoordinates,
-  onClearTargetJump
+  onClearTargetJump,
+  onSharePage,
+  isSidebarOpen
 }: CustomCanvasProps) {
   // Real-time Yjs CRDT Collaboration Room
   const { doc: ydoc, provider: yProvider, activeUsers, currentUser: yCurrentUser } = useYjsRoom(pageId, currentUser);
+
+  // Filter out self from live collaborators (only show OTHER active users, Google Docs/Sheets style)
+  const otherActiveCollaborators = useMemo(() => {
+    if (!activeUsers) return [];
+    return activeUsers.filter(u => {
+      if (yCurrentUser?.email && u.email) {
+        return u.email !== yCurrentUser.email;
+      }
+      if (yCurrentUser?.name && u.name) {
+        return u.name !== yCurrentUser.name;
+      }
+      return false;
+    });
+  }, [activeUsers, yCurrentUser]);
 
   const { 
     loading, strokes, setStrokes, texts, setTexts, audios, setAudios, 
@@ -2457,7 +2475,7 @@ export function CustomCanvas({
           
           {/* Inject headerControls here on the left */}
           {headerControls && (
-            <div className="flex items-center pb-1 mr-2 gap-1 border-r border-zinc-300 dark:border-zinc-700 pr-2">
+            <div className={`flex items-center pb-1 mr-2 gap-1 border-r border-zinc-300 dark:border-zinc-700 pr-2 ${!isSidebarOpen ? 'ml-6' : ''}`}>
               {headerControls}
             </div>
           )}
@@ -2520,39 +2538,6 @@ export function CustomCanvas({
           </div>
 
           <div className="ml-auto mb-1 flex items-center gap-2">
-            {/* Active Realtime Collaborators */}
-            {activeUsers && activeUsers.length > 0 && (
-              <div 
-                className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-full border border-zinc-200 dark:border-zinc-700/60 shadow-2xs mr-1"
-                title={`${activeUsers.length} collaborator${activeUsers.length > 1 ? 's' : ''} connected via Realtime sync`}
-              >
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <div className="flex items-center -space-x-1.5 overflow-hidden">
-                  {activeUsers.slice(0, 4).map((u, i) => (
-                    <div
-                      key={u.email || u.name || i}
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase ring-1.5 ring-white dark:ring-zinc-900 shadow-xs cursor-default select-none"
-                      style={{ backgroundColor: u.color }}
-                      title={`${u.name} (${u.email || 'Online'})${yCurrentUser && u.email === yCurrentUser.email ? ' (You)' : ''}`}
-                    >
-                      {u.name.slice(0, 2)}
-                    </div>
-                  ))}
-                  {activeUsers.length > 4 && (
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold bg-zinc-300 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 ring-1.5 ring-white dark:ring-zinc-900">
-                      +{activeUsers.length - 4}
-                    </div>
-                  )}
-                </div>
-                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hidden sm:inline pl-0.5">
-                  {activeUsers.length > 1 ? `${activeUsers.length} active` : 'Live'}
-                </span>
-              </div>
-            )}
-
             {audios && audios.length > 0 && (
               <button
                 onClick={() => toggleCollapseAllAudios()}
@@ -2566,6 +2551,7 @@ export function CustomCanvas({
                 </span>
               </button>
             )}
+
             <button
               onClick={() => handleOpenMeetingWorkspace()}
               className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-full text-xs font-semibold shadow-xs transition-transform active:scale-95"
@@ -2574,6 +2560,50 @@ export function CustomCanvas({
               <Sparkles size={13} className="text-amber-200" />
               <span>Meeting Workspace</span>
             </button>
+
+            {/* Active Realtime Collaborators (Only shows OTHER people connected, Google Docs/Sheets style) */}
+            {otherActiveCollaborators.length > 0 && (
+              <div 
+                className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-full border border-zinc-200 dark:border-zinc-700/60 shadow-2xs"
+                title={`${otherActiveCollaborators.length} collaborator${otherActiveCollaborators.length > 1 ? 's' : ''} connected live`}
+              >
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <div className="flex items-center -space-x-1.5 overflow-hidden">
+                  {otherActiveCollaborators.slice(0, 4).map((u, i) => (
+                    <div
+                      key={u.email || u.name || i}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase ring-1.5 ring-white dark:ring-zinc-900 shadow-xs cursor-default select-none"
+                      style={{ backgroundColor: u.color }}
+                      title={`${u.name} (${u.email || 'Online'})`}
+                    >
+                      {u.name.slice(0, 2)}
+                    </div>
+                  ))}
+                  {otherActiveCollaborators.length > 4 && (
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold bg-zinc-300 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 ring-1.5 ring-white dark:ring-zinc-900">
+                      +{otherActiveCollaborators.length - 4}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hidden sm:inline pl-0.5">
+                  {otherActiveCollaborators.length > 1 ? `${otherActiveCollaborators.length} online` : `${otherActiveCollaborators[0].name.split(' ')[0]} online`}
+                </span>
+              </div>
+            )}
+
+            {/* Share Button (icon only, positioned all the way to the right next to live presence) */}
+            {onSharePage && (
+              <button
+                onClick={onSharePage}
+                className="p-1.5 rounded-lg text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 flex items-center justify-center"
+                title="Share & Collaborate"
+              >
+                <Share2 size={16} />
+              </button>
+            )}
           </div>
         </div>
         

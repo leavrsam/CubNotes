@@ -27,7 +27,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useWebAudio } from "@/hooks/useWebAudio";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2, Download, Bot, Hash } from "lucide-react";
+import { Mic, Square, Menu, X, PanelLeftClose, PanelLeft, Minimize, Maximize, WifiOff, Share2, Download, Bot, Hash, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -681,72 +681,94 @@ export default function Home() {
       
       {/* --- DESKTOP LAYOUT --- */}
       {!isMobile && (
-        <div 
-          className={`absolute md:relative z-50 h-full transition-transform duration-300 ease-in-out ${
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden md:-translate-x-full md:w-0"
-          }`}
-        >
-          <Sidebar 
-            notebooks={notebooks} 
-            selectedPageId={selectedPageId}
-            onSelectPage={(id) => {
-              setSelectedPageId(id);
-              if (window.innerWidth < 768) setIsSidebarOpen(false);
-            }} 
-            onAddNotebook={async () => {
-              const res = await addNotebook("New Notebook");
-              if (res?.pageId) setSelectedPageId(res.pageId);
-            }}
-            onUpdateNotebook={updateNotebook}
-            onDeleteNotebook={(nbId) => {
-              const nb = notebooks.find(n => n.id === nbId);
-              if (nb && nb.sections.some(s => s.pages.some(p => p.id === selectedPageId))) {
-                setSelectedPageId(null);
-              }
-              deleteNotebook(nbId);
-            }}
-            onToggleJournalMode={toggleJournalMode}
-            onAddSection={(nbId) => addSection(nbId, "New Section")}
-            onUpdateSection={updateSection}
-            onDeleteSection={(secId) => {
-              for (const nb of notebooks) {
-                const s = nb.sections.find(sec => sec.id === secId);
-                if (s && s.pages.some(p => p.id === selectedPageId)) {
+        <>
+          <div 
+            className={`absolute md:relative z-50 h-full transition-transform duration-300 ease-in-out ${
+              isSidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden md:-translate-x-full md:w-0"
+            }`}
+          >
+            <Sidebar 
+              notebooks={notebooks} 
+              selectedPageId={selectedPageId}
+              onSelectPage={(id) => {
+                setSelectedPageId(id);
+                if (window.innerWidth < 768) setIsSidebarOpen(false);
+              }} 
+              onAddNotebook={async () => {
+                const res = await addNotebook("New Notebook");
+                if (res?.pageId) setSelectedPageId(res.pageId);
+              }}
+              onUpdateNotebook={updateNotebook}
+              onDeleteNotebook={(nbId) => {
+                const nb = notebooks.find(n => n.id === nbId);
+                if (nb && nb.sections.some(s => s.pages.some(p => p.id === selectedPageId))) {
                   setSelectedPageId(null);
-                  break;
                 }
-              }
-              deleteSection(secId);
-            }}
-            onAddPage={async (secId) => {
-              const page = await addPage(secId, "New Page");
-              if (page?.id) setSelectedPageId(page.id);
-            }}
-            onUpdatePage={updatePage}
-            onDeletePage={(id) => {
-              if (selectedPageId === id) setSelectedPageId(null);
-              deletePage(id);
-            }}
-            onClose={() => setIsSidebarOpen(false)}
-            onOpenSettings={() => {
-              setIsSidebarOpen(false);
-              handleOpenSettings();
-            }}
-            onOpenTrash={() => setIsTrashOpen(true)}
-            trashCount={trash.length}
-            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-            onOpenAskAI={() => handleOpenAskAI()}
-            onOpenTagHub={() => setActiveWorkspaceView('tag-hub')}
-            onOpenMindMap={() => setActiveWorkspaceView('mind-map')}
-            onJumpToCoordinates={(pageId, x, y) => {
-              setSelectedPageId(pageId);
-              setTargetJumpCoordinates({ x, y });
-              setActiveWorkspaceView('canvas');
-            }}
-            onShareItem={handleOpenShare}
-            user={currentUser}
-          />
-        </div>
+                deleteNotebook(nbId);
+              }}
+              onToggleJournalMode={toggleJournalMode}
+              onAddSection={(nbId) => addSection(nbId, "New Section")}
+              onUpdateSection={updateSection}
+              onDeleteSection={(secId) => {
+                for (const nb of notebooks) {
+                  const s = nb.sections.find(sec => sec.id === secId);
+                  if (s && s.pages.some(p => p.id === selectedPageId)) {
+                    setSelectedPageId(null);
+                    break;
+                  }
+                }
+                deleteSection(secId);
+              }}
+              onAddPage={async (secId) => {
+                const page = await addPage(secId, "New Page");
+                if (page?.id) setSelectedPageId(page.id);
+              }}
+              onUpdatePage={updatePage}
+              onDeletePage={(id) => {
+                if (selectedPageId === id) setSelectedPageId(null);
+                deletePage(id);
+              }}
+              onClose={() => setIsSidebarOpen(false)}
+              onOpenSettings={() => {
+                setIsSidebarOpen(false);
+                handleOpenSettings();
+              }}
+              onOpenTrash={() => setIsTrashOpen(true)}
+              trashCount={trash.length}
+              onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+              onOpenAskAI={() => handleOpenAskAI()}
+              onOpenTagHub={() => setActiveWorkspaceView('tag-hub')}
+              onOpenMindMap={() => setActiveWorkspaceView('mind-map')}
+              onJumpToCoordinates={(pageId, x, y) => {
+                setSelectedPageId(pageId);
+                setTargetJumpCoordinates({ x, y });
+                setActiveWorkspaceView('canvas');
+              }}
+              onShareItem={handleOpenShare}
+              user={currentUser}
+            />
+
+            {/* Attached Sidebar Toggle Handle (When Sidebar is Open) */}
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="absolute top-1.5 -right-5 z-50 flex items-center justify-center w-5 h-8 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white border border-l-0 border-zinc-700/80 rounded-r-md shadow-md transition-colors group cursor-pointer"
+              title="Collapse Sidebar (Cmd+B)"
+            >
+              <ChevronLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+
+          {/* Attached Sidebar Toggle Handle (When Sidebar is Closed) */}
+          {!isSidebarOpen && (
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="absolute top-1.5 left-0 z-50 flex items-center justify-center w-5 h-8 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white border border-l-0 border-zinc-700/80 rounded-r-md shadow-md transition-colors group cursor-pointer animate-in fade-in duration-150"
+              title="Expand Sidebar (Cmd+B)"
+            >
+              <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          )}
+        </>
       )}
       
       {/* Desktop Main Content */}
@@ -825,67 +847,28 @@ export default function Home() {
               currentUser={currentUser}
               targetJumpCoordinates={targetJumpCoordinates}
               onClearTargetJump={() => setTargetJumpCoordinates(null)}
+              onSharePage={() => handleOpenShare('page', selectedPageId, activePageTitle)}
+              isSidebarOpen={isSidebarOpen}
               headerControls={
                 <>
                   <button
-                    onClick={() => setActiveWorkspaceView('tag-hub')}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"
-                    title="Open Tag Place (All tagged notes, blocks & pins)"
-                  >
-                    <Hash size={13} />
-                    <span>Tags</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveWorkspaceView('mind-map')}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"
-                    title="Open Knowledge Graph Mind Map"
-                  >
-                    <span>🧠</span>
-                    <span>Mind Map</span>
-                  </button>
-                  {!isNativeApp() && (
-                    <a
-                      href="/download"
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold transition-colors shrink-0"
-                      title="Download Motif for Android, Mac & Windows"
-                    >
-                      <Download size={14} className="text-primary-500" />
-                      <span>Download App</span>
-                    </a>
-                  )}
-                  <button
                     onClick={() => handleOpenAskAI()}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-primary-600/15 to-purple-600/15 hover:from-primary-600/25 hover:to-purple-600/25 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-all shrink-0 shadow-xs"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-primary-600/15 to-purple-600/15 hover:from-primary-600/25 hover:to-purple-600/25 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-all shrink-0 shadow-xs"
                     title="Ask Motif AI across all notes & meetings (Cmd+J)"
                   >
-                    <Bot size={14} className="text-primary-400" />
+                    <Bot size={13} className="text-primary-400" />
                     <span>Ask AI</span>
                     <kbd className="hidden sm:inline-block ml-0.5 px-1 py-0.2 bg-zinc-800/80 rounded text-[10px] text-zinc-400 font-mono">⌘J</kbd>
-                  </button>
-                  <button
-                    onClick={() => handleOpenShare('page', selectedPageId, activePageTitle)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary-600/10 hover:bg-primary-600/20 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-colors shrink-0"
-                    title="Share & Collaborate"
-                  >
-                    <Share2 size={14} />
-                    <span>Share</span>
-                  </button>
-                  <button
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
-                    title="Toggle Sidebar (Cmd+B)"
-                  >
-                    {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
                   </button>
                   <button
                     onClick={(e) => {
                       e.preventDefault();
                       handleToggleFullscreen();
                     }}
-                    className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center"
+                    className="p-1.5 bg-transparent hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400 transition-colors flex items-center justify-center shrink-0"
                     title={isFullscreen ? "Exit Fullscreen (Esc)" : "Fullscreen"}
                   >
-                    {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                    {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
                   </button>
                 </>
               }
