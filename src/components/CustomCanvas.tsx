@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers } from "lucide-react";
+import { Pen, PenTool, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -943,6 +943,45 @@ export function CustomCanvas({
     setTool('pen');
     setActiveTab('Draw');
   }, []);
+
+  const handleUnpackPdfToGrid = useCallback((id: string, numPages: number, aspectRatio: number) => {
+    setFiles(prev => {
+      const targetFile = prev.find(f => f.id === id);
+      if (!targetFile) return prev;
+
+      const cols = 4;
+      const lateralMargin = 200;
+      const slideWidth = targetFile.width || 600;
+      const slideHeight = slideWidth / (aspectRatio || (4 / 3));
+
+      const unpackedSlides: FileNode[] = [];
+      for (let page = 1; page <= numPages; page++) {
+        const col = (page - 1) % cols;
+        const row = Math.floor((page - 1) / cols);
+        const x = targetFile.x + col * (slideWidth + lateralMargin);
+        const y = targetFile.y + row * (slideHeight + lateralMargin);
+
+        unpackedSlides.push({
+          id: uuidv4(),
+          x,
+          y,
+          url: targetFile.url,
+          filename: `${targetFile.filename} (Slide ${page})`,
+          width: slideWidth,
+          height: slideHeight,
+          pageCount: 1,
+          currentPage: page,
+          isPdf: true,
+          unpackedSlideIndex: page,
+          unpackedParentId: targetFile.id,
+          meta: targetFile.meta,
+        });
+      }
+
+      return prev.filter(f => f.id !== id).concat(unpackedSlides);
+    });
+    toast.success(`Unpacked ${numPages} slides to 4-column grid with 200px lateral margins!`);
+  }, [setFiles]);
 
   useEffect(() => {
     if (tool !== 'pen' && tool !== 'highlighter' && tool !== 'eraser') {
@@ -1990,6 +2029,100 @@ export function CustomCanvas({
     }
   };
 
+  const handleConvertHandwriting = async () => {
+    const selectedStrokes = strokes.filter(s => selectedIds.includes(s.id));
+    if (selectedStrokes.length === 0) return;
+
+    const toastId = toast.loading("Converting handwriting via Gemini Flash...");
+    try {
+      const bounds = getSelectionBounds();
+      if (!bounds) {
+        toast.error("Could not measure stroke bounds", { id: toastId });
+        return;
+      }
+
+      // Downscale to max 720p to preserve budget and performance
+      const maxDim = 1280;
+      const rawW = bounds.width;
+      const rawH = bounds.height;
+      const scale = Math.min(1, maxDim / Math.max(rawW, rawH, 1));
+      const padding = 20;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(100, Math.round((rawW + padding * 2) * scale));
+      canvas.height = Math.max(100, Math.round((rawH + padding * 2) * scale));
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) throw new Error("Could not create canvas context");
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(scale, scale);
+      ctx.translate(-bounds.x + padding, -bounds.y + padding);
+
+      selectedStrokes.forEach(stroke => {
+        const outlinePoints = getStroke(stroke.points, {
+          size: stroke.size || 4,
+          thinning: 0.5,
+          smoothing: 0.5,
+          streamline: 0.5,
+        });
+        const pathData = getSvgPathFromStroke(outlinePoints);
+        const p = new Path2D(pathData);
+        ctx.fillStyle = stroke.color || '#000000';
+        ctx.save();
+        ctx.translate(stroke.x || 0, stroke.y || 0);
+        ctx.fill(p);
+        ctx.restore();
+      });
+
+      const webpDataUrl = canvas.toDataURL('image/webp', 0.85);
+
+      const customKey = typeof window !== 'undefined'
+        ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key'))
+        : null;
+
+      const res = await fetch('/api/organize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(customKey ? { 'x-gemini-api-key': customKey } : {})
+        },
+        body: JSON.stringify({
+          textNodes: [],
+          audioSummaries: [],
+          imageNodes: [webpDataUrl],
+          apiKey: customKey || undefined
+        })
+      });
+
+      const resData = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(resData?.error || "Failed to convert handwriting");
+
+      const organizedHtml = resData?.organizedHtml || "<p></p>";
+
+      const recState = activeRecordingManager.getState();
+      const newTextNode: TextNode = {
+        id: uuidv4(),
+        x: bounds.x,
+        y: bounds.y,
+        width: Math.max(bounds.width, 400),
+        content: organizedHtml,
+        meta: (recState.isRecording && recState.audioBlockId)
+          ? { audioBlockId: recState.audioBlockId, t: activeRecordingManager.getActiveElapsedMs() }
+          : undefined,
+      };
+
+      setStrokes(prev => prev.filter(s => !selectedIds.includes(s.id)));
+      setTexts(prev => [...prev, newTextNode]);
+      setSelectedIds([newTextNode.id]);
+      toast.success("Handwriting converted to formatted text!", { id: toastId });
+    } catch (err: any) {
+      console.error("Convert Handwriting error:", err);
+      toast.error(err?.message || "Failed to convert handwriting", { id: toastId });
+    }
+  };
+
   const [isMiddleClickPanning, setIsMiddleClickPanning] = useState(false);
   const [isSpacePanning, setIsSpacePanning] = useState(false);
   const [isSpaceDragging, setIsSpaceDragging] = useState(false);
@@ -2531,16 +2664,25 @@ export function CustomCanvas({
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
         {/* Tab Headers and Quick Access Toolbar */}
-        <div className="flex items-end px-2 pt-1 gap-4">
+        <div 
+          className="flex items-end px-2 pt-1 gap-3 overflow-x-auto no-scrollbar select-none w-full shrink-0"
+          onWheel={(e) => {
+            if (e.currentTarget.scrollWidth > e.currentTarget.clientWidth) {
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }
+          }}
+        >
           
           {/* Inject headerControls here on the left */}
           {headerControls && (
-            <div className="flex items-center pb-1 mr-2 gap-1 border-r border-zinc-300 dark:border-zinc-700 pr-2">
+            <div className="flex items-center pb-1 mr-2 gap-1 border-r border-zinc-300 dark:border-zinc-700 pr-2 shrink-0">
               {headerControls}
             </div>
           )}
 
-          <div className="flex gap-1">
+          <div className="flex gap-1 shrink-0">
             {(["Home", "Insert", "Record", "Draw", "Flowchart", "History", "View"] as RibbonTab[]).map(tab => (
               <button
                 key={tab}
@@ -2555,7 +2697,7 @@ export function CustomCanvas({
                   setIsRibbonExpanded(prev => !prev);
                 }}
                 title="Click to switch tab, double-click to toggle ribbon"
-                className={`px-4 py-1.5 text-sm rounded-t-md transition-colors ${
+                className={`px-4 py-1.5 text-sm rounded-t-md transition-colors shrink-0 ${
                   activeTab === tab 
                     ? 'bg-white dark:bg-[#202020] text-zinc-900 dark:text-zinc-100 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] border-t border-l border-r border-transparent dark:border-zinc-800 relative z-10' 
                     : 'text-zinc-600 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 border-t border-l border-r border-transparent'
@@ -2566,7 +2708,7 @@ export function CustomCanvas({
             ))}
           </div>
 
-          <div className="flex items-center gap-1 mb-1 border-l border-zinc-300 dark:border-zinc-700 pl-4">
+          <div className="flex items-center gap-1 mb-1 border-l border-zinc-300 dark:border-zinc-700 pl-4 shrink-0">
             <button
               onClick={() => {
                 if (isEditorUsable(activeEditor) && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror')) && canEditorUndo) {
@@ -2597,7 +2739,7 @@ export function CustomCanvas({
             </button>
           </div>
 
-          <div className="ml-auto mb-1 flex items-center gap-2">
+          <div className="ml-auto mb-1 flex items-center gap-2 shrink-0">
             {audios && audios.length > 0 && (
               <button
                 onClick={() => toggleCollapseAllAudios()}
@@ -2681,7 +2823,16 @@ export function CustomCanvas({
         
         {/* Ribbon Content */}
         {isRibbonExpanded && (
-          <div className="h-[48px] bg-white dark:bg-zinc-900 flex items-center px-3 gap-2 shadow-sm border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar">
+          <div 
+            className="h-[48px] bg-white dark:bg-zinc-900 flex items-center px-3 gap-2 shadow-sm border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar"
+            onWheel={(e) => {
+              if (e.currentTarget.scrollWidth > e.currentTarget.clientWidth) {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                  e.currentTarget.scrollLeft += e.deltaY;
+                }
+              }
+            }}
+          >
             {activeTab === "Home" && (
               <div className="flex items-center gap-1.5 h-full py-1">
                 {/* 1. Selection Tool */}
@@ -3902,6 +4053,7 @@ export function CustomCanvas({
           onDragSelectionMove={handleDragSelectionMove}
           onDragSelectionEnd={handleDragSelectionEnd}
           onAnnotate={handleAnnotateBlock}
+          onUnpackPdfToGrid={handleUnpackPdfToGrid}
         />
         <FlowchartOverlay
           shapes={shapes || []}
@@ -4109,6 +4261,24 @@ export function CustomCanvas({
                   >
                     <Sparkles size={13} />
                     <span>Organize</span>
+                  </button>
+                </>
+              )}
+
+              {/* Convert Handwriting / Extract Action Items (if selection contains ink strokes) */}
+              {strokes.some(s => selectedIds.includes(s.id)) && (
+                <>
+                  <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 my-auto" />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleConvertHandwriting();
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 rounded-full shadow-sm transition-all active:scale-95"
+                    title="Convert handwritten strokes into formatted text or action items via Gemini Flash"
+                  >
+                    <PenTool size={13} />
+                    <span>Convert Handwriting</span>
                   </button>
                 </>
               )}

@@ -6,6 +6,7 @@ import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { isNativeApp } from "@/lib/nativeAudio";
 import { getCachedPageState } from "@/lib/offlineStore";
+import { audioPlaybackSyncBus } from "@/lib/audioPlaybackSync";
 
 interface SidebarProps {
   notebooks: Notebook[];
@@ -43,6 +44,8 @@ interface SearchItemResult {
   snippet?: string;
   x?: number;
   y?: number;
+  audioBlockId?: string;
+  timestampMs?: number;
   source: 'title' | 'content' | 'section' | 'notebook' | 'vector';
 }
 
@@ -58,6 +61,59 @@ export function Sidebar(props: SidebarProps) {
   const [searchScope, setSearchScope] = useState<'global' | 'local'>('global');
   const [isSearching, setIsSearching] = useState(false);
   const [contentResults, setContentResults] = useState<SearchItemResult[]>([]);
+
+  // Platform download link detection (only shown when not running in native downloaded app)
+  const [isNative, setIsNative] = useState(false);
+  const [deviceDownloadInfo, setDeviceDownloadInfo] = useState<{
+    label: string;
+    badge: string;
+    href: string;
+    isDirectDownload: boolean;
+  }>({
+    label: "Download App",
+    badge: "Get App",
+    href: "/download",
+    isDirectDownload: false,
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsNative(isNativeApp());
+    const ua = window.navigator.userAgent.toLowerCase();
+    const isAndroid = /android/i.test(ua);
+    const isMac = /macintosh|mac os x/i.test(ua);
+    const isWindows = /windows/i.test(ua);
+
+    if (isAndroid) {
+      setDeviceDownloadInfo({
+        label: "Download App",
+        badge: "Android APK",
+        href: "/Motif.apk",
+        isDirectDownload: true,
+      });
+    } else if (isMac) {
+      setDeviceDownloadInfo({
+        label: "Download App",
+        badge: "macOS",
+        href: "/download",
+        isDirectDownload: false,
+      });
+    } else if (isWindows) {
+      setDeviceDownloadInfo({
+        label: "Download App",
+        badge: "Windows",
+        href: "/download",
+        isDirectDownload: false,
+      });
+    } else {
+      setDeviceDownloadInfo({
+        label: "Download App",
+        badge: "Desktop / APK",
+        href: "/download",
+        isDirectDownload: false,
+      });
+    }
+  }, []);
 
   // 1. Instant client-side matches (synchronous, 0ms latency)
   const instantMatches = useMemo<SearchItemResult[]>(() => {
@@ -155,14 +211,24 @@ export function Sidebar(props: SidebarProps) {
                 }
               }
 
-              // Check audio transcripts
+              // Check audio transcripts (Audio-Anchored Search)
               if (!matchedBlock && Array.isArray(state.audios)) {
                 for (const a of state.audios) {
                   if (a.transcript && a.transcript.toLowerCase().includes(q)) {
+                    let tsMs: number | undefined;
+                    const lines = a.transcript.split('\n');
+                    const bestLine = lines.find((l: string) => l.toLowerCase().includes(q)) || a.transcript;
+                    const tsMatch = bestLine.match(/\[(\d{1,2}:\d{2})\]/);
+                    if (tsMatch) {
+                      const [m, s] = tsMatch[1].split(':').map(Number);
+                      tsMs = (m * 60 + s) * 1000;
+                    }
                     matchedBlock = {
-                      text: a.transcript,
+                      text: bestLine,
                       x: a.x,
-                      y: a.y
+                      y: a.y,
+                      audioBlockId: a.id,
+                      timestampMs: tsMs
                     };
                     break;
                   }
@@ -185,6 +251,8 @@ export function Sidebar(props: SidebarProps) {
                   snippet,
                   x: matchedBlock.x,
                   y: matchedBlock.y,
+                  audioBlockId: matchedBlock.audioBlockId,
+                  timestampMs: matchedBlock.timestampMs,
                   source: 'content'
                 });
                 seenPageIds.add(page.id);
@@ -320,6 +388,21 @@ export function Sidebar(props: SidebarProps) {
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') setSearchQuery('');
+              if (e.key === 'Enter' && allSearchResults.length > 0) {
+                const first = allSearchResults[0];
+                onSelectPage(first.pageId);
+                if (first.x != null && first.y != null) {
+                  onJumpToCoordinates?.(first.pageId, first.x, first.y);
+                }
+                if (first.audioBlockId && first.timestampMs != null) {
+                  audioPlaybackSyncBus.seek(first.audioBlockId, first.timestampMs);
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('motif-focus-time-ink', {
+                      detail: { audioBlockId: first.audioBlockId, timestampMs: first.timestampMs }
+                    }));
+                  }
+                }
+              }
             }}
             className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-8 pr-16 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 text-zinc-200 placeholder:text-zinc-600"
           />
@@ -432,12 +515,25 @@ export function Sidebar(props: SidebarProps) {
                     if (res.x != null && res.y != null) {
                       onJumpToCoordinates?.(res.pageId, res.x, res.y);
                     }
+                    if (res.audioBlockId && res.timestampMs != null) {
+                      audioPlaybackSyncBus.seek(res.audioBlockId, res.timestampMs);
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('motif-focus-time-ink', {
+                          detail: { audioBlockId: res.audioBlockId, timestampMs: res.timestampMs }
+                        }));
+                      }
+                    }
                   }}
                 >
                   <FileText size={14} className="text-primary-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-zinc-200 group-hover:text-white truncate">
-                      {res.title}
+                    <div className="text-xs font-medium text-zinc-200 group-hover:text-white truncate flex items-center justify-between">
+                      <span className="truncate">{res.title}</span>
+                      {res.timestampMs != null && (
+                        <span className="text-[10px] font-mono text-indigo-400 bg-indigo-950/60 border border-indigo-800/60 px-1 py-0.2 rounded shrink-0 ml-1">
+                          {Math.floor(res.timestampMs / 60000)}:{String(Math.floor((res.timestampMs % 60000) / 1000)).padStart(2, '0')}
+                        </span>
+                      )}
                     </div>
                     {(res.notebookTitle || res.sectionTitle) && (
                       <div className="text-[10px] text-zinc-500 truncate">
@@ -503,33 +599,20 @@ export function Sidebar(props: SidebarProps) {
       
       {/* Settings & Trash Footer */}
       <div className="p-3 border-t border-zinc-800 space-y-1 mt-auto">
-        {!isNativeApp() && (
+        {!isNative && (
           <div className="space-y-0.5">
             <a
-              href="/download"
+              href={deviceDownloadInfo.href}
+              download={deviceDownloadInfo.isDirectDownload ? "Motif.apk" : undefined}
               className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
-              title="Download Desktop App for Mac & Windows"
+              title={`Download Motif (${deviceDownloadInfo.badge})`}
             >
               <div className="flex items-center gap-2.5">
-                <Monitor size={15} className="text-zinc-400 group-hover:text-primary-400 transition-colors" />
-                <span>Desktop App</span>
+                <Download size={15} className="text-zinc-400 group-hover:text-primary-400 transition-colors" />
+                <span>{deviceDownloadInfo.label}</span>
               </div>
-              <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/60 rounded text-[10px] font-medium">
-                Mac / Win
-              </span>
-            </a>
-            <a
-              href="/Motif.apk"
-              download="Motif.apk"
-              className="flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-100 transition-colors w-full px-2.5 py-1.5 rounded-md hover:bg-zinc-800/50 text-left group"
-              title="Download Motif Android App (APK)"
-            >
-              <div className="flex items-center gap-2.5">
-                <Smartphone size={15} className="text-zinc-400 group-hover:text-emerald-400 transition-colors" />
-                <span>Mobile App</span>
-              </div>
-              <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/60 rounded text-[10px] font-medium">
-                APK
+              <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/60 rounded text-[10px] font-medium group-hover:border-primary-500/40 group-hover:text-primary-300 transition-colors">
+                {deviceDownloadInfo.badge}
               </span>
             </a>
           </div>

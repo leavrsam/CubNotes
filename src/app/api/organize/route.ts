@@ -34,10 +34,12 @@ DO NOT wrap the HTML in markdown code blocks (e.g. \`\`\`html). Just output the 
     const contents: any[] = [promptText];
 
     for (const imgUrl of imageNodes) {
+      const mimeMatch = imgUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : "image/webp";
       const base64Data = imgUrl.replace(/^data:image\/\w+;base64,/, '');
       contents.push({
         inlineData: {
-          mimeType: "image/png",
+          mimeType,
           data: base64Data
         }
       });

@@ -3,6 +3,7 @@
 import React, { useCallback, useRef, useState, useEffect } from "react";
 import type { ImageNode, FileNode, VideoNode, ToolType } from "./CustomCanvas";
 import { Trash2, GripVertical, File, Download } from "lucide-react";
+import { PdfShape } from "./canvas/shapes/PdfShape";
 
 interface MediaOverlayProps {
   images: ImageNode[];
@@ -20,6 +21,7 @@ interface MediaOverlayProps {
   onDragSelectionMove?: (deltaX: number, deltaY: number) => void;
   onDragSelectionEnd?: () => void;
   onAnnotate?: (id: string) => void;
+  onUnpackPdfToGrid?: (id: string, numPages: number, aspectRatio: number) => void;
 }
 
 type DragType = 'image' | 'file' | 'video';
@@ -31,7 +33,8 @@ export function MediaOverlay({
   pan, zoom, tool,
   selectedIds = [], setSelectedIds,
   onDragSelectionStart, onDragSelectionMove, onDragSelectionEnd,
-  onAnnotate
+  onAnnotate,
+  onUnpackPdfToGrid
 }: MediaOverlayProps) {
   
   const [dragging, setDragging] = useState<{ id: string, type: DragType } | null>(null);
@@ -138,56 +141,77 @@ export function MediaOverlay({
       ))}
 
       {/* FILES */}
-      {files.map(file => (
-        <div
-          key={file.id}
-          id={`file-node-${file.id}`}
-          className="absolute"
-          style={{
-            transform: `translate(${file.x * zoom + pan.x}px, ${file.y * zoom + pan.y}px) scale(${zoom})`,
-            transformOrigin: "0 0",
-            pointerEvents: tool === "home" ? "auto" : "none",
-            zIndex: selectedIds.includes(file.id) ? 50 : 10,
-          }}
-          onClick={(e) => { e.stopPropagation(); setSelectedIds?.([file.id]); }}
-        >
-          <div className={`relative group bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-sm border-2 ${selectedIds.includes(file.id) ? 'border-primary-500 shadow-md' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'} w-64 flex flex-col gap-2 items-center text-center`}>
-            <File size={32} className="text-primary-500" />
-            <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate w-full" title={file.filename}>{file.filename}</span>
-            <a href={file.url} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-2">
-              <Download size={14} /> Download
-            </a>
-            
-            {tool === "home" && (
-              <div 
-                className="absolute -top-3 -left-3 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                onPointerDown={(e) => onDragStart(e, file.id, 'file', file.x, file.y)}
-              >
-                <GripVertical size={12} />
-              </div>
-            )}
+      {files.map(file => {
+        const isPdf = file.isPdf || file.filename.toLowerCase().endsWith('.pdf');
+        if (isPdf) {
+          return (
+            <PdfShape
+              key={file.id}
+              node={file}
+              zoom={zoom}
+              pan={pan}
+              tool={tool}
+              isSelected={selectedIds.includes(file.id)}
+              onSelect={(id) => setSelectedIds?.([id])}
+              onDragStart={onDragStart}
+              onUnpackToGrid={onUnpackPdfToGrid}
+              onDelete={(id) => setFiles(prev => prev.filter(n => n.id !== id))}
+              onAnnotate={onAnnotate}
+            />
+          );
+        }
 
-            {tool === "home" && (
-              <button 
-                className="absolute -top-3 left-5 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-primary-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 z-10"
-                onClick={(e) => { e.stopPropagation(); onAnnotate?.(file.id); }}
-                title="Annotate File"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
-              </button>
-            )}
-            
-            {tool === "home" && (
-              <button 
-                className="absolute -top-3 -right-3 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                onClick={(e) => { e.stopPropagation(); setFiles(prev => prev.filter(n => n.id !== file.id)); }}
-              >
-                <Trash2 size={12} />
-              </button>
-            )}
+        return (
+          <div
+            key={file.id}
+            id={`file-node-${file.id}`}
+            className="absolute"
+            style={{
+              transform: `translate(${file.x * zoom + pan.x}px, ${file.y * zoom + pan.y}px) scale(${zoom})`,
+              transformOrigin: "0 0",
+              pointerEvents: tool === "home" ? "auto" : "none",
+              zIndex: selectedIds.includes(file.id) ? 50 : 10,
+            }}
+            onClick={(e) => { e.stopPropagation(); setSelectedIds?.([file.id]); }}
+          >
+            <div className={`relative group bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-sm border-2 ${selectedIds.includes(file.id) ? 'border-primary-500 shadow-md' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'} w-64 flex flex-col gap-2 items-center text-center`}>
+              <File size={32} className="text-primary-500" />
+              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate w-full" title={file.filename}>{file.filename}</span>
+              <a href={file.url} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-2">
+                <Download size={14} /> Download
+              </a>
+              
+              {tool === "home" && (
+                <div 
+                  className="absolute -top-3 -left-3 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                  onPointerDown={(e) => onDragStart(e, file.id, 'file', file.x, file.y)}
+                >
+                  <GripVertical size={12} />
+                </div>
+              )}
+
+              {tool === "home" && (
+                <button 
+                  className="absolute -top-3 left-5 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-primary-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 z-10"
+                  onClick={(e) => { e.stopPropagation(); onAnnotate?.(file.id); }}
+                  title="Annotate File"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+                </button>
+              )}
+              
+              {tool === "home" && (
+                <button 
+                  className="absolute -top-3 -right-3 w-6 h-6 bg-white dark:bg-zinc-800 rounded-full shadow border border-zinc-200 dark:border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  onClick={(e) => { e.stopPropagation(); setFiles(prev => prev.filter(n => n.id !== file.id)); }}
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* VIDEOS */}
       {videos.map(video => (

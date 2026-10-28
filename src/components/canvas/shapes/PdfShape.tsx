@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import type { FileNode, ToolType } from "../CustomCanvas";
+import type { FileNode, ToolType } from "../../CustomCanvas";
 import { ChevronLeft, ChevronRight, Grid, ZoomIn, ZoomOut, Download, FileText, Loader2 } from "lucide-react";
 
 interface PdfShapeProps {

@@ -83,6 +83,44 @@ export function SpatialCanvas({
   const stageRef = useRef<any>(null);
   const transformerRef = useRef<any>(null);
   const selectedNodeRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>({
+    width: width || (typeof window !== 'undefined' ? window.innerWidth : 1000),
+    height: height || (typeof window !== 'undefined' ? window.innerHeight : 800),
+  });
+
+  // Dynamically adapt stage canvas buffer on window resize or frame adjustments (Tauri / desktop apps / split-screen)
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        if (clientWidth > 0 && clientHeight > 0) {
+          setDimensions({ width: clientWidth, height: clientHeight });
+          return;
+        }
+      }
+      if (typeof window !== 'undefined') {
+        setDimensions({ width: window.innerWidth, height: window.innerHeight });
+      }
+    };
+
+    updateDimensions();
+
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => {
+      updateDimensions();
+    }) : null;
+
+    if (containerRef.current && observer) {
+      observer.observe(containerRef.current);
+    }
+
+    window.addEventListener('resize', updateDimensions);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateDimensions);
+    };
+  }, []);
 
   useEffect(() => {
     return audioPlaybackSyncBus.subscribe(setPlaybackState);
@@ -489,10 +527,13 @@ export function SpatialCanvas({
   }, [strokes, annotateBlockId]);
 
   return (
-    <div className={`absolute inset-0 touch-none ${tool === 'pen' ? 'cursor-crosshair' : tool === 'home' ? 'cursor-text' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
+    <div 
+      ref={containerRef}
+      className={`absolute inset-0 touch-none ${tool === 'pen' ? 'cursor-crosshair' : tool === 'home' ? 'cursor-text' : tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+    >
       <Stage
-        width={width || (typeof window !== 'undefined' ? window.innerWidth : 1000)}
-        height={height || (typeof window !== 'undefined' ? window.innerHeight : 800)}
+        width={width || dimensions.width}
+        height={height || dimensions.height}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

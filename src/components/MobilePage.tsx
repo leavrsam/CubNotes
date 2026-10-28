@@ -5,7 +5,7 @@ import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor, LineSpacingDropdown, executeIndent, executeOutdent } from "./TipTapEditor";
 import type { Editor } from "@tiptap/react";
-import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2, History, RotateCcw, X, PaintRoller, Bot } from "lucide-react";
+import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2, History, RotateCcw, X, PaintRoller, Bot, Play, Pause } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -18,6 +18,8 @@ import { getAvailableAudioInputs, setPreferredAudioInput } from "@/lib/audioReco
 import type { Stroke, TextNode, ImageNode, AudioNode, FileNode, VideoNode } from "./CustomCanvas";
 import { useYjsRoom } from "@/lib/yjs/useYjsRoom";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
+import { activeRecordingManager } from "@/lib/activeRecordingManager";
+import { audioPlaybackSyncBus, type PlaybackState } from "@/lib/audioPlaybackSync";
 
 function getStrokeBoundingBox(stroke: Stroke) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -630,6 +632,43 @@ export function MobilePage({
     }
   }, []);
 
+  const [playbackState, setPlaybackState] = useState<PlaybackState>(() => audioPlaybackSyncBus.getState());
+  const [isAudioCardOffscreen, setIsAudioCardOffscreen] = useState(false);
+
+  useEffect(() => {
+    return audioPlaybackSyncBus.subscribe(setPlaybackState);
+  }, []);
+
+  useEffect(() => {
+    if (!playbackState.activeAudioBlockId) {
+      setIsAudioCardOffscreen(false);
+      return;
+    }
+
+    const checkVisibility = () => {
+      const el = document.getElementById(`block-${playbackState.activeAudioBlockId}`);
+      if (!el) {
+        setIsAudioCardOffscreen(true);
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+      setIsAudioCardOffscreen(!isVisible);
+    };
+
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', checkVisibility, { passive: true });
+    }
+    checkVisibility();
+
+    return () => {
+      if (container) {
+        container.removeEventListener('scroll', checkVisibility);
+      }
+    };
+  }, [playbackState.activeAudioBlockId]);
+
   const handleSelectAudioInput = (deviceId: string) => {
     setSelectedAudioInput(deviceId);
     setPreferredAudioInput(deviceId);
@@ -783,6 +822,7 @@ export function MobilePage({
     const handleStartRecordingNode = (e: Event) => {
       const customEvent = e as CustomEvent<{ id: string }>;
       const { id } = customEvent.detail;
+      activeRecordingManager.start(id);
       const targetY = isJournal 
         ? INITIAL_CONTENT_Y
         : Math.max(INITIAL_CONTENT_Y, bottomY);
@@ -829,6 +869,7 @@ export function MobilePage({
     const handleInjectTranscribing = (e: Event) => {
       const customEvent = e as CustomEvent<{ id: string }>;
       const { id } = customEvent.detail;
+      activeRecordingManager.stop();
       setAudios(prev => prev.map(a => a.id === id ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
     };
 
@@ -1511,6 +1552,8 @@ export function MobilePage({
                 {block.type === 'text' && (
                   <div 
                     id={`block-${block.id}`}
+                    data-audio-block-id={block.meta?.audioBlockId || (activeRecordingManager.getState().isRecording ? activeRecordingManager.getState().audioBlockId : undefined)}
+                    data-t={block.meta?.t != null ? block.meta.t : (activeRecordingManager.getState().isRecording ? activeRecordingManager.getActiveElapsedMs() : undefined)}
                     className={`w-[calc(100%+24px)] -mx-3 px-3.5 py-2 min-h-[50px] relative rounded-xl transition-all duration-200 ${
                       isSelected && !isRearranging ? 'ring-1 ring-primary-500/50 bg-zinc-50/50 dark:bg-zinc-900/30' : ''
                     } ${isRearranging ? 'pointer-events-none' : ''}`}
@@ -1548,7 +1591,14 @@ export function MobilePage({
                       provider={yProvider}
                       user={yCurrentUser ? { name: yCurrentUser.name, color: yCurrentUser.color } : undefined}
                       onChange={(content) => {
-                        setTexts(prev => prev.map(t => t.id === block.id ? { ...t, content } : t));
+                        const recState = activeRecordingManager.getState();
+                        setTexts(prev => prev.map(t => {
+                          if (t.id !== block.id) return t;
+                          const meta = t.meta || (recState.isRecording && recState.audioBlockId
+                            ? { audioBlockId: recState.audioBlockId, t: activeRecordingManager.getActiveElapsedMs() }
+                            : undefined);
+                          return { ...t, content, meta };
+                        }));
                       }}
                       onDelete={() => {
                         editorMapRef.current.delete(block.id);
@@ -1741,6 +1791,70 @@ export function MobilePage({
           />
         </div>
       </div>
+
+      {/* Sticky Floating Mini-Player (Phase 7) */}
+      {playbackState.activeAudioBlockId && isAudioCardOffscreen && (
+        <div 
+          className="fixed left-3 right-3 z-[1550] transition-all animate-in fade-in slide-in-from-bottom-2 duration-200"
+          style={{ bottom: isKeyboardOpen ? `${(keyboardOffset || 0) + 48}px` : 'max(76px, calc(env(safe-area-inset-bottom, 0px) + 72px))' }}
+        >
+          <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl bg-zinc-900/95 text-white backdrop-blur-xl border border-zinc-700/80 shadow-2xl">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const audioElements = document.querySelectorAll('audio');
+                  audioElements.forEach(el => {
+                    if (el.src && playbackState.activeAudioBlockId) {
+                      if (el.paused) el.play().catch(() => {}); else el.pause();
+                    }
+                  });
+                }}
+                className="w-8 h-8 rounded-full bg-primary-600 hover:bg-primary-500 flex items-center justify-center shrink-0 shadow text-white transition-all active:scale-90"
+                title={playbackState.isPlaying ? "Pause" : "Play"}
+              >
+                {playbackState.isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+              </button>
+
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold truncate text-zinc-100">
+                  {audios.find(a => a.id === playbackState.activeAudioBlockId)?.title || "Meeting Recording"}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] font-mono text-zinc-400 shrink-0">
+                    {Math.floor(playbackState.currentTimeMs / 60000)}:{String(Math.floor((playbackState.currentTimeMs % 60000) / 1000)).padStart(2, '0')}
+                    {" / "}
+                    {Math.floor(playbackState.durationMs / 60000)}:{String(Math.floor((playbackState.durationMs % 60000) / 1000)).padStart(2, '0')}
+                  </span>
+                  {/* Interactive condensed scrubber */}
+                  <div 
+                    className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden cursor-pointer relative"
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                      audioPlaybackSyncBus.seek(playbackState.activeAudioBlockId!, frac * playbackState.durationMs);
+                    }}
+                  >
+                    <div 
+                      className="h-full bg-primary-500 rounded-full transition-all"
+                      style={{ width: `${playbackState.durationMs > 0 ? (playbackState.currentTimeMs / playbackState.durationMs) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => audioPlaybackSyncBus.clearPlayback(playbackState.activeAudioBlockId!)}
+              className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shrink-0"
+              title="Dismiss mini-player"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Floating Glassmorphic Dock - Hidden completely when keyboard is open */}
       {!isKeyboardOpen && (
