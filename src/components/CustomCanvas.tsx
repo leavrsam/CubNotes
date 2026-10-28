@@ -3278,26 +3278,11 @@ export function CustomCanvas({ pageId, pageTitle, pageCreatedAt, onUpdatePageTit
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
 
                 {/* AI Flowchart Generator (gemini-3.8-flash) */}
-                <div className="flex items-center gap-1.5 h-full">
+                <div className="flex items-center h-full">
                   <button
-                    onClick={() => {
-                      setAiFlowchartMode('todo');
-                      setIsAiFlowchartModalOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium text-xs shadow-xs transition-transform active:scale-95"
-                    title="Organize To-Do List into a categorized flowchart with Gemini 3.8 Flash"
-                  >
-                    <ListTodo size={14} className="text-blue-600 dark:text-blue-400" />
-                    <span>To-Do Flowchart</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setAiFlowchartMode('auto');
-                      setIsAiFlowchartModalOpen(true);
-                    }}
+                    onClick={() => setIsAiFlowchartModalOpen(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium text-xs shadow-xs transition-transform active:scale-95"
-                    title="Generate Flowchart with Gemini 3.8 Flash"
+                    title="Generate Flowcharts & Organize To-Do Lists with Gemini 3.8 Flash"
                   >
                     <Workflow size={14} className="text-blue-100" />
                     <span>AI Flowchart</span>
