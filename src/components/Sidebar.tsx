@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download, Monitor, Smartphone, Sparkles, Hash, Network } from "lucide-react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { Book, BookOpen, Folder, FileText, ChevronRight, ChevronDown, Plus, MoreVertical, Edit2, Trash2, Settings, Search, Loader2, PanelLeftClose, Palette, Command, Share2, Users, Download, Monitor, Smartphone, Sparkles, Hash, Network, X } from "lucide-react";
 import { Notebook, Section, Page } from "@/hooks/useNotebooks";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { isNativeApp } from "@/lib/nativeAudio";
+import { getCachedPageState } from "@/lib/offlineStore";
 
 interface SidebarProps {
   notebooks: Notebook[];
@@ -33,6 +34,18 @@ interface SidebarProps {
   user?: any;
 }
 
+interface SearchItemResult {
+  id: string;
+  pageId: string;
+  title: string;
+  notebookTitle: string;
+  sectionTitle: string;
+  snippet?: string;
+  x?: number;
+  y?: number;
+  source: 'title' | 'content' | 'section' | 'notebook' | 'vector';
+}
+
 export function Sidebar(props: SidebarProps) {
   const { 
     notebooks, selectedPageId, onSelectPage,
@@ -44,7 +57,200 @@ export function Sidebar(props: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<'global' | 'local'>('global');
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [contentResults, setContentResults] = useState<SearchItemResult[]>([]);
+
+  // 1. Instant client-side matches (synchronous, 0ms latency)
+  const instantMatches = useMemo<SearchItemResult[]>(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const results: SearchItemResult[] = [];
+
+    for (const nb of notebooks) {
+      const nbMatch = (nb.title || '').toLowerCase().includes(q);
+      for (const sec of nb.sections || []) {
+        const secMatch = (sec.title || '').toLowerCase().includes(q);
+        for (const page of sec.pages || []) {
+          if (searchScope === 'local' && selectedPageId && page.id !== selectedPageId) {
+            continue;
+          }
+          const pageTitle = page.title || 'Untitled Note';
+          const pLower = pageTitle.toLowerCase();
+
+          if (pLower.includes(q)) {
+            results.push({
+              id: `p-${page.id}`,
+              pageId: page.id,
+              title: pageTitle,
+              notebookTitle: nb.title,
+              sectionTitle: sec.title,
+              source: 'title'
+            });
+          } else if (secMatch) {
+            results.push({
+              id: `s-${page.id}`,
+              pageId: page.id,
+              title: pageTitle,
+              notebookTitle: nb.title,
+              sectionTitle: sec.title,
+              source: 'section'
+            });
+          } else if (nbMatch) {
+            results.push({
+              id: `nb-${page.id}`,
+              pageId: page.id,
+              title: pageTitle,
+              notebookTitle: nb.title,
+              sectionTitle: sec.title,
+              source: 'notebook'
+            });
+          }
+        }
+      }
+    }
+    return results;
+  }, [notebooks, searchQuery, searchScope, selectedPageId]);
+
+  // 2. Debounced deep content search across cached page contents & vector search
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || q.length < 2) {
+      setContentResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsSearching(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const found: SearchItemResult[] = [];
+        const seenPageIds = new Set(instantMatches.map(m => m.pageId));
+
+        // Scan local IndexedDB cached document states
+        for (const nb of notebooks) {
+          for (const sec of nb.sections || []) {
+            for (const page of sec.pages || []) {
+              if (isCancelled) return;
+              if (searchScope === 'local' && selectedPageId && page.id !== selectedPageId) {
+                continue;
+              }
+              if (seenPageIds.has(page.id)) continue;
+
+              const state: any = await getCachedPageState(page.id);
+              if (!state) continue;
+
+              // Check text blocks
+              const texts = Array.isArray(state.texts) ? state.texts : (Array.isArray(state.textBlocks) ? state.textBlocks : []);
+              let matchedBlock: any = null;
+              for (const b of texts) {
+                const textContent = (b.content || "").replace(/<[^>]*>/g, ' ');
+                if (textContent.toLowerCase().includes(q)) {
+                  matchedBlock = {
+                    text: textContent,
+                    x: b.x,
+                    y: b.y
+                  };
+                  break;
+                }
+              }
+
+              // Check audio transcripts
+              if (!matchedBlock && Array.isArray(state.audios)) {
+                for (const a of state.audios) {
+                  if (a.transcript && a.transcript.toLowerCase().includes(q)) {
+                    matchedBlock = {
+                      text: a.transcript,
+                      x: a.x,
+                      y: a.y
+                    };
+                    break;
+                  }
+                }
+              }
+
+              if (matchedBlock) {
+                const lower = matchedBlock.text.toLowerCase();
+                const idx = lower.indexOf(q);
+                const start = Math.max(0, idx - 20);
+                const end = Math.min(matchedBlock.text.length, idx + q.length + 35);
+                const snippet = (start > 0 ? '...' : '') + matchedBlock.text.slice(start, end).trim() + (end < matchedBlock.text.length ? '...' : '');
+
+                found.push({
+                  id: `cnt-${page.id}`,
+                  pageId: page.id,
+                  title: page.title || 'Untitled Note',
+                  notebookTitle: nb.title,
+                  sectionTitle: sec.title,
+                  snippet,
+                  x: matchedBlock.x,
+                  y: matchedBlock.y,
+                  source: 'content'
+                });
+                seenPageIds.add(page.id);
+              }
+            }
+          }
+        }
+
+        // Try API search in parallel (if online and Supabase user configured)
+        try {
+          const res = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              query: q,
+              pageId: searchScope === 'local' ? selectedPageId : undefined
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data.matches)) {
+              for (const m of data.matches) {
+                const pid = m.metadata?.pageId;
+                if (pid && !seenPageIds.has(pid)) {
+                  const preview = (m.content || '').replace(/<[^>]+>/g, ' ').slice(0, 50) + '...';
+                  found.push({
+                    id: `vec-${m.id || pid}`,
+                    pageId: pid,
+                    title: m.metadata?.title || 'Matching Note',
+                    notebookTitle: m.metadata?.notebookTitle || '',
+                    sectionTitle: m.metadata?.sectionTitle || '',
+                    snippet: preview,
+                    x: m.metadata?.x,
+                    y: m.metadata?.y,
+                    source: 'vector'
+                  });
+                  seenPageIds.add(pid);
+                }
+              }
+            }
+          }
+        } catch {
+          // Gracefully ignore network/auth errors for vector search fallback
+        }
+
+        if (!isCancelled) {
+          setContentResults(found);
+        }
+      } catch (err) {
+        console.error("Content search error:", err);
+      } finally {
+        if (!isCancelled) {
+          setIsSearching(false);
+        }
+      }
+    }, 200);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, notebooks, searchScope, selectedPageId, instantMatches]);
+
+  const allSearchResults = useMemo(() => {
+    return [...instantMatches, ...contentResults];
+  }, [instantMatches, contentResults]);
 
   // Confirmation state for deleting notebooks, folders, or notes
   const [confirmDelete, setConfirmDelete] = useState<{
@@ -83,28 +289,6 @@ export function Sidebar(props: SidebarProps) {
     });
   };
 
-  const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      setIsSearching(true);
-      try {
-        const res = await fetch('/api/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            query: searchQuery,
-            pageId: searchScope === 'local' ? selectedPageId : undefined
-          })
-        });
-        const data = await res.json();
-        setSearchResults(data.matches || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsSearching(false);
-      }
-    }
-  };
-
   return (
     <aside 
       className="w-64 bg-zinc-950 text-zinc-300 h-screen flex flex-col border-r border-zinc-800 flex-shrink-0"
@@ -123,15 +307,6 @@ export function Sidebar(props: SidebarProps) {
           >
             <Plus size={16} />
           </button>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
-              title="Collapse Sidebar (Cmd+B)"
-            >
-              <PanelLeftClose size={16} />
-            </button>
-          )}
         </div>
       </div>
 
@@ -140,13 +315,27 @@ export function Sidebar(props: SidebarProps) {
           <Search size={14} className="absolute left-2.5 text-zinc-500" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search notes & content..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearch}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setSearchQuery('');
+            }}
             className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-8 pr-16 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 text-zinc-200 placeholder:text-zinc-600"
           />
           <div className="absolute right-1 flex items-center gap-1">
+            {isSearching && (
+              <Loader2 size={12} className="text-zinc-500 animate-spin" />
+            )}
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="p-1 rounded text-zinc-500 hover:text-zinc-300 transition-colors"
+                title="Clear search"
+              >
+                <X size={12} />
+              </button>
+            )}
             <button
               onClick={() => setSearchScope(prev => prev === 'global' ? 'local' : 'global')}
               className={`p-1 rounded flex items-center justify-center transition-colors ${searchScope === 'local' ? 'bg-primary-500/20 text-primary-400' : 'text-zinc-500 hover:text-zinc-300'}`}
@@ -154,9 +343,6 @@ export function Sidebar(props: SidebarProps) {
             >
               {searchScope === 'global' ? <Folder size={12} /> : <FileText size={12} />}
             </button>
-            {isSearching && (
-              <Loader2 size={12} className="text-zinc-500 animate-spin mr-1" />
-            )}
           </div>
         </div>
 
@@ -218,32 +404,60 @@ export function Sidebar(props: SidebarProps) {
         </div>
       </div>
 
-      {searchResults.length > 0 && (
-        <div className="max-h-48 overflow-y-auto border-b border-zinc-800 p-2 space-y-1 bg-zinc-900/50">
+      {searchQuery.trim().length > 0 && (
+        <div className="max-h-64 overflow-y-auto border-b border-zinc-800 p-2 space-y-1 bg-zinc-900/60 divide-y divide-zinc-800/40">
           <div className="flex items-center justify-between px-2 py-1">
-            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Top Matches</span>
-            <button onClick={() => setSearchResults([])} className="text-xs text-zinc-400 hover:text-zinc-200">Clear</button>
+            <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>Results</span>
+              <span className="px-1.5 py-0.2 bg-zinc-800 text-zinc-300 rounded text-[10px]">
+                {allSearchResults.length}
+              </span>
+            </span>
+            <button 
+              onClick={() => setSearchQuery('')} 
+              className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              Clear
+            </button>
           </div>
-          {searchResults.map((res: any) => {
-            // strip html tags for preview
-            const preview = res.content.replace(/<[^>]+>/g, '').substring(0, 40) + '...';
-            return (
-              <div 
-                key={res.id} 
-                className="px-2 py-1.5 rounded hover:bg-zinc-800 cursor-pointer"
-                onClick={() => {
-                  if (res.metadata?.pageId && res.metadata?.x != null && res.metadata?.y != null) {
-                    onJumpToCoordinates?.(res.metadata.pageId, res.metadata.x, res.metadata.y);
-                  } else if (res.metadata?.pageId) {
-                    onSelectPage(res.metadata.pageId);
-                  }
-                }}
-              >
-                <div className="text-xs text-primary-400 mb-0.5">{(res.similarity * 100).toFixed(1)}% match</div>
-                <div className="text-sm text-zinc-300 truncate">{preview}</div>
-              </div>
-            );
-          })}
+
+          {allSearchResults.length > 0 ? (
+            <div className="pt-1 space-y-0.5">
+              {allSearchResults.map((res) => (
+                <div 
+                  key={res.id} 
+                  className="px-2 py-1.5 rounded-md hover:bg-zinc-800/80 cursor-pointer transition-colors group flex items-start gap-2"
+                  onClick={() => {
+                    onSelectPage(res.pageId);
+                    if (res.x != null && res.y != null) {
+                      onJumpToCoordinates?.(res.pageId, res.x, res.y);
+                    }
+                  }}
+                >
+                  <FileText size={14} className="text-primary-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium text-zinc-200 group-hover:text-white truncate">
+                      {res.title}
+                    </div>
+                    {(res.notebookTitle || res.sectionTitle) && (
+                      <div className="text-[10px] text-zinc-500 truncate">
+                        {res.notebookTitle}{res.notebookTitle && res.sectionTitle ? ' › ' : ''}{res.sectionTitle}
+                      </div>
+                    )}
+                    {res.snippet && (
+                      <div className="text-[11px] text-zinc-400 italic truncate mt-0.5 bg-zinc-950/40 px-1 py-0.5 rounded border border-zinc-800/60">
+                        {res.snippet}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !isSearching ? (
+            <div className="p-3 text-center text-xs text-zinc-500 italic">
+              No notes found matching &quot;{searchQuery}&quot;
+            </div>
+          ) : null}
         </div>
       )}
 

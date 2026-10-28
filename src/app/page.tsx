@@ -749,22 +749,6 @@ export default function Home() {
             />
 
           </div>
-
-          {/* Attached Sidebar Toggle Handle on the Border (Like ZipMap / Reference Image) */}
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="fixed z-[60] top-14 flex items-center justify-center w-5 h-8 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-l-0 border-zinc-700/80 rounded-r-md shadow-lg transition-all duration-300 group cursor-pointer"
-            style={{
-              left: isSidebarOpen ? '256px' : '0px',
-            }}
-            title={isSidebarOpen ? "Collapse Sidebar (Cmd+B)" : "Expand Sidebar (Cmd+B)"}
-          >
-            {isSidebarOpen ? (
-              <ChevronLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
-            ) : (
-              <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
-            )}
-          </button>
         </>
       )}
       
@@ -818,6 +802,8 @@ export default function Home() {
               }}
               onClose={() => setActiveWorkspaceView('canvas')}
               onOpenMindMap={() => setActiveWorkspaceView('mind-map')}
+              onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+              isSidebarOpen={isSidebarOpen}
             />
           ) : activeWorkspaceView === 'mind-map' ? (
             <GlobalMindMapView
@@ -833,6 +819,8 @@ export default function Home() {
               }}
               onClose={() => setActiveWorkspaceView('canvas')}
               onOpenTagHub={() => setActiveWorkspaceView('tag-hub')}
+              onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+              isSidebarOpen={isSidebarOpen}
             />
           ) : selectedPageId ? (
             <CustomCanvas 
@@ -869,16 +857,27 @@ export default function Home() {
               }
             />
           ) : (
-            <div className="flex flex-col gap-4 items-center justify-center w-full h-full text-zinc-500">
-              <p>Select or create a page to begin.</p>
-              {notebooks.length === 0 && (
-                <button 
-                  onClick={() => addNotebook("My First Notebook", false)}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
+            <div className="flex flex-col w-full h-full text-zinc-500">
+              <div className="w-full h-11 border-b border-zinc-800 bg-zinc-950 flex items-center px-3 shrink-0">
+                <button
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                  className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors flex items-center justify-center shrink-0"
+                  title={isSidebarOpen ? "Collapse Sidebar (Cmd+B)" : "Expand Sidebar (Cmd+B)"}
                 >
-                  Create Notebook
+                  {isSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
                 </button>
-              )}
+              </div>
+              <div className="flex-1 flex flex-col gap-4 items-center justify-center">
+                <p>Select or create a page to begin.</p>
+                {notebooks.length === 0 && (
+                  <button 
+                    onClick={() => addNotebook("My First Notebook", false)}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
+                  >
+                    Create Notebook
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

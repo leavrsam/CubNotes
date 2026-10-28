@@ -24,7 +24,10 @@ import {
   ChevronRight,
   Flame,
   Globe2,
-  FolderOpen
+  FolderOpen,
+  Brain,
+  PanelLeftClose,
+  PanelLeft
 } from "lucide-react";
 import { Notebook } from "@/hooks/useNotebooks";
 import { getCachedPageState } from "@/lib/offlineStore";
@@ -44,6 +47,8 @@ interface GlobalMindMapViewProps {
   onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
   onClose: () => void;
   onOpenTagHub?: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export type MindMapNodeType = 'tag' | 'page' | 'block' | 'notebook-hub';
@@ -108,7 +113,9 @@ export function GlobalMindMapView({
   onSelectPage,
   onJumpToCoordinates,
   onClose,
-  onOpenTagHub
+  onOpenTagHub,
+  onToggleSidebar,
+  isSidebarOpen
 }: GlobalMindMapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -723,19 +730,100 @@ export function GlobalMindMapView({
       ctx.lineWidth = node.type === 'tag' ? 3 : 2.2;
       ctx.stroke();
 
-      // Node Icon / Badge inside
+      // Node Icon / Badge inside (Crisp vector drawing, NO emojis)
       if (node.type === 'page') {
-        ctx.fillStyle = node.color;
-        ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText("📄", node.x, node.y);
+        const w = 10, h = 13;
+        const left = node.x - w / 2;
+        const top = node.y - h / 2;
+        const fold = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(left, top);
+        ctx.lineTo(left + w - fold, top);
+        ctx.lineTo(left + w, top + fold);
+        ctx.lineTo(left + w, top + h);
+        ctx.lineTo(left, top + h);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(left + w - fold, top);
+        ctx.lineTo(left + w - fold, top + fold);
+        ctx.lineTo(left + w, top + fold);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(left + 2.5, top + 6.5);
+        ctx.lineTo(left + w - 2.5, top + 6.5);
+        ctx.moveTo(left + 2.5, top + 9.5);
+        ctx.lineTo(left + w - 4, top + 9.5);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       } else if (node.type === 'block') {
-        ctx.fillStyle = node.color;
-        ctx.font = '10px system-ui, -apple-system, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(node.blockType === 'audio' ? "🎙️" : node.blockType === 'pin' ? "📍" : "💬", node.x, node.y);
+        if (node.blockType === 'audio') {
+          // Clean vector microphone
+          ctx.beginPath();
+          ctx.arc(node.x, node.y - 3, 2.5, Math.PI, 0, false);
+          ctx.lineTo(node.x + 2.5, node.y + 1);
+          ctx.arc(node.x, node.y + 1, 2.5, 0, Math.PI, false);
+          ctx.closePath();
+          ctx.fillStyle = node.color;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 4.5, 0, Math.PI, false);
+          ctx.moveTo(node.x, node.y + 4.5);
+          ctx.lineTo(node.x, node.y + 7);
+          ctx.moveTo(node.x - 3, node.y + 7);
+          ctx.lineTo(node.x + 3, node.y + 7);
+          ctx.strokeStyle = node.color;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        } else if (node.blockType === 'pin') {
+          // Clean vector map pin
+          ctx.beginPath();
+          ctx.arc(node.x, node.y - 2, 4, Math.PI * 0.8, Math.PI * 2.2);
+          ctx.lineTo(node.x, node.y + 6);
+          ctx.closePath();
+          ctx.fillStyle = node.color;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(node.x, node.y - 2, 1.6, 0, Math.PI * 2);
+          ctx.fillStyle = '#0f172a';
+          ctx.fill();
+        } else {
+          // Clean vector chat/text bubble
+          const bw = 11, bh = 8;
+          const bleft = node.x - bw / 2;
+          const btop = node.y - bh / 2 - 1;
+          ctx.beginPath();
+          ctx.moveTo(bleft, btop);
+          ctx.lineTo(bleft + bw, btop);
+          ctx.lineTo(bleft + bw, btop + bh);
+          ctx.lineTo(bleft + 4, btop + bh);
+          ctx.lineTo(bleft + 1.5, btop + bh + 2.5);
+          ctx.lineTo(bleft + 2, btop + bh);
+          ctx.lineTo(bleft, btop + bh);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+          ctx.fill();
+          ctx.strokeStyle = node.color;
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(bleft + 2.5, btop + 2.8);
+          ctx.lineTo(bleft + bw - 2.5, btop + 2.8);
+          ctx.moveTo(bleft + 2.5, btop + 5.5);
+          ctx.lineTo(bleft + bw - 4, btop + 5.5);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+          ctx.lineWidth = 0.9;
+          ctx.stroke();
+        }
       } else {
         // Tag node: print item count
         ctx.fillStyle = '#ffffff';
@@ -930,7 +1018,17 @@ export function GlobalMindMapView({
         className="flex items-center justify-between px-4 py-2.5 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 z-10 shrink-0"
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              title={isSidebarOpen ? "Collapse Sidebar (Cmd+B)" : "Expand Sidebar (Cmd+B)"}
+            >
+              {isSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
+            </button>
+          )}
+
           <button
             onClick={onClose}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition-colors"
@@ -944,7 +1042,9 @@ export function GlobalMindMapView({
 
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-              <span className="p-1 rounded-md bg-purple-500/20 text-purple-400">🧠</span>
+              <span className="p-1 rounded-md bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                <Brain size={15} />
+              </span>
               <span>Knowledge Graph</span>
             </span>
 

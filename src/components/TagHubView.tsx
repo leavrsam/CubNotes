@@ -19,7 +19,9 @@ import {
   Check, 
   Palette, 
   SlidersHorizontal,
-  ArrowUpDown
+  ArrowUpDown,
+  PanelLeftClose,
+  PanelLeft
 } from "lucide-react";
 import { Notebook, Page } from "@/hooks/useNotebooks";
 import { getCachedPageState } from "@/lib/offlineStore";
@@ -41,6 +43,8 @@ interface TagHubViewProps {
   onJumpToCoordinates?: (pageId: string, x: number, y: number) => void;
   onClose: () => void;
   onOpenMindMap?: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export function TagHubView({
@@ -48,7 +52,9 @@ export function TagHubView({
   onSelectPage,
   onJumpToCoordinates,
   onClose,
-  onOpenMindMap
+  onOpenMindMap,
+  onToggleSidebar,
+  isSidebarOpen
 }: TagHubViewProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [filterMode, setFilterMode] = useState<'AND' | 'OR'>('OR');
@@ -291,7 +297,17 @@ export function TagHubView({
       
       {/* Top Header Bar */}
       <header className="px-6 py-4 border-b border-zinc-800/80 bg-zinc-900/60 backdrop-blur-md flex items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              title={isSidebarOpen ? "Collapse Sidebar (Cmd+B)" : "Expand Sidebar (Cmd+B)"}
+            >
+              {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}

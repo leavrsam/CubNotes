@@ -111,14 +111,14 @@ export function MobileDrawOverlay({
   );
 
   const getContextLabel = () => {
-    if (!annotateBlockId) return '🎨 New Sketch Block';
-    if (blockType === 'drawing') return '🎨 Editing Sketch';
-    if (blockType === 'image') return '🖼️ Annotating Image';
-    if (blockType === 'audio') return '🎙️ Annotating Voice Note';
-    if (blockType === 'video') return '🎬 Annotating Video';
-    if (blockType === 'file') return '📎 Annotating File';
-    if (blockType === 'text') return '📝 Annotating Text';
-    return '✏️ Annotating Block';
+    if (!annotateBlockId) return 'New Sketch Block';
+    if (blockType === 'drawing') return 'Editing Sketch';
+    if (blockType === 'image') return 'Annotating Image';
+    if (blockType === 'audio') return 'Annotating Voice Note';
+    if (blockType === 'video') return 'Annotating Video';
+    if (blockType === 'file') return 'Annotating File';
+    if (blockType === 'text') return 'Annotating Text';
+    return 'Annotating Block';
   };
 
   const hasAutoCenteredRef = useRef(false);

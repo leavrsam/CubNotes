@@ -142,7 +142,7 @@ export function AskAIModal({
         {
           id: `ai-err-${Date.now()}`,
           role: "assistant",
-          text: `⚠️ **Error**: ${err.message || "Could not analyze notes. Please check your internet connection or Gemini API key in Settings."}`,
+          text: `**Error**: ${err.message || "Could not analyze notes. Please check your internet connection or Gemini API key in Settings."}`,
           timestamp: Date.now(),
         },
       ]);
@@ -206,10 +206,10 @@ export function AskAIModal({
                 className="appearance-none bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700/80 rounded-xl px-2.5 py-1.5 pr-7 text-xs font-medium outline-none cursor-pointer max-w-[150px] sm:max-w-[200px] truncate"
                 title="Filter by notebook"
               >
-                <option value="all">📚 All Notebooks</option>
+                <option value="all">All Notebooks</option>
                 {notebooks.map((nb) => (
                   <option key={nb.id} value={nb.id}>
-                    {nb.is_journal ? "📖 " : "📓 "} {nb.title || "Untitled"}
+                    {nb.is_journal ? "[Journal] " : ""}{nb.title || "Untitled"}
                   </option>
                 ))}
               </select>

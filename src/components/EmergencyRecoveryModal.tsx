@@ -192,7 +192,7 @@ export function EmergencyRecoveryModal({
 
   const consoleRescueSnippet = `// === Motif Emergency CDO Notebook Rescue Script ===
 (async () => {
-  console.log("🔍 Scanning Motif IndexedDB for orphaned pages...");
+  console.log("Scanning Motif IndexedDB for orphaned pages...");
   const dbReq = indexedDB.open('cubnotes_offline_db');
   dbReq.onsuccess = async () => {
     const db = dbReq.result;
@@ -203,7 +203,7 @@ export function EmergencyRecoveryModal({
     const allPagesReq = pagesStore.getAll();
     allPagesReq.onsuccess = async () => {
       const cachedPages = allPagesReq.result || [];
-      console.log(\`📦 Found \${cachedPages.length} cached pages on device\`);
+      console.log(\`Found \${cachedPages.length} cached pages on device\`);
       
       const hierarchyReq = nbStore.get('hierarchy');
       hierarchyReq.onsuccess = async () => {
@@ -212,7 +212,7 @@ export function EmergencyRecoveryModal({
         activeNotebooks.forEach(nb => nb.sections?.forEach(s => s.pages?.forEach(p => activeIds.add(p.id))));
         
         const orphans = cachedPages.filter(p => !activeIds.has(p.pageId));
-        console.log(\`🎯 Found \${orphans.length} orphaned pages eligible for recovery\`);
+        console.log(\`Found \${orphans.length} orphaned pages eligible for recovery\`);
         
         if (orphans.length === 0) {
           alert("No orphaned pages found in browser cache. If the user was on another device, please run this on that device!");
@@ -255,7 +255,7 @@ export function EmergencyRecoveryModal({
 
         const updated = [recoveredNb, ...activeNotebooks];
         nbStore.put(updated, 'hierarchy');
-        alert(\`🎉 Restored notebook "CDO (Restored)" with \${recoveredPages.length} notes! Refreshing...\`);
+        alert(\`Restored notebook "CDO (Restored)" with \${recoveredPages.length} notes! Refreshing...\`);
         window.location.reload();
       };
     };

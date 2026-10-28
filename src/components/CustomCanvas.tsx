@@ -1170,7 +1170,7 @@ export function CustomCanvas({
       setRecordingDuration(0);
       activeRecordingNodeIdRef.current = null;
       isStoppingRecordingRef.current = false;
-      toast("Recording discarded.", { icon: "🗑️" });
+      toast("Recording discarded.");
     } catch (err) {
       console.warn("Error discarding recording:", err);
     }
@@ -2630,7 +2630,7 @@ export function CustomCanvas({
                     } else if (isPainterActive) {
                       formatPainterStore.clear();
                     } else {
-                      toast("Click inside a text box first to copy its format", { icon: "🎨" });
+                      toast("Click inside a text box first to copy its format");
                     }
                   }}
                   onDoubleClick={() => {
@@ -4167,7 +4167,7 @@ export function CustomCanvas({
                 if (inList) { htmlParts.push('</ul>'); inList = false; }
                 const checked = trimmed.startsWith('- [x] ');
                 const text = trimmed.slice(6);
-                htmlParts.push(`<p>${checked ? '☑ ' : '☐ '} ${text}</p>`);
+                htmlParts.push(`<p>${checked ? '[x] ' : '[ ] '} ${text}</p>`);
               } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
                 if (!inList) { htmlParts.push('<ul>'); inList = true; }
                 htmlParts.push(`<li>${trimmed.slice(2)}</li>`);

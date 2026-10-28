@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from 'react';
-import { Trash2, AlertTriangle, X } from 'lucide-react';
+import { Trash2, AlertTriangle, Archive, X } from 'lucide-react';
 
 interface DeleteConfirmModalProps {
   isOpen: boolean;
@@ -85,9 +85,15 @@ export function DeleteConfirmModal({
               : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40 text-amber-800 dark:text-amber-300'
           }`}>
             {isPermanent ? (
-              <span>⚠️ <strong>Permanent Deletion:</strong> This will permanently erase this {typeLabel.toLowerCase()} and its contents from Motif and cannot be recovered.</span>
+              <span className="flex items-start gap-1.5">
+                <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                <span><strong>Permanent Deletion:</strong> This will permanently erase this {typeLabel.toLowerCase()} and its contents from Motif and cannot be recovered.</span>
+              </span>
             ) : (
-              <span>📦 <strong>30-Day Trash:</strong> This will be moved to your Trash. You can restore it at any time over the next 30 days before it is permanently removed.</span>
+              <span className="flex items-start gap-1.5">
+                <Archive size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                <span><strong>30-Day Trash:</strong> This will be moved to your Trash. You can restore it at any time over the next 30 days before it is permanently removed.</span>
+              </span>
             )}
           </div>
         </div>
