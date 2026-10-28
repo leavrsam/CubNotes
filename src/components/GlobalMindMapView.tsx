@@ -21,7 +21,10 @@ import {
   Play,
   Pause,
   SlidersHorizontal,
-  ChevronRight
+  ChevronRight,
+  Flame,
+  Globe2,
+  FolderOpen
 } from "lucide-react";
 import { Notebook } from "@/hooks/useNotebooks";
 import { getCachedPageState } from "@/lib/offlineStore";
@@ -43,7 +46,7 @@ interface GlobalMindMapViewProps {
   onOpenTagHub?: () => void;
 }
 
-export type MindMapNodeType = 'tag' | 'page' | 'block';
+export type MindMapNodeType = 'tag' | 'page' | 'block' | 'notebook-hub';
 
 export interface GraphNode {
   id: string;
@@ -72,6 +75,32 @@ export interface GraphEdge {
   target: string;
   color?: string;
   weight?: number;
+  isNotebookLink?: boolean;
+}
+
+// Curated distinctive color palette for notebook galaxies
+const NOTEBOOK_COLORS = [
+  '#6366f1', // Indigo (Motif / Core)
+  '#10b981', // Emerald (Fledge)
+  '#f59e0b', // Amber (Caliber)
+  '#ec4899', // Pink (Journal / Personal)
+  '#06b6d4', // Cyan (Work)
+  '#8b5cf6', // Violet
+  '#3b82f6', // Blue
+  '#14b8a6', // Teal
+  '#f97316', // Orange
+  '#ef4444', // Rose
+];
+
+export function getNotebookColor(notebookTitle: string = ""): string {
+  if (!notebookTitle) return NOTEBOOK_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < notebookTitle.length; i++) {
+    hash = (hash << 5) - hash + notebookTitle.charCodeAt(i);
+    hash |= 0;
+  }
+  const idx = Math.abs(hash) % NOTEBOOK_COLORS.length;
+  return NOTEBOOK_COLORS[idx];
 }
 
 export function GlobalMindMapView({
@@ -92,7 +121,18 @@ export function GlobalMindMapView({
   const [searchQuery, setSearchQuery] = useState("");
   const [showBlocks, setShowBlocks] = useState(false);
   const [selectedNotebookId, setSelectedNotebookId] = useState<string>('all');
+  const [groupByNotebook, setGroupByNotebook] = useState<boolean>(true);
+  const [showOrphansOnly, setShowOrphansOnly] = useState<boolean>(false);
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState<boolean>(false);
+
+  // Obsidian-Style Physics Parameters
+  const [repulsionStrength, setRepulsionStrength] = useState<number>(1400);
+  const [centerGravity, setCenterGravity] = useState<number>(0.012);
+  const [linkDistance, setLinkDistance] = useState<number>(120);
   const [isSimulating, setIsSimulating] = useState(true);
+
+  // Simulation alpha (energy decay parameter)
+  const alphaRef = useRef<number>(1.0);
 
   // Interaction state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -104,14 +144,24 @@ export function GlobalMindMapView({
   const isDraggingCanvasRef = useRef(false);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
   const draggedNodeRef = useRef<GraphNode | null>(null);
+  const lastClickTimeRef = useRef<number>(0);
 
-  // Animation frame ref
-  const animFrameRef = useRef<number | null>(null);
-  const nodesRef = useRef<GraphNode[]>([]);
-  const edgesRef = useRef<GraphEdge[]>([]);
+  // Notebook Cluster Centers for Constellation Mode
+  const notebookCenters = useMemo(() => {
+    const centers = new Map<string, { x: number; y: number; color: string }>();
+    const total = Math.max(1, notebooks.length);
+    const radius = Math.max(220, total * 65);
 
-  nodesRef.current = nodes;
-  edgesRef.current = edges;
+    notebooks.forEach((nb, idx) => {
+      const angle = (idx / total) * Math.PI * 2 - Math.PI / 2;
+      centers.set(nb.title, {
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+        color: getNotebookColor(nb.title)
+      });
+    });
+    return centers;
+  }, [notebooks]);
 
   // 1. Scan notebooks & cached document states to build the Knowledge Graph
   useEffect(() => {
@@ -128,6 +178,9 @@ export function GlobalMindMapView({
 
       // Collect all tags and pages
       for (const nb of notebooks) {
+        const nbColor = getNotebookColor(nb.title);
+        const center = notebookCenters.get(nb.title) || { x: 0, y: 0, color: nbColor };
+
         for (const sec of nb.sections || []) {
           for (const page of sec.pages || []) {
             const pageTagsSet = new Set<string>();
@@ -158,125 +211,127 @@ export function GlobalMindMapView({
                 }
                 const hashtags = extractInlineHashtags(b.content || "");
                 for (const t of hashtags) {
-                  const norm = normalizeTagId(t);
-                  if (norm) bTags.add(norm);
+                  bTags.add(t);
                 }
 
-                for (const t of bTags) {
-                  pageTagsSet.add(t);
-                  tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
-                }
-
-                // Optional block node
                 if (bTags.size > 0) {
-                  const blockNodeId = `block-${b.id}`;
+                  bTags.forEach(t => {
+                    pageTagsSet.add(t);
+                    tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
+                  });
+
+                  const preview = (b.content || "").replace(/<[^>]*>/g, '').trim().slice(0, 36) || "Text Block";
+                  const blockNodeId = `block-${page.id}-${b.id}`;
                   rawNodes.push({
                     id: blockNodeId,
                     type: 'block',
-                    label: (b.content || "Text snippet").replace(/<[^>]+>/g, '').trim().slice(0, 36) || "Text Block",
-                    color: '#94a3b8',
-                    radius: 9,
-                    x: 0,
-                    y: 0,
+                    blockType: 'text',
+                    label: preview,
+                    sublabel: page.title || "Untitled",
+                    color: '#a855f7',
+                    radius: 10,
+                    x: center.x + (Math.random() - 0.5) * 80,
+                    y: center.y + (Math.random() - 0.5) * 80,
                     vx: 0,
                     vy: 0,
                     pageId: page.id,
                     notebookTitle: nb.title,
                     sectionTitle: sec.title,
-                    tags: Array.from(bTags),
-                    blockType: 'text',
-                    jumpCoordinates: { x: b.x || 0, y: b.y || 0 }
+                    jumpCoordinates: { x: b.x || 0, y: b.y || 0 },
+                    tags: Array.from(bTags)
                   });
 
-                  // Edge to page
                   rawEdges.push({
                     id: `edge-${page.id}-${blockNodeId}`,
                     source: `page-${page.id}`,
                     target: blockNodeId,
-                    color: '#cbd5e1',
-                    weight: 0.5
+                    color: '#64748b',
+                    weight: 0.6
                   });
                 }
               }
 
-              // Audio recordings
-              const audioList = Array.isArray(state?.audios) ? state.audios : (Array.isArray(state?.audioRecordings) ? state.audioRecordings : []);
+              // Audio cards
+              const audioList = Array.isArray(state?.audios) ? state.audios : [];
               for (const a of audioList) {
-                if (Array.isArray(a.tags) && a.tags.length > 0) {
-                  const aTags: string[] = [];
-                  for (const t of a.tags) {
-                    const norm = normalizeTagId(t);
-                    if (norm) {
-                      aTags.push(norm);
-                      pageTagsSet.add(norm);
-                      tagCounts.set(norm, (tagCounts.get(norm) || 0) + 1);
-                    }
-                  }
+                const aTags: string[] = Array.isArray(a.tags) 
+                  ? a.tags.map((t: any) => normalizeTagId(String(t))).filter((t: string): t is string => Boolean(t)) 
+                  : [];
+                if (aTags.length > 0) {
+                  aTags.forEach((t: string) => {
+                    pageTagsSet.add(t);
+                    tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
+                  });
 
-                  const audioNodeId = `audio-${a.id}`;
+                  const audioNodeId = `audio-${page.id}-${a.id}`;
                   rawNodes.push({
                     id: audioNodeId,
                     type: 'block',
+                    blockType: 'audio',
                     label: a.title || "Voice Note",
-                    color: '#ef4444',
-                    radius: 10,
-                    x: 0,
-                    y: 0,
+                    sublabel: page.title || "Untitled",
+                    color: '#ec4899',
+                    radius: 11,
+                    x: center.x + (Math.random() - 0.5) * 80,
+                    y: center.y + (Math.random() - 0.5) * 80,
                     vx: 0,
                     vy: 0,
                     pageId: page.id,
                     notebookTitle: nb.title,
                     sectionTitle: sec.title,
-                    tags: aTags,
-                    blockType: 'audio',
-                    jumpCoordinates: { x: a.x || 0, y: a.y || 0 }
+                    jumpCoordinates: { x: a.x || 0, y: a.y || 0 },
+                    tags: aTags
                   });
 
                   rawEdges.push({
                     id: `edge-${page.id}-${audioNodeId}`,
                     source: `page-${page.id}`,
                     target: audioNodeId,
-                    color: '#fca5a5',
-                    weight: 0.5
+                    color: '#64748b',
+                    weight: 0.6
                   });
                 }
               }
 
               // Canvas Tag Pins
-              if (Array.isArray(state?.tagPins)) {
-                for (const pin of state.tagPins) {
-                  const norm = normalizeTagId(pin.tag);
-                  if (norm) {
-                    pageTagsSet.add(norm);
-                    tagCounts.set(norm, (tagCounts.get(norm) || 0) + 1);
+              const pinList = Array.isArray(state?.tagPins) ? state.tagPins : [];
+              for (const pin of pinList) {
+                const pTags: string[] = Array.isArray(pin.tags) 
+                  ? pin.tags.map((t: any) => normalizeTagId(String(t))).filter((t: string): t is string => Boolean(t)) 
+                  : [];
+                if (pTags.length > 0) {
+                  pTags.forEach((t: string) => {
+                    pageTagsSet.add(t);
+                    tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
+                  });
 
-                    const pinNodeId = `pin-${pin.id}`;
-                    rawNodes.push({
-                      id: pinNodeId,
-                      type: 'block',
-                      label: pin.label || `#${pin.tag}`,
-                      color: pin.color || getTagColor(norm, registry).color,
-                      radius: 9,
-                      x: 0,
-                      y: 0,
-                      vx: 0,
-                      vy: 0,
-                      pageId: page.id,
-                      notebookTitle: nb.title,
-                      sectionTitle: sec.title,
-                      tags: [norm],
-                      blockType: 'pin',
-                      jumpCoordinates: { x: pin.x || 0, y: pin.y || 0 }
-                    });
+                  const pinNodeId = `pin-${page.id}-${pin.id}`;
+                  rawNodes.push({
+                    id: pinNodeId,
+                    type: 'block',
+                    blockType: 'pin',
+                    label: pin.label || `#${pTags[0]}`,
+                    sublabel: page.title || "Untitled",
+                    color: '#10b981',
+                    radius: 11,
+                    x: center.x + (Math.random() - 0.5) * 80,
+                    y: center.y + (Math.random() - 0.5) * 80,
+                    vx: 0,
+                    vy: 0,
+                    pageId: page.id,
+                    notebookTitle: nb.title,
+                    sectionTitle: sec.title,
+                    jumpCoordinates: { x: pin.x || 0, y: pin.y || 0 },
+                    tags: pTags
+                  });
 
-                    rawEdges.push({
-                      id: `edge-${page.id}-${pinNodeId}`,
-                      source: `page-${page.id}`,
-                      target: pinNodeId,
-                      color: '#cbd5e1',
-                      weight: 0.5
-                    });
-                  }
+                  rawEdges.push({
+                    id: `edge-${page.id}-${pinNodeId}`,
+                    source: `page-${page.id}`,
+                    target: pinNodeId,
+                    color: '#64748b',
+                    weight: 0.6
+                  });
                 }
               }
 
@@ -286,16 +341,19 @@ export function GlobalMindMapView({
 
             pageTagMap.set(page.id, pageTagsSet);
 
-            // Add Page Node
+            // Add Page Node with notebook-specific galaxy color
+            const pageInitialX = center.x + (Math.random() - 0.5) * 110;
+            const pageInitialY = center.y + (Math.random() - 0.5) * 110;
+
             rawNodes.push({
               id: `page-${page.id}`,
               type: 'page',
               label: page.title || "Untitled Note",
               sublabel: `${nb.title} › ${sec.title}`,
-              color: '#3b82f6',
-              radius: 18,
-              x: 0,
-              y: 0,
+              color: nbColor,
+              radius: 16,
+              x: pageInitialX,
+              y: pageInitialY,
               vx: 0,
               vy: 0,
               pageId: page.id,
@@ -307,7 +365,7 @@ export function GlobalMindMapView({
         }
       }
 
-      // Add Tag Nodes
+      // Add Tag Nodes (Shared conceptual hubs)
       for (const [tagId, count] of tagCounts.entries()) {
         const tagTheme = getTagColor(tagId, registry);
         rawNodes.push({
@@ -315,16 +373,16 @@ export function GlobalMindMapView({
           type: 'tag',
           label: `#${formatTagName(tagId)}`,
           color: tagTheme.color,
-          radius: Math.min(38, Math.max(20, 18 + count * 4)),
-          x: 0,
-          y: 0,
+          radius: Math.min(32, Math.max(18, 16 + count * 3)),
+          x: (Math.random() - 0.5) * 160,
+          y: (Math.random() - 0.5) * 160,
           vx: 0,
           vy: 0,
           itemCount: count
         });
       }
 
-      // Create Edges: Page <-> Tag
+      // Create Edges: Page <-> Tag (bridges across notebooks)
       for (const [pageId, tags] of pageTagMap.entries()) {
         for (const tagId of tags) {
           rawEdges.push({
@@ -332,49 +390,18 @@ export function GlobalMindMapView({
             source: `tag-${tagId}`,
             target: `page-${pageId}`,
             color: getTagColor(tagId, registry).color,
-            weight: 1.2
+            weight: 1.5
           });
         }
       }
-
-      // Initial placement in concentric layout to speed up force convergence
-      const tagList = rawNodes.filter(n => n.type === 'tag');
-      const pageList = rawNodes.filter(n => n.type === 'page');
-      const blockList = rawNodes.filter(n => n.type === 'block');
-
-      // Tag nodes in center ring
-      const tagRadius = Math.max(120, tagList.length * 36);
-      tagList.forEach((tagNode, idx) => {
-        const angle = (idx / Math.max(1, tagList.length)) * Math.PI * 2;
-        tagNode.x = Math.cos(angle) * tagRadius + (Math.random() - 0.5) * 30;
-        tagNode.y = Math.sin(angle) * tagRadius + (Math.random() - 0.5) * 30;
-      });
-
-      // Page nodes in outer ring
-      const pageRadius = tagRadius + 180;
-      pageList.forEach((pageNode, idx) => {
-        const angle = (idx / Math.max(1, pageList.length)) * Math.PI * 2;
-        pageNode.x = Math.cos(angle) * pageRadius + (Math.random() - 0.5) * 50;
-        pageNode.y = Math.sin(angle) * pageRadius + (Math.random() - 0.5) * 50;
-      });
-
-      // Block nodes around their parent page
-      const pageMap = new Map<string, GraphNode>();
-      pageList.forEach(p => pageMap.set(p.pageId!, p));
-      blockList.forEach((bNode, idx) => {
-        const parentPage = bNode.pageId ? pageMap.get(bNode.pageId) : null;
-        if (parentPage) {
-          const angle = Math.random() * Math.PI * 2;
-          const dist = 40 + Math.random() * 40;
-          bNode.x = parentPage.x + Math.cos(angle) * dist;
-          bNode.y = parentPage.y + Math.sin(angle) * dist;
-        }
-      });
 
       if (isMounted) {
         setNodes(rawNodes);
         setEdges(rawEdges);
         setIsLoading(false);
+        // Start simulation with fresh alpha energy
+        alphaRef.current = 1.0;
+        setIsSimulating(true);
       }
     }
 
@@ -383,15 +410,27 @@ export function GlobalMindMapView({
     return () => {
       isMounted = false;
     };
-  }, [notebooks]);
+  }, [notebooks, notebookCenters]);
 
   // 2. Filter active nodes & edges based on search, notebook, and showBlocks
-  const { filteredNodes, filteredEdges, connectedNodeIds } = useMemo(() => {
+  const { filteredNodes, filteredEdges, connectedNodeIds, degreeMap } = useMemo(() => {
+    // Degree map to calculate how connected each node is
+    const degMap = new Map<string, number>();
+    edges.forEach(e => {
+      degMap.set(e.source, (degMap.get(e.source) || 0) + 1);
+      degMap.set(e.target, (degMap.get(e.target) || 0) + 1);
+    });
+
     let activeNodes = nodes.filter(n => {
       if (!showBlocks && n.type === 'block') return false;
       if (selectedNotebookId !== 'all') {
         if (n.type === 'page' && n.notebookTitle !== selectedNotebookId) return false;
         if (n.type === 'block' && n.notebookTitle !== selectedNotebookId) return false;
+      }
+      if (showOrphansOnly) {
+        // Orphan = degree 0 (no tags or connected items)
+        const deg = degMap.get(n.id) || 0;
+        if (deg > 0) return false;
       }
       return true;
     });
@@ -415,45 +454,84 @@ export function GlobalMindMapView({
     return {
       filteredNodes: activeNodes,
       filteredEdges: activeEdges,
-      connectedNodeIds: connected
+      connectedNodeIds: connected,
+      degreeMap: degMap
     };
-  }, [nodes, edges, showBlocks, selectedNotebookId, selectedNodeId, hoveredNodeId]);
+  }, [nodes, edges, showBlocks, selectedNotebookId, selectedNodeId, hoveredNodeId, showOrphansOnly]);
 
-  // 3. Force-directed physics step (Repulsion, Springs, Center Gravity, Damping)
+  // Reignite simulation (re-heat)
+  const reheatSimulation = useCallback(() => {
+    alphaRef.current = 1.0;
+    setIsSimulating(true);
+  }, []);
+
+  // 3. Smooth Damped Force Physics Simulation (d3-force style with Alpha Energy Decay)
   useEffect(() => {
     if (!isSimulating || filteredNodes.length === 0) return;
 
     let animId: number;
-    let iteration = 0;
-    const MAX_ITERATIONS = 400;
+    const activeNodes = filteredNodes;
+    const activeEdges = filteredEdges;
+    const nodeMap = new Map<string, GraphNode>();
+    activeNodes.forEach(n => nodeMap.set(n.id, n));
 
     const step = () => {
-      if (iteration++ > MAX_ITERATIONS && !draggedNodeRef.current) {
+      let alpha = alphaRef.current;
+
+      // Stop condition: when energy decays past threshold, lock completely still
+      if (alpha < 0.006 && !draggedNodeRef.current) {
         setIsSimulating(false);
         return;
       }
 
-      const activeNodes = filteredNodes;
-      const activeEdges = filteredEdges;
-      const nodeMap = new Map<string, GraphNode>();
-      activeNodes.forEach(n => nodeMap.set(n.id, n));
+      // 1. Notebook Galaxy Pull (Constellation mode)
+      if (groupByNotebook) {
+        for (const node of activeNodes) {
+          if (node.isFixed) continue;
+          if (node.type === 'page' && node.notebookTitle) {
+            const center = notebookCenters.get(node.notebookTitle);
+            if (center) {
+              const cdx = center.x - node.x;
+              const cdy = center.y - node.y;
+              node.vx += cdx * 0.04 * alpha;
+              node.vy += cdy * 0.04 * alpha;
+            }
+          }
+        }
+      }
 
-      // 1. Repulsion between all node pairs
+      // 2. Anti-Collision & Node Repulsion
       for (let i = 0; i < activeNodes.length; i++) {
         const n1 = activeNodes[i];
         for (let j = i + 1; j < activeNodes.length; j++) {
           const n2 = activeNodes[j];
           const dx = n2.x - n1.x;
           const dy = n2.y - n1.y;
-          const distSq = dx * dx + dy * dy + 1;
+          const distSq = dx * dx + dy * dy + 0.1;
           const dist = Math.sqrt(distSq);
 
-          const minDistance = n1.radius + n2.radius + 30;
-          const repulsionK = (n1.type === 'tag' || n2.type === 'tag') ? 2400 : 1200;
-          const force = (repulsionK / distSq) * (dist < minDistance ? 3 : 1);
+          // Direct collision boundary (radius + label safety margin)
+          const minDist = n1.radius + n2.radius + 36;
+          if (dist < minDist) {
+            const overlap = minDist - dist;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const push = overlap * 0.45 * alpha;
+            if (!n1.isFixed) {
+              n1.x -= nx * push;
+              n1.y -= ny * push;
+            }
+            if (!n2.isFixed) {
+              n2.x += nx * push;
+              n2.y += ny * push;
+            }
+          }
 
-          const fx = (dx / dist) * force;
-          const fy = (dy / dist) * force;
+          // Smooth inverse-square repulsion
+          const k = (n1.type === 'tag' || n2.type === 'tag') ? repulsionStrength * 1.5 : repulsionStrength;
+          const repForce = (k / distSq) * alpha;
+          const fx = (dx / dist) * repForce;
+          const fy = (dy / dist) * repForce;
 
           if (!n1.isFixed) {
             n1.vx -= fx;
@@ -466,7 +544,7 @@ export function GlobalMindMapView({
         }
       }
 
-      // 2. Spring attraction along edges
+      // 3. Spring Attraction along Edges
       for (const edge of activeEdges) {
         const source = nodeMap.get(edge.source);
         const target = nodeMap.get(edge.target);
@@ -476,12 +554,12 @@ export function GlobalMindMapView({
         const dy = target.y - source.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-        const idealDist = (source.type === 'tag' && target.type === 'page') ? 140 : 80;
+        const idealDist = (source.type === 'tag' && target.type === 'page') ? linkDistance : linkDistance * 0.65;
         const displacement = dist - idealDist;
-        const springK = 0.035 * (edge.weight || 1);
+        const springK = 0.045 * (edge.weight || 1);
 
-        const fx = (dx / dist) * displacement * springK;
-        const fy = (dy / dist) * displacement * springK;
+        const fx = (dx / dist) * displacement * springK * alpha;
+        const fy = (dy / dist) * displacement * springK * alpha;
 
         if (!source.isFixed) {
           source.vx += fx;
@@ -493,22 +571,27 @@ export function GlobalMindMapView({
         }
       }
 
-      // 3. Center gravity & velocity dampening
-      const gravity = 0.015;
-      const damping = 0.82;
+      // 4. Center Gravity, Friction Damping & Velocity Cutoff
+      const damping = 0.74; // High friction so nodes settle fast without wobbling
 
       for (const node of activeNodes) {
         if (node.isFixed) continue;
 
-        node.vx += -node.x * gravity;
-        node.vy += -node.y * gravity;
+        // Gentle global center gravity
+        node.vx += -node.x * centerGravity * alpha;
+        node.vy += -node.y * centerGravity * alpha;
 
+        // Apply damping
         node.vx *= damping;
         node.vy *= damping;
 
-        // Apply velocities with cap
+        // Deadband: eliminate micro-vibrations completely
+        if (Math.abs(node.vx) < 0.03) node.vx = 0;
+        if (Math.abs(node.vy) < 0.03) node.vy = 0;
+
+        // Cap maximum speed
         const speed = Math.sqrt(node.vx * node.vx + node.vy * node.vy);
-        const maxSpeed = 16;
+        const maxSpeed = 12;
         if (speed > maxSpeed) {
           node.vx = (node.vx / speed) * maxSpeed;
           node.vy = (node.vy / speed) * maxSpeed;
@@ -518,15 +601,27 @@ export function GlobalMindMapView({
         node.y += node.vy;
       }
 
+      // Decay simulation energy (alpha cools down toward 0)
+      alphaRef.current *= 0.965;
+
       animId = requestAnimationFrame(step);
     };
 
     animId = requestAnimationFrame(step);
 
     return () => cancelAnimationFrame(animId);
-  }, [isSimulating, filteredNodes, filteredEdges]);
+  }, [
+    isSimulating, 
+    filteredNodes, 
+    filteredEdges, 
+    groupByNotebook, 
+    notebookCenters, 
+    repulsionStrength, 
+    centerGravity, 
+    linkDistance
+  ]);
 
-  // 4. Canvas Renderer (Draws edges, nodes, labels, selection halo)
+  // 4. Canvas Renderer (Draws cosmic background, galaxy watermarks, edges, nodes, labels, selection halo)
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -558,40 +653,61 @@ export function GlobalMindMapView({
     const isSearching = searchQuery.trim().length > 0;
     const searchLower = searchQuery.toLowerCase().trim();
 
-    // 1. Draw Edges
+    // 1. Draw Notebook Galaxy Watermarks & Ambient Boundaries (Constellation mode)
+    if (groupByNotebook && !isSearching) {
+      notebookCenters.forEach((center, title) => {
+        // Draw subtle galaxy orbit / cluster glow
+        const gradient = ctx.createRadialGradient(center.x, center.y, 10, center.x, center.y, 140);
+        gradient.addColorStop(0, center.color + '18');
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, 140, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Notebook title watermark in background
+        ctx.font = '600 11px system-ui, -apple-system, sans-serif';
+        ctx.fillStyle = center.color + '66';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(title.toUpperCase(), center.x, center.y - 100);
+      });
+    }
+
+    // 2. Draw Edges
     for (const edge of filteredEdges) {
       const source = nodeMap.get(edge.source);
       const target = nodeMap.get(edge.target);
       if (!source || !target) continue;
 
       const isConnectedToFocus = focusId ? (edge.source === focusId || edge.target === focusId) : true;
-      const alpha = focusId ? (isConnectedToFocus ? 0.8 : 0.08) : 0.28;
+      const alpha = focusId ? (isConnectedToFocus ? 0.85 : 0.05) : 0.22;
 
       ctx.beginPath();
       ctx.moveTo(source.x, source.y);
       ctx.lineTo(target.x, target.y);
       ctx.strokeStyle = edge.color || '#94a3b8';
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = isConnectedToFocus && focusId ? 2.5 : 1.2;
+      ctx.lineWidth = isConnectedToFocus && focusId ? 2.2 : 1.0;
       ctx.stroke();
     }
     ctx.globalAlpha = 1.0;
 
-    // 2. Draw Nodes
+    // 3. Draw Nodes
     for (const node of filteredNodes) {
       const isSelected = selectedNodeId === node.id;
       const isHovered = hoveredNodeId === node.id;
       const isConnected = focusId ? connectedNodeIds.has(node.id) : true;
       const matchesSearch = isSearching ? node.label.toLowerCase().includes(searchLower) || (node.tags || []).some(t => t.includes(searchLower)) : true;
 
-      const nodeAlpha = (focusId && !isConnected) || (isSearching && !matchesSearch) ? 0.15 : 1.0;
+      const nodeAlpha = (focusId && !isConnected) || (isSearching && !matchesSearch) ? 0.12 : 1.0;
       ctx.globalAlpha = nodeAlpha;
 
       // Glow halo on hover or select
       if (isSelected || isHovered) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.radius + 6, 0, Math.PI * 2);
-        ctx.fillStyle = node.color + '44';
+        ctx.fillStyle = node.color + '33';
         ctx.fill();
         ctx.strokeStyle = node.color;
         ctx.lineWidth = 2.5;
@@ -601,10 +717,10 @@ export function GlobalMindMapView({
       // Main Node Circle
       ctx.beginPath();
       ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-      ctx.fillStyle = node.type === 'tag' ? node.color : '#ffffff';
+      ctx.fillStyle = node.type === 'tag' ? node.color : '#0f172a';
       ctx.fill();
       ctx.strokeStyle = node.color;
-      ctx.lineWidth = node.type === 'tag' ? 3 : 2;
+      ctx.lineWidth = node.type === 'tag' ? 3 : 2.2;
       ctx.stroke();
 
       // Node Icon / Badge inside
@@ -623,41 +739,59 @@ export function GlobalMindMapView({
       } else {
         // Tag node: print item count
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+        ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(String(node.itemCount || 1), node.x, node.y);
       }
 
-      // Label below or pill
-      const fontSize = node.type === 'tag' ? 12 : node.type === 'page' ? 11 : 10;
-      ctx.font = `${node.type === 'tag' ? 'bold ' : 'medium '}${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
+      // Label below (Level of Detail: show when zoomed in, hovered, selected, or tag)
+      const shouldShowLabel = zoom >= 0.65 || isHovered || isSelected || node.type === 'tag' || isSearching;
 
-      const labelText = node.label.length > 24 ? node.label.slice(0, 22) + '…' : node.label;
-      const labelY = node.y + node.radius + 5;
+      if (shouldShowLabel) {
+        const fontSize = node.type === 'tag' ? 12 : 11;
+        ctx.font = `${node.type === 'tag' ? 'bold ' : '500 '}${fontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
 
-      // Label background pill for readability
-      const textMetrics = ctx.measureText(labelText);
-      const paddingX = 6;
-      const paddingY = 3;
-      const bgWidth = textMetrics.width + paddingX * 2;
-      const bgHeight = fontSize + paddingY * 2;
+        const labelText = node.label.length > 22 ? node.label.slice(0, 20) + '…' : node.label;
+        const labelY = node.y + node.radius + 5;
 
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.beginPath();
-      ctx.roundRect(node.x - bgWidth / 2, labelY, bgWidth, bgHeight, 5);
-      ctx.fill();
+        // Label background pill with subtle border
+        const textMetrics = ctx.measureText(labelText);
+        const paddingX = 6;
+        const paddingY = 3;
+        const bgWidth = textMetrics.width + paddingX * 2;
+        const bgHeight = fontSize + paddingY * 2;
 
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillText(labelText, node.x, labelY + paddingY);
+        ctx.fillStyle = 'rgba(10, 10, 18, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(node.x - bgWidth / 2, labelY, bgWidth, bgHeight, 5);
+        ctx.fill();
+        ctx.strokeStyle = isHovered || isSelected ? node.color : 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = isHovered || isSelected ? '#ffffff' : '#e2e8f0';
+        ctx.fillText(labelText, node.x, labelY + paddingY);
+      }
     }
 
     ctx.restore();
-  }, [filteredNodes, filteredEdges, pan, zoom, selectedNodeId, hoveredNodeId, connectedNodeIds, searchQuery]);
+  }, [
+    filteredNodes, 
+    filteredEdges, 
+    pan, 
+    zoom, 
+    selectedNodeId, 
+    hoveredNodeId, 
+    connectedNodeIds, 
+    searchQuery, 
+    groupByNotebook, 
+    notebookCenters
+  ]);
 
-  // Animation loop for continuous smooth drawing during physics or pan/zoom
+  // Continuous smooth rendering frame loop
   useEffect(() => {
     let frameId: number;
     const loop = () => {
@@ -668,7 +802,7 @@ export function GlobalMindMapView({
     return () => cancelAnimationFrame(frameId);
   }, [draw]);
 
-  // 5. Pointer & Gesture Handlers (Pan, Zoom, Drag Node, Click to Select)
+  // 5. Pointer & Gesture Handlers (Pan, Zoom, Drag Node, Click to Select, Double Click to Open)
   const getCanvasCoords = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { worldX: 0, worldY: 0, clientX: e.clientX, clientY: e.clientY };
@@ -676,7 +810,6 @@ export function GlobalMindMapView({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Convert screen coordinates to world coordinates
     const worldX = (mouseX - rect.width / 2 - pan.x) / zoom;
     const worldY = (mouseY - rect.height / 2 - pan.y) / zoom;
     return { worldX, worldY, clientX: e.clientX, clientY: e.clientY };
@@ -687,7 +820,7 @@ export function GlobalMindMapView({
       const node = filteredNodes[i];
       const dx = wx - node.x;
       const dy = wy - node.y;
-      if (Math.sqrt(dx * dx + dy * dy) <= node.radius + 6) {
+      if (Math.sqrt(dx * dx + dy * dy) <= node.radius + 8) {
         return node;
       }
     }
@@ -698,9 +831,20 @@ export function GlobalMindMapView({
     const { worldX, worldY, clientX, clientY } = getCanvasCoords(e);
     const hitNode = findNodeAtCoords(worldX, worldY);
 
+    const now = Date.now();
+    const isDoubleClick = now - lastClickTimeRef.current < 300;
+    lastClickTimeRef.current = now;
+
     if (hitNode) {
+      if (isDoubleClick && hitNode.type === 'page' && hitNode.pageId) {
+        onSelectPage(hitNode.pageId);
+        onClose();
+        return;
+      }
+
       draggedNodeRef.current = hitNode;
       hitNode.isFixed = true;
+      alphaRef.current = 0.5; // Re-heat gently while dragging
       setIsSimulating(true);
       setSelectedNodeId(hitNode.id);
     } else {
@@ -758,14 +902,14 @@ export function GlobalMindMapView({
       maxY = Math.max(maxY, n.y);
     });
 
-    const graphWidth = maxX - minX + 120;
-    const graphHeight = maxY - minY + 120;
+    const graphWidth = maxX - minX + 160;
+    const graphHeight = maxY - minY + 160;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const scaleX = canvas.clientWidth / graphWidth;
     const scaleY = canvas.clientHeight / graphHeight;
-    const newZoom = Math.min(1.5, Math.max(0.3, Math.min(scaleX, scaleY)));
+    const newZoom = Math.min(1.4, Math.max(0.3, Math.min(scaleX, scaleY)));
 
     setZoom(newZoom);
     setPan({
@@ -783,8 +927,8 @@ export function GlobalMindMapView({
     <div className="fixed inset-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col font-sans select-none overflow-hidden">
       {/* 1. Header Toolbar */}
       <header 
-        className="flex items-center justify-between px-4 py-3 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 z-10 shrink-0"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+        className="flex items-center justify-between px-4 py-2.5 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 z-10 shrink-0"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}
       >
         <div className="flex items-center gap-3">
           <button
@@ -804,8 +948,11 @@ export function GlobalMindMapView({
               <span>Knowledge Graph</span>
             </span>
 
-            <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800 border border-zinc-700 text-zinc-300">
-              {nodes.filter(n => n.type === 'tag').length} tags · {nodes.filter(n => n.type === 'page').length} notes
+            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800 border border-zinc-700 text-zinc-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>{nodes.filter(n => n.type === 'page').length} notes</span>
+              <span>·</span>
+              <span>{nodes.filter(n => n.type === 'tag').length} tags</span>
             </span>
           </div>
         </div>
@@ -843,27 +990,27 @@ export function GlobalMindMapView({
             </button>
           )}
 
-          {/* Toggle Block Items */}
+          {/* Obsidian Graph Settings Button */}
           <button
-            onClick={() => setShowBlocks(!showBlocks)}
-            className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              showBlocks 
-                ? 'bg-zinc-800 text-purple-300 border-purple-500/40' 
-                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+            onClick={() => setShowSettingsDrawer(!showSettingsDrawer)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              showSettingsDrawer 
+                ? 'bg-zinc-800 text-purple-300 border-purple-500/40 shadow-sm' 
+                : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
             }`}
-            title="Toggle tagged paragraphs, audio, and pins"
+            title="Graph View Controls & Filters"
           >
-            <Layers size={13} />
-            <span>{showBlocks ? "Hide Blocks" : "Show Blocks"}</span>
+            <SlidersHorizontal size={14} />
+            <span className="hidden sm:inline">Settings</span>
           </button>
 
-          {/* Physics Simulation Toggle */}
+          {/* Reheat / Restart Physics Button */}
           <button
-            onClick={() => setIsSimulating(!isSimulating)}
-            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
-            title={isSimulating ? "Pause Physics (Stabilize)" : "Resume Physics"}
+            onClick={reheatSimulation}
+            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-amber-300 transition-colors"
+            title="Rearrange & Re-balance Physics"
           >
-            {isSimulating ? <Pause size={14} /> : <Play size={14} />}
+            <Flame size={15} />
           </button>
 
           {/* Fit to View */}
@@ -878,7 +1025,7 @@ export function GlobalMindMapView({
       </header>
 
       {/* 2. Main Interactive Graph Canvas */}
-      <div className="flex-1 relative overflow-hidden bg-zinc-950">
+      <div className="flex-1 relative overflow-hidden bg-[#09090b]">
         <canvas
           ref={canvasRef}
           onPointerDown={handlePointerDown}
@@ -918,9 +1065,163 @@ export function GlobalMindMapView({
           </button>
         </div>
 
+        {/* Floating Obsidian-Style Settings Drawer */}
+        {showSettingsDrawer && (
+          <div className="absolute top-4 left-4 w-76 p-4 bg-zinc-900/95 backdrop-blur-xl rounded-2xl border border-zinc-800 shadow-2xl z-30 animate-in fade-in slide-in-from-top-2 duration-150 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <span className="font-bold text-white flex items-center gap-1.5">
+                <SlidersHorizontal size={14} className="text-purple-400" />
+                <span>Graph View Settings</span>
+              </span>
+              <button
+                onClick={() => setShowSettingsDrawer(false)}
+                className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="py-3 space-y-3.5">
+              {/* Group By Notebook Constellations */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-medium text-zinc-200 block">Notebook Constellations</span>
+                  <span className="text-[10px] text-zinc-500">Cluster notes by project</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setGroupByNotebook(!groupByNotebook);
+                    reheatSimulation();
+                  }}
+                  className={`w-9 h-5 rounded-full transition-colors relative p-0.5 ${
+                    groupByNotebook ? 'bg-purple-600' : 'bg-zinc-700'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                    groupByNotebook ? 'translate-x-4' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Show Media & Canvas Pins */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-medium text-zinc-200 block">Show Canvas Blocks</span>
+                  <span className="text-[10px] text-zinc-500">Audio, text & canvas pins</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowBlocks(!showBlocks);
+                    reheatSimulation();
+                  }}
+                  className={`w-9 h-5 rounded-full transition-colors relative p-0.5 ${
+                    showBlocks ? 'bg-purple-600' : 'bg-zinc-700'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                    showBlocks ? 'translate-x-4' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Show Orphan Notes Only */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-medium text-zinc-200 block">Orphan Notes Only</span>
+                  <span className="text-[10px] text-zinc-500">Find notes with 0 connections</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowOrphansOnly(!showOrphansOnly);
+                    reheatSimulation();
+                  }}
+                  className={`w-9 h-5 rounded-full transition-colors relative p-0.5 ${
+                    showOrphansOnly ? 'bg-amber-600' : 'bg-zinc-700'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                    showOrphansOnly ? 'translate-x-4' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Filter By Specific Notebook */}
+              <div className="pt-2 border-t border-zinc-800">
+                <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1.5">
+                  Filter by Notebook
+                </label>
+                <select
+                  value={selectedNotebookId}
+                  onChange={(e) => {
+                    setSelectedNotebookId(e.target.value);
+                    reheatSimulation();
+                  }}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-1.5 px-2 text-xs text-zinc-200 focus:outline-none focus:border-purple-500"
+                >
+                  <option value="all">All Notebooks ({notebooks.length})</option>
+                  {notebooks.map(nb => (
+                    <option key={nb.id} value={nb.title}>
+                      {nb.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Force Sliders */}
+              <div className="pt-2 border-t border-zinc-800 space-y-2.5">
+                <div>
+                  <div className="flex justify-between text-[11px] text-zinc-400 mb-1">
+                    <span>Node Spacing (Repulsion)</span>
+                    <span className="font-mono text-zinc-300">{repulsionStrength}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="500"
+                    max="3000"
+                    step="100"
+                    value={repulsionStrength}
+                    onChange={(e) => {
+                      setRepulsionStrength(Number(e.target.value));
+                      reheatSimulation();
+                    }}
+                    className="w-full accent-purple-500 h-1.5 bg-zinc-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[11px] text-zinc-400 mb-1">
+                    <span>Link Distance</span>
+                    <span className="font-mono text-zinc-300">{linkDistance}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="60"
+                    max="240"
+                    step="10"
+                    value={linkDistance}
+                    onChange={(e) => {
+                      setLinkDistance(Number(e.target.value));
+                      reheatSimulation();
+                    }}
+                    className="w-full accent-purple-500 h-1.5 bg-zinc-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={reheatSimulation}
+                className="w-full py-2 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Flame size={14} className="text-amber-400" />
+                <span>Re-balance Constellations</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Floating Node Details Card when clicked */}
         {activeSelectedNode && (
-          <div className="absolute top-6 right-6 w-80 max-w-[calc(100vw-3rem)] p-4 bg-zinc-900/95 backdrop-blur-lg rounded-2xl border border-zinc-800 shadow-2xl z-30 animate-in fade-in slide-in-from-right-4 duration-150">
+          <div className="absolute top-4 right-4 w-84 max-w-[calc(100vw-2rem)] p-4 bg-zinc-900/95 backdrop-blur-xl rounded-2xl border border-zinc-800 shadow-2xl z-30 animate-in fade-in slide-in-from-right-4 duration-150">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div 
@@ -928,7 +1229,7 @@ export function GlobalMindMapView({
                   style={{ backgroundColor: activeSelectedNode.color }} 
                 />
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                  {activeSelectedNode.type === 'tag' ? 'Tag Cluster' : activeSelectedNode.type === 'page' ? 'Note Document' : 'Tagged Block'}
+                  {activeSelectedNode.type === 'tag' ? 'Tag Hub' : activeSelectedNode.type === 'page' ? 'Note Document' : 'Tagged Block'}
                 </span>
               </div>
               <button
@@ -944,8 +1245,9 @@ export function GlobalMindMapView({
             </h3>
 
             {activeSelectedNode.sublabel && (
-              <p className="text-xs text-zinc-400 mt-0.5">
-                {activeSelectedNode.sublabel}
+              <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1">
+                <FolderOpen size={12} className="text-zinc-500" />
+                <span>{activeSelectedNode.sublabel}</span>
               </p>
             )}
 
@@ -958,9 +1260,7 @@ export function GlobalMindMapView({
                 </div>
                 {onOpenTagHub && (
                   <button
-                    onClick={() => {
-                      onOpenTagHub();
-                    }}
+                    onClick={() => onOpenTagHub()}
                     className="w-full mt-2 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-purple-600/20"
                   >
                     <Hash size={13} />
@@ -973,7 +1273,7 @@ export function GlobalMindMapView({
             {/* Page Node Specific Details */}
             {activeSelectedNode.type === 'page' && activeSelectedNode.pageId && (
               <div className="mt-3 pt-3 border-t border-zinc-800/80 space-y-3">
-                {activeSelectedNode.tags && activeSelectedNode.tags.length > 0 && (
+                {activeSelectedNode.tags && activeSelectedNode.tags.length > 0 ? (
                   <div>
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 block mb-1">
                       Tags on this note:
@@ -989,6 +1289,10 @@ export function GlobalMindMapView({
                       ))}
                     </div>
                   </div>
+                ) : (
+                  <div className="text-[11px] text-zinc-500 italic bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/60">
+                    No tags attached yet. Add tags in the note to connect it to other ideas!
+                  </div>
                 )}
 
                 <button
@@ -999,7 +1303,7 @@ export function GlobalMindMapView({
                   className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-blue-600/20"
                 >
                   <FileText size={13} />
-                  <span>Open Note</span>
+                  <span>Open Note in Canvas</span>
                 </button>
               </div>
             )}
