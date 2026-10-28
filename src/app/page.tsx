@@ -748,26 +748,23 @@ export default function Home() {
               user={currentUser}
             />
 
-            {/* Attached Sidebar Toggle Handle (When Sidebar is Open) */}
-            <button
-              onClick={() => setIsSidebarOpen(false)}
-              className="absolute top-1.5 -right-5 z-50 flex items-center justify-center w-5 h-8 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white border border-l-0 border-zinc-700/80 rounded-r-md shadow-md transition-colors group cursor-pointer"
-              title="Collapse Sidebar (Cmd+B)"
-            >
-              <ChevronLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
-            </button>
           </div>
 
-          {/* Attached Sidebar Toggle Handle (When Sidebar is Closed) */}
-          {!isSidebarOpen && (
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="absolute top-1.5 left-0 z-50 flex items-center justify-center w-5 h-8 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white border border-l-0 border-zinc-700/80 rounded-r-md shadow-md transition-colors group cursor-pointer animate-in fade-in duration-150"
-              title="Expand Sidebar (Cmd+B)"
-            >
+          {/* Attached Sidebar Toggle Handle on the Border (Like ZipMap / Reference Image) */}
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="fixed z-[60] top-14 flex items-center justify-center w-5 h-8 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-l-0 border-zinc-700/80 rounded-r-md shadow-lg transition-all duration-300 group cursor-pointer"
+            style={{
+              left: isSidebarOpen ? '256px' : '0px',
+            }}
+            title={isSidebarOpen ? "Collapse Sidebar (Cmd+B)" : "Expand Sidebar (Cmd+B)"}
+          >
+            {isSidebarOpen ? (
+              <ChevronLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
+            ) : (
               <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
-            </button>
-          )}
+            )}
+          </button>
         </>
       )}
       
@@ -852,13 +849,11 @@ export default function Home() {
               headerControls={
                 <>
                   <button
-                    onClick={() => handleOpenAskAI()}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-primary-600/15 to-purple-600/15 hover:from-primary-600/25 hover:to-purple-600/25 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold transition-all shrink-0 shadow-xs"
-                    title="Ask Motif AI across all notes & meetings (Cmd+J)"
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors flex items-center justify-center shrink-0"
+                    title={isSidebarOpen ? "Collapse Sidebar (Cmd+B)" : "Expand Sidebar (Cmd+B)"}
                   >
-                    <Bot size={13} className="text-primary-400" />
-                    <span>Ask AI</span>
-                    <kbd className="hidden sm:inline-block ml-0.5 px-1 py-0.2 bg-zinc-800/80 rounded text-[10px] text-zinc-400 font-mono">⌘J</kbd>
+                    {isSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
                   </button>
                   <button
                     onClick={(e) => {

@@ -123,6 +123,15 @@ export function Sidebar(props: SidebarProps) {
           >
             <Plus size={16} />
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
+              title="Collapse Sidebar (Cmd+B)"
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          )}
         </div>
       </div>
 

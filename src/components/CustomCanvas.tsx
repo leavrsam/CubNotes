@@ -2475,7 +2475,7 @@ export function CustomCanvas({
           
           {/* Inject headerControls here on the left */}
           {headerControls && (
-            <div className={`flex items-center pb-1 mr-2 gap-1 border-r border-zinc-300 dark:border-zinc-700 pr-2 ${!isSidebarOpen ? 'ml-6' : ''}`}>
+            <div className="flex items-center pb-1 mr-2 gap-1 border-r border-zinc-300 dark:border-zinc-700 pr-2">
               {headerControls}
             </div>
           )}
