@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import toast from "react-hot-toast";
 import type { AudioNode } from "./CustomCanvas";
 import { TranscriptionTableOfContents, extractMarkdownTOC, extractTranscriptTOC, slugify } from "./TranscriptionTableOfContents";
+import { copyFormattedMeetingNotes } from "@/lib/clipboard";
 
 interface MeetingWorkspaceProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ export function MeetingWorkspace({
   const [shorthandNotes, setShorthandNotes] = useState(activeAudioNode?.notes || "");
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [showEnhanced, setShowEnhanced] = useState(Boolean(activeAudioNode?.enhancedNotes));
+  const [synthesisTemplate, setSynthesisTemplate] = useState<'standard' | 'one_on_one' | 'technical' | 'client'>('standard');
   
   // Interactive Chat / Q&A state
   const [chatInput, setChatInput] = useState("");
@@ -195,6 +197,7 @@ export function MeetingWorkspace({
           notes: shorthandNotes,
           transcript,
           meetingTitle: activeAudioNode?.title || pageTitle,
+          template: synthesisTemplate,
           apiKey: customKey || undefined,
         })
       });
@@ -274,15 +277,20 @@ export function MeetingWorkspace({
     }
   };
 
-  // Copy summary to clipboard
-  const handleCopySummary = () => {
-    const textToCopy = activeAudioNode?.summary || activeAudioNode?.enhancedNotes || shorthandNotes;
+  // Copy clean formatted summary to clipboard (Slack, Email, Docs ready)
+  const handleCopySummary = async () => {
+    const textToCopy = activeAudioNode?.enhancedNotes || activeAudioNode?.summary || shorthandNotes;
     if (!textToCopy) {
       toast.error("Nothing to copy yet.");
       return;
     }
-    navigator.clipboard.writeText(textToCopy);
-    toast.success("Summary copied to clipboard!");
+    const title = activeAudioNode?.title || pageTitle || "Meeting Takeaways";
+    const success = await copyFormattedMeetingNotes(textToCopy, title);
+    if (success) {
+      toast.success("Formatted takeaways copied! Ready to paste into Slack, Email, or Docs.");
+    } else {
+      toast.error("Failed to copy takeaways.");
+    }
   };
 
   // Export full meeting report as Markdown
@@ -334,14 +342,26 @@ export function MeetingWorkspace({
       {/* Top Navigation Bar */}
       <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onClose}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors text-xs font-medium"
-            title="Return to Whiteboard Canvas"
-          >
-            <ArrowLeft size={16} />
-            <span className="hidden sm:inline">Whiteboard Canvas</span>
-          </button>
+          {/* Dual-Mode Pill Switcher */}
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-2xs">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full text-xs font-semibold transition-colors"
+              title="Return to Infinite Whiteboard Canvas"
+            >
+              <Layers size={13} className="text-primary-500" />
+              <span>Canvas</span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white rounded-full text-xs font-semibold shadow-2xs"
+              title="Active: Meeting Workspace"
+            >
+              <Mic size={13} className="text-primary-600 dark:text-primary-400" />
+              <span>Meeting Mode</span>
+            </button>
+          </div>
 
           <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700 hidden sm:block" />
 
@@ -436,10 +456,11 @@ export function MeetingWorkspace({
 
           <button
             onClick={handleCopySummary}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            title="Copy summary to clipboard"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium transition-colors"
+            title="Copy clean formatted takeaways (Slack, Email, Docs ready)"
           >
-            <Copy size={16} />
+            <Copy size={14} className="text-zinc-600 dark:text-zinc-400" />
+            <span className="hidden sm:inline">Copy Takeaways</span>
           </button>
 
           <button
@@ -509,15 +530,30 @@ export function MeetingWorkspace({
                     {showEnhanced ? "View Raw Shorthand" : "View Enhanced Version"}
                   </button>
                 )}
-                <button
-                  onClick={handleEnhanceNotes}
-                  disabled={isEnhancing}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-95"
-                  title="Enrich your shorthand notes with exact figures, dates, and action items from the audio"
-                >
-                  <Sparkles size={13} className={isEnhancing ? "animate-spin" : ""} />
-                  <span>{isEnhancing ? "Enhancing..." : "Enhance Notes"}</span>
-                </button>
+
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={synthesisTemplate}
+                    onChange={(e) => setSynthesisTemplate(e.target.value as any)}
+                    className="text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none font-medium cursor-pointer"
+                    title="Choose meeting template style"
+                  >
+                    <option value="standard">Standard Meeting</option>
+                    <option value="one_on_one">1-on-1 Catch-up</option>
+                    <option value="technical">Technical / Spec</option>
+                    <option value="client">Client / Sales</option>
+                  </select>
+
+                  <button
+                    onClick={handleEnhanceNotes}
+                    disabled={isEnhancing}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-95"
+                    title="Enrich your shorthand notes with exact figures, dates, and action items from the audio"
+                  >
+                    <Sparkles size={13} className={isEnhancing ? "animate-spin" : ""} />
+                    <span>{isEnhancing ? "Enhancing..." : "Enhance Notes"}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

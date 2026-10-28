@@ -7,7 +7,13 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { notes = '', transcript = '', meetingTitle = 'Meeting', apiKey: clientApiKey } = body;
+    const { 
+      notes = '', 
+      transcript = '', 
+      meetingTitle = 'Meeting', 
+      template = 'standard',
+      apiKey: clientApiKey 
+    } = body;
 
     const apiKey = clientApiKey || req.headers.get('x-gemini-api-key') || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
@@ -20,6 +26,37 @@ export async function POST(req: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
+    let templateInstructions = "";
+    if (template === 'one_on_one') {
+      templateInstructions = `
+TARGET STRUCTURE (1-on-1 Catch-up):
+- "## Context & Role Check-in": Personal alignment, state of mind, relationship context.
+- "## Current Priorities & Progress": Key initiatives discussed and recent wins.
+- "## Challenges & Feedback": Blockers, growth feedback, or support requested.
+- "## Next Commitments": Specific mutual commitments with "- [ ] Owner: Task".`;
+    } else if (template === 'technical') {
+      templateInstructions = `
+TARGET STRUCTURE (Technical / Architecture Spec):
+- "## Architectural Decisions": Core technical decisions finalized, with rationale.
+- "## System Design & Schema Changes": API, database, or protocol changes discussed.
+- "## Trade-offs & Alternatives Considered": Rejected alternatives and identified risks.
+- "## Implementation Tasks & Blockers": Concrete engineering tasks with "- [ ] Owner: Task".`;
+    } else if (template === 'client') {
+      templateInstructions = `
+TARGET STRUCTURE (Client / Sales Discovery):
+- "## Client Goals & Pain Points": The client's core problems, desired outcomes, and requirements.
+- "## Scope, Budget & Timing": Agreed bounds, estimates, or schedule considerations.
+- "## Questions & Objections": Key inquiries raised by the client and answers provided.
+- "## Action Items & Deliverables": Follow-ups with "- [ ] Owner: Deliverable".`;
+    } else {
+      templateInstructions = `
+TARGET STRUCTURE (Executive Summary):
+- "## Executive Summary": Concise high-level synopsis.
+- "## Discussion Highlights": Fleshed out from the user's notes and transcript.
+- "## Key Decisions": Explicit list of decisions made.
+- "## Action Items": Checkbox list format "- [ ] Owner: Task (deadline if mentioned)".`;
+    }
+
     const prompt = `You are an elite executive assistant and meeting note enhancer.
 Your task is to take the user's raw shorthand meeting notes and ENRICH them using the verbatim meeting transcript.
 
@@ -30,6 +67,7 @@ CRITICAL INSTRUCTIONS:
 4. EXTRACT ACTION ITEMS: Create an explicit "Action Items" checklist with checkboxes format "- [ ] Owner: Task (due date if mentioned)".
 5. FORMATTING: Use clean, professional Markdown with clear headings (##, ###), bold text for emphasis, and bullet points. DO NOT use emojis.
 6. GROUNDING: DO NOT hallucinate. Every detail added must be directly supported by the transcript.
+${templateInstructions}
 
 Meeting Title: "${meetingTitle}"
 

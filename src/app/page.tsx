@@ -583,7 +583,7 @@ export default function Home() {
           const newAudioId = uuidv4();
           activeRecordingAudioIdRef.current = newAudioId;
           window.dispatchEvent(new CustomEvent('start-recording-node', { detail: { id: newAudioId } }));
-          await invoke("start_recording");
+          await invoke("start_recording", { sessionId: newAudioId, canvasPageId: selectedPageId || 'default' });
           setIsDesktopRecording(true);
         } catch (e) {
           console.error("Failed to start desktop recording, attempting web mic fallback:", e);

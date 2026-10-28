@@ -2,9 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, RotateCcw, RotateCw } from 'lucide-react';
+import { audioPlaybackSyncBus } from '@/lib/audioPlaybackSync';
 
 export interface AudioPlayerProps {
   url: string;
+  audioBlockId?: string;
   initialDurationMs?: number;
   className?: string;
   onEnded?: () => void;
@@ -23,7 +25,7 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }: AudioPlayerProps) {
+export function AudioPlayer({ url, audioBlockId, initialDurationMs, className = '', onEnded }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressBarRef = useRef<HTMLDivElement | null>(null);
 
@@ -43,6 +45,34 @@ export function AudioPlayer({ url, initialDurationMs, className = '', onEnded }:
       setDuration(initialDurationMs / 1000);
     }
   }, [initialDurationMs, duration]);
+
+  // Synchronize playback state with global AudioPlaybackSyncBus
+  useEffect(() => {
+    if (!audioBlockId) return;
+    const unsub = audioPlaybackSyncBus.onSeek((targetId, timestampMs) => {
+      if (targetId === audioBlockId && audioRef.current) {
+        const seekSec = Math.max(0, timestampMs / 1000);
+        audioRef.current.currentTime = seekSec;
+        setCurrentTime(seekSec);
+        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      }
+    });
+    return () => {
+      unsub();
+      audioPlaybackSyncBus.clearPlayback(audioBlockId);
+    };
+  }, [audioBlockId]);
+
+  useEffect(() => {
+    if (audioBlockId) {
+      audioPlaybackSyncBus.updatePlayback(
+        audioBlockId,
+        currentTime * 1000,
+        duration * 1000,
+        isPlaying
+      );
+    }
+  }, [audioBlockId, currentTime, duration, isPlaying]);
 
   // Audio metadata loading & WebM duration resolution trick
   const handleLoadedMetadata = useCallback(() => {

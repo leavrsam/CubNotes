@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2 } from "lucide-react";
+import { Pen, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -37,6 +37,8 @@ import { isNativeAndroid, startNativeRecording, stopNativeRecording, pauseNative
 import { processAudioTranscription } from "@/lib/transcribe";
 import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 import { useYjsRoom } from "@/lib/yjs/useYjsRoom";
+import { activeRecordingManager } from "@/lib/activeRecordingManager";
+import { audioPlaybackSyncBus } from "@/lib/audioPlaybackSync";
 
 export interface CustomCanvasProps {
   pageId: string;
@@ -52,6 +54,12 @@ export interface CustomCanvasProps {
   isSidebarOpen?: boolean;
 }
 
+export type ShapeMeta = {
+  audioBlockId?: string;
+  t?: number;
+  [key: string]: any;
+};
+
 export type Stroke = {
   id: string;
   points: number[][]; // [x, y, pressure][]
@@ -66,6 +74,7 @@ export type Stroke = {
   scaleY?: number;
   blockId?: string; // Links local strokes to specific blocks
   blockY?: number; // The absolute vertical position in the block feed
+  meta?: ShapeMeta;
 };
 
 export type TextNode = {
@@ -75,6 +84,7 @@ export type TextNode = {
   content: string;
   width: number;
   tags?: string[];
+  meta?: ShapeMeta;
 };
 
 export type AudioNode = {
@@ -98,6 +108,7 @@ export type AudioNode = {
   audioExpiresAt?: number;
   isAudioSavedPermanently?: boolean;
   isCollapsed?: boolean;
+  meta?: ShapeMeta;
 };
 
 export type ImageNode = {
@@ -107,6 +118,7 @@ export type ImageNode = {
   url: string;
   width?: number;
   height?: number;
+  meta?: ShapeMeta;
 };
 
 export type FileNode = {
@@ -117,6 +129,12 @@ export type FileNode = {
   filename: string;
   width?: number;
   height?: number;
+  pageCount?: number;
+  currentPage?: number;
+  isPdf?: boolean;
+  unpackedSlideIndex?: number;
+  unpackedParentId?: string;
+  meta?: ShapeMeta;
 };
 
 export type VideoNode = {
@@ -156,6 +174,7 @@ export type ShapeNode = {
   fontSize?: number;
   textColor?: string;
   textAlign?: 'left' | 'center' | 'right';
+  meta?: ShapeMeta;
 };
 
 export type ConnectorNode = {
@@ -1588,6 +1607,11 @@ export function CustomCanvas({
   };
 
   const handleCanvasClick = useCallback((x: number, y: number) => {
+    const recState = activeRecordingManager.getState();
+    const activeMeta = (recState.isRecording && recState.audioBlockId)
+      ? { audioBlockId: recState.audioBlockId, t: activeRecordingManager.getActiveElapsedMs() }
+      : undefined;
+
     // If in shape placer mode, clicking canvas places the active shape
     if (tool === "shape") {
       const isRound = activeShapeType === 'circle';
@@ -1605,7 +1629,8 @@ export function CustomCanvas({
         strokeWidth: 2,
         strokeStyle: 'solid',
         fontSize: 14,
-        textAlign: 'center'
+        textAlign: 'center',
+        meta: activeMeta
       };
       setShapes(prev => [...prev, newShape]);
       setSelectedShapeId(newShape.id);
@@ -1631,7 +1656,8 @@ export function CustomCanvas({
         x,
         y: safeY,
         width: 600,
-        content: "<p></p>"
+        content: "<p></p>",
+        meta: activeMeta
       };
       
       setTexts(prev => {
@@ -1652,6 +1678,7 @@ export function CustomCanvas({
     const handleStartRecordingNode = (e: Event) => {
       const customEvent = e as CustomEvent<{ id: string }>;
       const { id } = customEvent.detail;
+      activeRecordingManager.start(id);
       const center = getCanvasCenter();
       setAudios(prev => {
         if (prev.some(a => a.id === id)) return prev;
@@ -1674,6 +1701,7 @@ export function CustomCanvas({
     const handleInjectTranscribing = (e: Event) => {
       const customEvent = e as CustomEvent<{ id: string }>;
       const { id } = customEvent.detail;
+      activeRecordingManager.stop();
       setAudios(prev => prev.map(a => a.id === id ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
     };
 
@@ -1735,12 +1763,48 @@ export function CustomCanvas({
       setAudios(prev => prev.map(a => a.isLiveRecording ? { ...a, transcript } : a));
     };
 
+    const handleFocusTimeInk = (e: Event) => {
+      const { audioBlockId, timestampMs } = (e as CustomEvent<{ audioBlockId: string; timestampMs: number }>).detail;
+      const matchingStrokes = strokes.filter(s =>
+        s.meta?.audioBlockId === audioBlockId &&
+        s.meta?.t != null &&
+        Math.abs(s.meta.t - timestampMs) <= 30000
+      );
+
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      let count = 0;
+
+      matchingStrokes.forEach(s => {
+        s.points.forEach(([x, y]) => {
+          const ptX = x + (s.x || 0);
+          const ptY = y + (s.y || 0);
+          if (ptX < minX) minX = ptX;
+          if (ptX > maxX) maxX = ptX;
+          if (ptY < minY) minY = ptY;
+          if (ptY > maxY) maxY = ptY;
+          count++;
+        });
+      });
+
+      if (count > 0 && isFinite(minX) && isFinite(maxX)) {
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const screenCenterX = window.innerWidth / 2;
+        const screenCenterY = window.innerHeight / 2;
+        setPan({
+          x: screenCenterX - centerX * zoom,
+          y: screenCenterY - centerY * zoom
+        });
+      }
+    };
+
     window.addEventListener('start-recording-node', handleStartRecordingNode);
     window.addEventListener('inject-transcribing', handleInjectTranscribing);
     window.addEventListener('inject-summary', handleInjectSummary);
     window.addEventListener('inject-audio', handleInjectAudio);
     window.addEventListener('jump-to-coordinates', handleJumpToCoordinates);
     window.addEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
+    window.addEventListener('motif-focus-time-ink', handleFocusTimeInk);
 
     return () => {
       window.removeEventListener('start-recording-node', handleStartRecordingNode);
@@ -1749,8 +1813,9 @@ export function CustomCanvas({
       window.removeEventListener('inject-audio', handleInjectAudio);
       window.removeEventListener('jump-to-coordinates', handleJumpToCoordinates);
       window.removeEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
+      window.removeEventListener('motif-focus-time-ink', handleFocusTimeInk);
     };
-  }, [getCanvasCenter, setAudios, setPan, zoom]);
+  }, [getCanvasCenter, setAudios, setPan, zoom, strokes]);
 
   const getSelectionBounds = useCallback(() => {
     if (selectedIds.length === 0) return null;
@@ -2547,14 +2612,26 @@ export function CustomCanvas({
               </button>
             )}
 
-            <button
-              onClick={() => handleOpenMeetingWorkspace()}
-              className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-full text-xs font-semibold shadow-xs transition-transform active:scale-95"
-              title="Open Meeting Workspace"
-            >
-              <Sparkles size={13} className="text-amber-200" />
-              <span>Meeting Workspace</span>
-            </button>
+            {/* Dual-Mode View Switcher (Canvas vs Meeting Mode) */}
+            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-2xs">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white rounded-full text-xs font-semibold shadow-2xs cursor-default"
+                title="Current View: Infinite Whiteboard Canvas"
+              >
+                <Layers size={13} className="text-primary-600 dark:text-primary-400" />
+                <span>Canvas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenMeetingWorkspace()}
+                className="flex items-center gap-1.5 px-3 py-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full text-xs font-semibold transition-colors"
+                title="Switch to Focused Meeting Workspace"
+              >
+                <Mic size={13} className="text-primary-500" />
+                <span>Meeting Mode</span>
+              </button>
+            </div>
 
             {/* Active Realtime Collaborators (Only shows OTHER people connected, Google Docs/Sheets style) */}
             {otherActiveCollaborators.length > 0 && (

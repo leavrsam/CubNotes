@@ -546,6 +546,7 @@ export function MobileAudioCard({
             <div className="flex flex-col gap-2">
               <AudioPlayer 
                 url={node.url} 
+                audioBlockId={node.id}
                 initialDurationMs={node.durationMs} 
                 className="w-full" 
               />

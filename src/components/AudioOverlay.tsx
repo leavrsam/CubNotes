@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
-import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, Minimize2, Maximize2, Play, Pause, Mic, Flag } from "lucide-react";
+import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, Minimize2, Maximize2, Play, Pause, Mic, Flag, Copy } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,8 @@ import toast from "react-hot-toast";
 import { processAudioTranscription } from "@/lib/transcribe";
 import { AudioPlayer } from "./AudioPlayer";
 import { TranscriptionTableOfContents, extractMarkdownTOC, extractTranscriptTOC, slugify } from "./TranscriptionTableOfContents";
+import { audioPlaybackSyncBus } from "@/lib/audioPlaybackSync";
+import { copyFormattedMeetingNotes } from "@/lib/clipboard";
 
 const supabase = createClient();
 
@@ -534,6 +536,25 @@ function AudioNodeCard({
                   </button>
                 )}
                 <button 
+                  onClick={async () => {
+                    const text = node.enhancedNotes || node.summary || node.notes;
+                    if (!text) {
+                      toast.error("No notes or summary to copy yet.");
+                      return;
+                    }
+                    const success = await copyFormattedMeetingNotes(text, node.title || "Meeting Takeaways");
+                    if (success) {
+                      toast.success("Formatted takeaways copied! Ready to paste into Slack, Email, or Docs.");
+                    } else {
+                      toast.error("Failed to copy takeaways.");
+                    }
+                  }}
+                  className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  title="Copy clean takeaways (Slack, Email, Docs ready)"
+                >
+                  <Copy size={14} />
+                </button>
+                <button 
                   onClick={handleExportNotes}
                   className="text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   title="Export Notes & Transcript (.md)"
@@ -629,6 +650,7 @@ function AudioNodeCard({
             <div className="flex flex-col gap-2">
               <AudioPlayer 
                 url={node.url} 
+                audioBlockId={node.id}
                 initialDurationMs={node.durationMs} 
                 className="w-full" 
               />
@@ -811,56 +833,78 @@ function AudioNodeCard({
               {activeTranscriptText ? (
                 <>
                   <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptContainerRef} title="Topics & Speakers" />
-                  <div className="text-[13px] font-mono leading-loose text-zinc-800 dark:text-zinc-200 space-y-1">
-                    {activeTranscriptText.split('\n').map((line, idx) => {
-                      const trimmed = line.trim();
-                      if (!trimmed) {
-                        return <div key={idx} className="h-2" />;
+                  {(() => {
+                    const handleTimestampClick = (timeStr: string) => {
+                      const clean = timeStr.replace(/[\[\]]/g, '').trim();
+                      const parts = clean.split(':').map(Number);
+                      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        const timestampMs = (parts[0] * 60 + parts[1]) * 1000;
+                        audioPlaybackSyncBus.seek(node.id, timestampMs);
+                        if (typeof window !== 'undefined') {
+                          window.dispatchEvent(new CustomEvent('motif-focus-time-ink', {
+                            detail: { audioBlockId: node.id, timestampMs }
+                          }));
+                        }
                       }
+                    };
 
-                      // Check for Topic Heading (e.g. "### [00:00] Meeting Kickoff" or "### Topic Title")
-                      const headingMatch = trimmed.match(/^#{2,4}\s+(.+)$/);
-                      if (headingMatch) {
-                        const rawHeading = headingMatch[1].trim();
-                        const tsMatch = rawHeading.match(/\[(\d{1,2}:\d{2})\]/);
-                        const cleanTitle = rawHeading.replace(/\[\d{1,2}:\d{2}\]/, '').replace(/[*_`#]/g, '').trim();
+                    return (
+                      <div className="text-[13px] font-mono leading-loose text-zinc-800 dark:text-zinc-200 space-y-1">
+                        {activeTranscriptText.split('\n').map((line, idx) => {
+                          const trimmed = line.trim();
+                          if (!trimmed) {
+                            return <div key={idx} className="h-2" />;
+                          }
 
-                        return (
-                          <div 
-                            key={idx}
-                            id={`transcript-line-${idx}`}
-                            className="pt-4 pb-2 mb-2 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between scroll-mt-3 select-none"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Bookmark size={13} className="text-primary-600 dark:text-primary-400 shrink-0" />
-                              <span className="font-sans font-semibold text-xs tracking-tight text-zinc-900 dark:text-zinc-100">
-                                {cleanTitle}
-                              </span>
+                          // Check for Topic Heading (e.g. "### [00:00] Meeting Kickoff" or "### Topic Title")
+                          const headingMatch = trimmed.match(/^#{2,4}\s+(.+)$/);
+                          if (headingMatch) {
+                            const rawHeading = headingMatch[1].trim();
+                            const tsMatch = rawHeading.match(/\[(\d{1,2}:\d{2})\]/);
+                            const cleanTitle = rawHeading.replace(/\[\d{1,2}:\d{2}\]/, '').replace(/[*_`#]/g, '').trim();
+
+                            return (
+                              <div 
+                                key={idx}
+                                id={`transcript-line-${idx}`}
+                                className="pt-4 pb-2 mb-2 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between scroll-mt-3 select-none"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Bookmark size={13} className="text-primary-600 dark:text-primary-400 shrink-0" />
+                                  <span className="font-sans font-semibold text-xs tracking-tight text-zinc-900 dark:text-zinc-100">
+                                    {cleanTitle}
+                                  </span>
+                                </div>
+                                {tsMatch && (
+                                  <button 
+                                    onClick={() => handleTimestampClick(tsMatch[1])}
+                                    className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-100/60 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium hover:bg-primary-200 dark:hover:bg-primary-900 cursor-pointer transition-colors"
+                                    title="Click to seek audio and frame notes"
+                                  >
+                                    {tsMatch[1]}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
+                          return (
+                            <div 
+                              key={idx} 
+                              id={`transcript-line-${idx}`} 
+                              className={`scroll-mt-4 rounded px-1.5 py-0.5 transition-colors ${speakerMatch ? 'font-medium text-zinc-900 dark:text-zinc-100 mt-2 bg-zinc-100/60 dark:bg-zinc-800/40 border-l-2 border-primary-500/50' : ''}`}
+                            >
+                              {line}
                             </div>
-                            {tsMatch && (
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-100/60 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium">
-                                {tsMatch[1]}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
-                      return (
-                        <div 
-                          key={idx} 
-                          id={`transcript-line-${idx}`} 
-                          className={`scroll-mt-4 rounded px-1.5 py-0.5 transition-colors ${speakerMatch ? 'font-medium text-zinc-900 dark:text-zinc-100 mt-2 bg-zinc-100/60 dark:bg-zinc-800/40 border-l-2 border-primary-500/50' : ''}`}
-                        >
-                          {line}
-                        </div>
-                      );
-                    })}
-                    {node.isLiveRecording && (
-                      <span className="inline-block w-1.5 h-4 ml-1 bg-red-500 animate-pulse align-middle" />
-                    )}
-                  </div>
+                          );
+                        })}
+                        {node.isLiveRecording && (
+                          <span className="inline-block w-1.5 h-4 ml-1 bg-red-500 animate-pulse align-middle" />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-zinc-400 text-sm py-8 text-center px-4">

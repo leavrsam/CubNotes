@@ -11,11 +11,17 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      // Boot-Time Orphan Session Recovery
+      audio::recover_orphan_sessions(app.handle());
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
       audio::start_recording,
-      audio::stop_recording
+      audio::stop_recording,
+      audio::pause_recording,
+      audio::resume_recording
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -5,6 +5,9 @@ import { Stage, Layer, Path, Transformer, Rect } from "react-konva";
 import { getStroke } from "perfect-freehand";
 import { v4 as uuidv4 } from "uuid";
 import type { Stroke, ToolType } from "./CustomCanvas";
+import { ramerDouglasPeucker } from "@/lib/rdpDecimation";
+import { activeRecordingManager } from "@/lib/activeRecordingManager";
+import { audioPlaybackSyncBus, type PlaybackState } from "@/lib/audioPlaybackSync";
 
 // Utility to convert perfect-freehand points to an SVG path string
 function getSvgPathFromStroke(stroke: number[][]) {
@@ -19,6 +22,14 @@ function getSvgPathFromStroke(stroke: number[][]) {
   );
   d.push("Z");
   return d.join(" ");
+}
+
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return '0:00';
+  const totalSecs = Math.floor(seconds);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 interface SpatialCanvasProps {
@@ -66,10 +77,31 @@ export function SpatialCanvas({
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   const [lassoPath, setLassoPath] = useState<number[][]>([]);
   const [marqueeBox, setMarqueeBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  const [playbackState, setPlaybackState] = useState<PlaybackState>(() => audioPlaybackSyncBus.getState());
+  const [hoveredStrokeInfo, setHoveredStrokeInfo] = useState<{ id: string; t: number; x: number; y: number } | null>(null);
 
   const stageRef = useRef<any>(null);
   const transformerRef = useRef<any>(null);
   const selectedNodeRef = useRef<any>(null);
+
+  useEffect(() => {
+    return audioPlaybackSyncBus.subscribe(setPlaybackState);
+  }, []);
+
+  useEffect(() => {
+    if (stageRef.current) {
+      const container = stageRef.current.container();
+      if (container) {
+        container.style.touchAction = 'none';
+        const canvases = container.querySelectorAll('canvas');
+        canvases.forEach((canvas: HTMLCanvasElement) => {
+          try {
+            canvas.getContext('2d', { desynchronized: true });
+          } catch {}
+        });
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (selectedIds.length > 0 && transformerRef.current && stageRef.current) {
@@ -103,10 +135,15 @@ export function SpatialCanvas({
       }
     }
     
+    const rawPressure = e?.evt && typeof (e.evt as any).pressure === 'number'
+      ? (e.evt as any).pressure
+      : 0;
+    const pressure = rawPressure > 0 ? rawPressure : 0.5;
+
     return {
       x: (pointer.x - pan.x) / zoom,
       y: (pointer.y - pan.y) / zoom,
-      pressure: 0.5 // Default pressure since Konva doesn't provide it natively easily
+      pressure
     };
   };
 
@@ -225,6 +262,18 @@ export function SpatialCanvas({
       return;
     }
 
+    // 1. Hardware digitizer classification & zero palm rejection false-triggers
+    const pointerType = (e?.evt && (e.evt as any).pointerType) || 'mouse';
+
+    // Touch events: Strictly bound to canvas viewport navigation (pan, pinch-to-zoom).
+    // Intercept and preventDefault() any touch events that attempt to invoke drawing tools.
+    if (pointerType === 'touch') {
+      if (tool === 'pen' || tool === 'eraser' || tool === 'lasso') {
+        e?.evt?.preventDefault?.();
+        return;
+      }
+    }
+
     if (touchStateRef.current.isPinching || (e.evt.touches && e.evt.touches.length >= 2)) {
       return;
     }
@@ -264,6 +313,11 @@ export function SpatialCanvas({
       return;
     }
 
+    const recState = activeRecordingManager.getState();
+    const activeMeta = (recState.isRecording && recState.audioBlockId)
+      ? { audioBlockId: recState.audioBlockId, t: activeRecordingManager.getActiveElapsedMs() }
+      : undefined;
+
     if (tool === "eraser") {
       if (eraserType === 'stroke') {
         eraseStrokesAtPoint(pos.x, pos.y, 10);
@@ -273,7 +327,8 @@ export function SpatialCanvas({
           points: [[pos.x, pos.y, pos.pressure]],
           color: "white", // Or match background if dark mode
           size: eraserSize,
-          type: 'eraser'
+          type: 'eraser',
+          meta: activeMeta
         });
       }
       return;
@@ -287,12 +342,18 @@ export function SpatialCanvas({
         size: activeSize,
         type: activePresetType,
         blockId: annotateBlockId || undefined,
-        blockY: initialBlockY
+        blockY: initialBlockY,
+        meta: activeMeta
       });
     }
   };
 
   const handlePointerMove = (e: any) => {
+    const pointerType = (e?.evt && (e.evt as any).pointerType) || 'mouse';
+    if (pointerType === 'touch' && (tool === 'pen' || tool === 'eraser' || tool === 'lasso')) {
+      return;
+    }
+
     if (tool === "home") {
       if (marqueeBox) {
         const rawPos = getPointerPos(e);
@@ -379,8 +440,18 @@ export function SpatialCanvas({
           onLassoComplete?.(minX, maxX, minY, maxY, lassoPath);
         }
         setLassoPath([]);
-      } else if (currentStroke) {
-        setStrokes(prev => [...prev, currentStroke]);
+      } else if (currentStroke && currentStroke.points.length > 0) {
+        // Stroke point decimation using Ramer-Douglas-Peucker (RDP) algorithm
+        const decimatedPoints = ramerDouglasPeucker(currentStroke.points, 0.65);
+        const recState = activeRecordingManager.getState();
+        const stampedStroke: Stroke = {
+          ...currentStroke,
+          points: decimatedPoints,
+          meta: currentStroke.meta || ((recState.isRecording && recState.audioBlockId)
+            ? { audioBlockId: recState.audioBlockId, t: activeRecordingManager.getActiveElapsedMs() }
+            : undefined),
+        };
+        setStrokes(prev => [...prev, stampedStroke]);
       }
     }
     setIsDrawing(false);
@@ -463,6 +534,13 @@ export function SpatialCanvas({
             const offsetX = stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].x : 0;
             const offsetY = stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].y : 0;
             const isFirstSelected = selectedIds.length > 0 && stroke.id === selectedIds.find(id => strokes.some(s => s.id === id));
+            const isEchoActive = Boolean(
+              playbackState.activeAudioBlockId &&
+              stroke.meta?.audioBlockId === playbackState.activeAudioBlockId &&
+              stroke.meta?.t != null &&
+              stroke.meta.t >= playbackState.currentTimeMs - 2000 &&
+              stroke.meta.t <= playbackState.currentTimeMs + 4000
+            );
             return (
               <Path
                 key={stroke.id}
@@ -472,12 +550,37 @@ export function SpatialCanvas({
                 fill={stroke.type === 'eraser' ? 'white' : stroke.color}
                 opacity={stroke.type === 'highlighter' ? 0.4 : 1}
                 globalCompositeOperation={stroke.type === 'eraser' ? 'destination-out' : stroke.type === 'highlighter' ? 'multiply' : 'source-over'}
+                shadowColor={isEchoActive ? "#6366f1" : undefined}
+                shadowBlur={isEchoActive ? 16 : 0}
+                shadowOpacity={isEchoActive ? 0.95 : 0}
                 x={(stroke.x || 0) + offsetX}
                 y={(stroke.y || 0) + offsetY}
                 scaleX={stroke.scaleX || 1}
                 scaleY={stroke.scaleY || 1}
                 hitStrokeWidth={tool === 'home' ? Math.max(20, stroke.size + 10) : stroke.size}
                 draggable={tool === 'home'}
+                onPointerEnter={() => {
+                  if (stroke.meta?.audioBlockId && stroke.meta.t != null) {
+                    const stage = stageRef.current;
+                    const pointer = stage?.getPointerPosition();
+                    if (pointer) {
+                      setHoveredStrokeInfo({
+                        id: stroke.id,
+                        t: stroke.meta.t,
+                        x: pointer.x,
+                        y: pointer.y - 28,
+                      });
+                    }
+                  }
+                }}
+                onPointerLeave={() => {
+                  setHoveredStrokeInfo(prev => prev?.id === stroke.id ? null : prev);
+                }}
+                onClick={() => {
+                  if (tool === 'home' && stroke.meta?.audioBlockId && stroke.meta.t != null) {
+                    audioPlaybackSyncBus.seek(stroke.meta.audioBlockId, stroke.meta.t);
+                  }
+                }}
                 onPointerDown={(e) => {
                   if (tool === 'home') {
                     e.cancelBubble = true;
@@ -619,6 +722,15 @@ export function SpatialCanvas({
           )}
         </Layer>
       </Stage>
+      {hoveredStrokeInfo && (
+        <div 
+          className="pointer-events-none absolute z-50 transform -translate-x-1/2 px-2 py-0.5 bg-zinc-900/90 text-indigo-300 text-[11px] font-mono rounded shadow border border-indigo-500/30 backdrop-blur-sm flex items-center gap-1.5 transition-all duration-75"
+          style={{ left: hoveredStrokeInfo.x, top: hoveredStrokeInfo.y }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {formatTime(hoveredStrokeInfo.t / 1000)}
+        </div>
+      )}
     </div>
   );
 }
