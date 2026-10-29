@@ -2682,6 +2682,31 @@ export function CustomCanvas({
             </div>
           )}
 
+          {/* Dual-Mode View Switcher (Canvas vs Meeting Mode) */}
+          <div className="flex items-center pb-1 mr-2 shrink-0">
+            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-2xs">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white rounded-full text-xs font-semibold shadow-2xs cursor-default"
+                title="Current View: Infinite Whiteboard Canvas"
+              >
+                <Layers size={13} className="text-primary-600 dark:text-primary-400" />
+                <span>Canvas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenMeetingWorkspace()}
+                className="flex items-center gap-1.5 px-3 py-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full text-xs font-semibold transition-colors"
+                title="Switch to Focused Meeting Workspace"
+              >
+                <Mic size={13} className="text-primary-500" />
+                <span>Meeting Mode</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700 mb-2 mr-1 hidden sm:block shrink-0" />
+
           <div className="flex gap-1 shrink-0">
             {(["Home", "Insert", "Record", "Draw", "Flowchart", "History", "View"] as RibbonTab[]).map(tab => (
               <button
@@ -2753,27 +2778,6 @@ export function CustomCanvas({
                 </span>
               </button>
             )}
-
-            {/* Dual-Mode View Switcher (Canvas vs Meeting Mode) */}
-            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-2xs">
-              <button
-                type="button"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white rounded-full text-xs font-semibold shadow-2xs cursor-default"
-                title="Current View: Infinite Whiteboard Canvas"
-              >
-                <Layers size={13} className="text-primary-600 dark:text-primary-400" />
-                <span>Canvas</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleOpenMeetingWorkspace()}
-                className="flex items-center gap-1.5 px-3 py-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full text-xs font-semibold transition-colors"
-                title="Switch to Focused Meeting Workspace"
-              >
-                <Mic size={13} className="text-primary-500" />
-                <span>Meeting Mode</span>
-              </button>
-            </div>
 
             {/* Active Realtime Collaborators (Only shows OTHER people connected, Google Docs/Sheets style) */}
             {otherActiveCollaborators.length > 0 && (
