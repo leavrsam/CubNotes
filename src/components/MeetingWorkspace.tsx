@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Mic, Square, Sparkles, Bot, Send, User, Copy, Check, Download, 
   ArrowLeft, FileText, CheckSquare, Clock, Search, HelpCircle, 
-  Compass, ExternalLink, RefreshCw, Layers, ChevronRight, MessageSquare, Flag, Bookmark
+  Compass, ExternalLink, RefreshCw, Layers, ChevronRight, MessageSquare, Flag, Bookmark,
+  PanelRightClose, PanelRight, X
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -13,6 +14,7 @@ import toast from "react-hot-toast";
 import type { AudioNode } from "./CustomCanvas";
 import { TranscriptionTableOfContents, extractMarkdownTOC, extractTranscriptTOC, slugify } from "./TranscriptionTableOfContents";
 import { copyFormattedMeetingNotes } from "@/lib/clipboard";
+import { AudioPlayer } from "./AudioPlayer";
 
 interface MeetingWorkspaceProps {
   isOpen: boolean;
@@ -30,9 +32,11 @@ interface MeetingWorkspaceProps {
   pageTitle: string;
   audios?: AudioNode[];
   onSelectAudioNode?: (id: string) => void;
+  canvasNotesText?: string;
+  topOffset?: number;
 }
 
-type MainTab = "notes" | "summary" | "transcript";
+type MainTab = "summary" | "transcript" | "enhanced" | "chat";
 
 export function MeetingWorkspace({
   isOpen,
@@ -49,14 +53,14 @@ export function MeetingWorkspace({
   onExplodeToCanvas,
   pageTitle,
   audios = [],
-  onSelectAudioNode
+  onSelectAudioNode,
+  canvasNotesText = "",
+  topOffset = 88
 }: MeetingWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<MainTab>(
-    activeAudioNode?.notes ? "notes" : (activeAudioNode?.summary ? "summary" : "notes")
+    isLiveRecording ? "transcript" : (activeAudioNode?.enhancedNotes ? "enhanced" : (activeAudioNode?.summary ? "summary" : "summary"))
   );
-  const [shorthandNotes, setShorthandNotes] = useState(activeAudioNode?.notes || "");
   const [isEnhancing, setIsEnhancing] = useState(false);
-  const [showEnhanced, setShowEnhanced] = useState(Boolean(activeAudioNode?.enhancedNotes));
   const [synthesisTemplate, setSynthesisTemplate] = useState<'standard' | 'one_on_one' | 'technical' | 'client'>('standard');
   
   // Interactive Chat / Q&A state
@@ -70,14 +74,17 @@ export function MeetingWorkspace({
   // Knowledge Radar state (Related Notes retrieved via semantic search)
   const [relatedNotes, setRelatedNotes] = useState<any[]>([]);
   const [isLoadingRadar, setIsLoadingRadar] = useState(false);
+  const [showRadar, setShowRadar] = useState(false);
 
   // Transcript search
   const [transcriptSearch, setTranscriptSearch] = useState("");
   const summaryPaneRef = useRef<HTMLDivElement>(null);
   const transcriptPaneRef = useRef<HTMLDivElement>(null);
+  const enhancedPaneRef = useRef<HTMLDivElement>(null);
 
   const summaryTOC = React.useMemo(() => extractMarkdownTOC(activeAudioNode?.summary || ""), [activeAudioNode?.summary]);
   const transcriptTOC = React.useMemo(() => extractTranscriptTOC(activeAudioNode?.transcript || ""), [activeAudioNode?.transcript]);
+  const enhancedTOC = React.useMemo(() => extractMarkdownTOC(activeAudioNode?.enhancedNotes || ""), [activeAudioNode?.enhancedNotes]);
 
   const markdownComponents = React.useMemo(() => {
     const seenIds = new Map<string, number>();
@@ -94,32 +101,25 @@ export function MeetingWorkspace({
       h1: ({ children, ...props }: any) => {
         const text = Array.isArray(children) ? children.join('') : String(children);
         const id = getId(text);
-        return <h1 id={id} className="scroll-mt-4 font-bold text-xl mt-6 mb-3 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h1>;
+        return <h1 id={id} className="scroll-mt-4 font-bold text-lg mt-4 mb-2 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h1>;
       },
       h2: ({ children, ...props }: any) => {
         const text = Array.isArray(children) ? children.join('') : String(children);
         const id = getId(text);
-        return <h2 id={id} className="scroll-mt-4 font-bold text-lg mt-5 mb-2 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h2>;
+        return <h2 id={id} className="scroll-mt-4 font-bold text-base mt-3 mb-1.5 text-zinc-900 dark:text-zinc-100" {...props}>{children}</h2>;
       },
       h3: ({ children, ...props }: any) => {
         const text = Array.isArray(children) ? children.join('') : String(children);
         const id = getId(text);
-        return <h3 id={id} className="scroll-mt-4 font-semibold text-base mt-4 mb-1.5 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h3>;
+        return <h3 id={id} className="scroll-mt-4 font-semibold text-sm mt-2.5 mb-1 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h3>;
       },
       h4: ({ children, ...props }: any) => {
         const text = Array.isArray(children) ? children.join('') : String(children);
         const id = getId(text);
-        return <h4 id={id} className="scroll-mt-4 font-semibold text-sm mt-3 mb-1 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h4>;
+        return <h4 id={id} className="scroll-mt-4 font-semibold text-xs mt-2 mb-1 text-zinc-800 dark:text-zinc-200" {...props}>{children}</h4>;
       },
     };
-  }, [activeAudioNode?.summary]);
-
-  // Keep notes in sync
-  useEffect(() => {
-    if (activeAudioNode?.notes !== undefined && activeAudioNode.notes !== shorthandNotes) {
-      setShorthandNotes(activeAudioNode.notes);
-    }
-  }, [activeAudioNode?.notes]);
+  }, [activeAudioNode?.summary, activeAudioNode?.enhancedNotes]);
 
   // Keep chat history in sync
   useEffect(() => {
@@ -174,16 +174,17 @@ export function MeetingWorkspace({
     }
   }, [chatHistory, isAsking]);
 
-  // Enhance My Notes
+  // Enhance notes from Canvas + Audio Transcript
   const handleEnhanceNotes = async () => {
     const transcript = activeAudioNode?.transcript || "";
-    if (!shorthandNotes.trim() && !transcript.trim()) {
-      toast.error("Please add some notes or record audio first.");
+    const notesToEnhance = activeAudioNode?.notes?.trim() || canvasNotesText?.trim() || "";
+    if (!notesToEnhance && !transcript) {
+      toast.error("Please add notes on the canvas or record audio first.");
       return;
     }
 
     setIsEnhancing(true);
-    const toastId = toast.loading("Enhancing notes with gemini-3.8-flash...");
+    const toastId = toast.loading("Synthesizing canvas notes with audio transcript via Gemini 3.8 Flash...");
 
     try {
       const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
@@ -194,7 +195,7 @@ export function MeetingWorkspace({
           ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
         },
         body: JSON.stringify({
-          notes: shorthandNotes,
+          notes: notesToEnhance,
           transcript,
           meetingTitle: activeAudioNode?.title || pageTitle,
           template: synthesisTemplate,
@@ -208,8 +209,8 @@ export function MeetingWorkspace({
       if (activeAudioNode?.id) {
         updateAudioField(activeAudioNode.id, 'enhancedNotes', data.enhancedNotes);
       }
-      setShowEnhanced(true);
-      toast.success("Notes enriched with transcript details!", { id: toastId });
+      setActiveTab("enhanced");
+      toast.success("Notes synthesized with canvas diagrams & transcript!", { id: toastId });
     } catch (err: any) {
       console.error(err);
       const rawMsg = err?.message || String(err);
@@ -249,7 +250,7 @@ export function MeetingWorkspace({
           question,
           transcript: activeAudioNode?.transcript || "",
           summary: activeAudioNode?.summary || "",
-          notes: shorthandNotes,
+          notes: activeAudioNode?.notes || canvasNotesText || "",
           history: newHistory,
           apiKey: customKey || undefined,
         })
@@ -279,7 +280,7 @@ export function MeetingWorkspace({
 
   // Copy clean formatted summary to clipboard (Slack, Email, Docs ready)
   const handleCopySummary = async () => {
-    const textToCopy = activeAudioNode?.enhancedNotes || activeAudioNode?.summary || shorthandNotes;
+    const textToCopy = activeAudioNode?.enhancedNotes || activeAudioNode?.summary || canvasNotesText || activeAudioNode?.notes;
     if (!textToCopy) {
       toast.error("Nothing to copy yet.");
       return;
@@ -309,8 +310,8 @@ export function MeetingWorkspace({
       "",
       "---",
       "",
-      "## Enhanced Notes",
-      activeAudioNode?.enhancedNotes || shorthandNotes || "No notes taken.",
+      "## Enhanced Notes (Canvas & Transcript)",
+      activeAudioNode?.enhancedNotes || canvasNotesText || activeAudioNode?.notes || "No notes taken.",
       "",
       "---",
       "",
@@ -337,402 +338,391 @@ export function MeetingWorkspace({
   const currentTranscript = activeAudioNode?.transcript || "";
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#fafafa] dark:bg-zinc-950 flex flex-col overflow-hidden text-zinc-900 dark:text-zinc-100 font-sans">
-      
-      {/* Top Navigation Bar */}
-      <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur px-4 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          {/* Dual-Mode Pill Switcher */}
-          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-2xs">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex items-center gap-1.5 px-3 py-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full text-xs font-semibold transition-colors"
-              title="Return to Infinite Whiteboard Canvas"
-            >
-              <Layers size={13} className="text-primary-500" />
-              <span>Canvas</span>
-            </button>
-            <button
-              type="button"
-              className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white rounded-full text-xs font-semibold shadow-2xs"
-              title="Active: Meeting Workspace"
-            >
-              <Mic size={13} className="text-primary-600 dark:text-primary-400" />
-              <span>Meeting Mode</span>
-            </button>
+    <aside 
+      className="fixed right-0 bottom-0 z-40 w-[420px] max-w-[100vw] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden text-zinc-900 dark:text-zinc-100 font-sans pointer-events-auto transition-all"
+      style={{ top: topOffset || 88 }}
+    >
+      {/* Top Header Bar of the Side Panel */}
+      <header className="h-12 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/50 backdrop-blur px-3 flex items-center justify-between shrink-0 select-none">
+        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+          <div className="w-6 h-6 rounded-lg bg-primary-100 dark:bg-primary-950/50 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
+            <Mic size={13} />
           </div>
-
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700 hidden sm:block" />
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase tracking-wider font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-1">
-              <Sparkles size={13} />
-              <span>Meeting Workspace</span>
-            </span>
-            <input 
-              type="text"
-              value={activeAudioNode?.title || pageTitle}
-              onChange={(e) => {
-                if (activeAudioNode?.id) {
-                  updateAudioField(activeAudioNode.id, 'title', e.target.value);
-                }
-              }}
-              className="text-sm font-bold bg-transparent border-none outline-none text-zinc-900 dark:text-zinc-100 px-1 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 rounded max-w-[200px] sm:max-w-xs truncate"
-              placeholder="Meeting Title..."
-            />
-            {audios.length > 1 && onSelectAudioNode && (
-              <select
-                value={activeAudioNode?.id || ""}
-                onChange={(e) => onSelectAudioNode(e.target.value)}
-                className="text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 outline-none max-w-[140px] truncate"
-                title="Switch between recordings on this page"
-              >
-                {audios.map((a, idx) => (
-                  <option key={a.id} value={a.id}>
-                    {a.title || `Recording #${idx + 1}`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+          <input 
+            type="text"
+            value={activeAudioNode?.title || pageTitle}
+            onChange={(e) => {
+              if (activeAudioNode?.id) {
+                updateAudioField(activeAudioNode.id, 'title', e.target.value);
+              }
+            }}
+            className="text-xs font-bold bg-transparent border-none outline-none text-zinc-900 dark:text-zinc-100 px-1 hover:bg-black/5 dark:hover:bg-white/5 rounded flex-1 min-w-0 truncate tracking-tight"
+            placeholder="Meeting Title..."
+          />
+          {audios.length > 1 && onSelectAudioNode && (
+            <select
+              value={activeAudioNode?.id || ""}
+              onChange={(e) => onSelectAudioNode(e.target.value)}
+              className="text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 outline-none max-w-[110px] truncate"
+              title="Switch between recordings on this page"
+            >
+              {audios.map((a, idx) => (
+                <option key={a.id} value={a.id}>
+                  {a.title || `Recording #${idx + 1}`}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
-        {/* Live Recording HUD & Actions */}
-        <div className="flex items-center gap-2">
-          {isLiveRecording ? (
-            <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 px-3 py-1 rounded-full text-red-600 dark:text-red-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-              <span>{formatTimer(recordingDuration)}</span>
-
-              {isRecordingPaused ? (
-                <button 
-                  onClick={onResumeRecording}
-                  className="ml-1 text-[11px] hover:underline"
-                >
-                  Resume
-                </button>
-              ) : (
-                <button 
-                  onClick={onPauseRecording}
-                  className="ml-1 text-[11px] hover:underline"
-                >
-                  Pause
-                </button>
-              )}
-
-              <button
-                onClick={onStopRecording}
-                className="ml-1 px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-[11px] font-bold"
-              >
-                End & Process
-              </button>
-            </div>
-          ) : (
-            onStartRecording && (
-              <button
-                onClick={onStartRecording}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-xs font-semibold shadow-xs transition-transform active:scale-95"
-              >
-                <Mic size={14} />
-                <span>Record Meeting</span>
-              </button>
-            )
-          )}
-
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700 hidden md:block" />
-
-          {/* Canvas Explosion & Export */}
+        {/* Quick Action Buttons & Close Panel */}
+        <div className="flex items-center gap-1 shrink-0">
           {onExplodeToCanvas && (
             <button
-              onClick={() => onExplodeToCanvas(currentEnhanced || shorthandNotes, currentSummary)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium transition-colors"
-              title="Explode notes and tasks onto the infinite spatial canvas"
+              onClick={() => onExplodeToCanvas(currentEnhanced || canvasNotesText || activeAudioNode?.notes || "", currentSummary)}
+              className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              title="Explode takeaways & tasks onto canvas"
             >
-              <Layers size={14} className="text-primary-500" />
-              <span className="hidden lg:inline">Send to Canvas</span>
+              <Layers size={14} />
             </button>
           )}
 
           <button
             onClick={handleCopySummary}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-medium transition-colors"
-            title="Copy clean formatted takeaways (Slack, Email, Docs ready)"
+            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+            title="Copy clean formatted takeaways (Slack, Email, Docs)"
           >
-            <Copy size={14} className="text-zinc-600 dark:text-zinc-400" />
-            <span className="hidden sm:inline">Copy Takeaways</span>
+            <Copy size={14} />
           </button>
 
           <button
             onClick={handleExportMarkdown}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
             title="Download Markdown Report"
           >
-            <Download size={16} />
+            <Download size={14} />
+          </button>
+
+          <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+
+          {/* Close Panel Toggle (symmetric with left sidebar toggle) */}
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors flex items-center justify-center shrink-0"
+            title="Collapse Meeting Panel (Cmd+M)"
+          >
+            <PanelRightClose size={16} />
           </button>
         </div>
       </header>
 
-      {/* Main Two-Column Split Workspace */}
-      <div className="flex-1 flex overflow-hidden">
-        
-        {/* LEFT PANE: Note-taking & Summaries */}
-        <div className="flex-1 flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 overflow-hidden">
-          
-          {/* Segmented Tab Controls */}
-          <div className="flex items-center justify-between px-6 pt-3 border-b border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/20">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setActiveTab("notes")}
-                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
-                  activeTab === "notes"
-                    ? "border-primary-600 text-primary-600 dark:text-primary-400"
-                    : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-                }`}
-              >
-                <FileText size={14} />
-                <span>My Notes {currentEnhanced ? "(Enhanced)" : ""}</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab("summary")}
-                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
-                  activeTab === "summary"
-                    ? "border-primary-600 text-primary-600 dark:text-primary-400"
-                    : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-                }`}
-              >
-                <CheckSquare size={14} />
-                <span>Executive Summary</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab("transcript")}
-                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
-                  activeTab === "transcript"
-                    ? "border-primary-600 text-primary-600 dark:text-primary-400"
-                    : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-                }`}
-              >
-                <Clock size={14} />
-                <span>Transcript</span>
-              </button>
-            </div>
-
-            {/* Note Enhancement CTA */}
-            {activeTab === "notes" && (
-              <div className="flex items-center gap-2 pb-2">
-                {currentEnhanced && (
-                  <button
-                    onClick={() => setShowEnhanced(!showEnhanced)}
-                    className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline"
+      {/* Recording HUD / Audio Player Bar */}
+      <div className="px-3 py-2 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 shrink-0">
+        {isLiveRecording ? (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between px-3 py-1.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl">
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full bg-red-500 ${!isRecordingPaused ? 'animate-ping' : ''}`} />
+                <span className="text-xs font-bold text-red-600 dark:text-red-400">
+                  {isRecordingPaused ? 'Paused' : 'Recording Live'}
+                </span>
+                <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400 ml-1">
+                  {formatTimer(recordingDuration)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {isRecordingPaused ? (
+                  <button 
+                    onClick={onResumeRecording} 
+                    className="px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 rounded transition-colors"
                   >
-                    {showEnhanced ? "View Raw Shorthand" : "View Enhanced Version"}
+                    Resume
+                  </button>
+                ) : (
+                  <button 
+                    onClick={onPauseRecording} 
+                    className="px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 rounded transition-colors"
+                  >
+                    Pause
                   </button>
                 )}
-
-                <div className="flex items-center gap-1.5">
-                  <select
-                    value={synthesisTemplate}
-                    onChange={(e) => setSynthesisTemplate(e.target.value as any)}
-                    className="text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none font-medium cursor-pointer"
-                    title="Choose meeting template style"
+                {onStopRecording && (
+                  <button 
+                    onClick={onStopRecording}
+                    className="px-2.5 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-[11px] font-bold shadow-2xs"
                   >
-                    <option value="standard">Standard Meeting</option>
-                    <option value="one_on_one">1-on-1 Catch-up</option>
-                    <option value="technical">Technical / Spec</option>
-                    <option value="client">Client / Sales</option>
-                  </select>
+                    Stop & Process
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : activeAudioNode?.url ? (
+          <AudioPlayer 
+            url={activeAudioNode.url}
+            audioBlockId={activeAudioNode.id}
+            initialDurationMs={activeAudioNode.durationMs}
+            className="w-full"
+          />
+        ) : (
+          onStartRecording && (
+            <div className="flex items-center justify-between py-0.5">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                Live canvas strokes are audio-synced.
+              </span>
+              <button
+                onClick={onStartRecording}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-transform active:scale-95"
+              >
+                <Mic size={13} />
+                <span>Record Meeting</span>
+              </button>
+            </div>
+          )
+        )}
+      </div>
 
+      {/* Segmented Tab Navigation Bar */}
+      <div className="flex items-center px-2 pt-1 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-950/40 shrink-0 text-xs font-semibold">
+        <button
+          onClick={() => setActiveTab("summary")}
+          className={`flex-1 py-2 px-2 text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === "summary"
+              ? "border-primary-600 text-primary-600 dark:text-primary-400"
+              : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+          }`}
+        >
+          <CheckSquare size={13} />
+          <span>Summary</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("transcript")}
+          className={`flex-1 py-2 px-2 text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === "transcript"
+              ? "border-primary-600 text-primary-600 dark:text-primary-400"
+              : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+          }`}
+        >
+          <Clock size={13} />
+          <span>Transcript</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("enhanced")}
+          className={`flex-1 py-2 px-2 text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === "enhanced"
+              ? "border-primary-600 text-primary-600 dark:text-primary-400"
+              : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+          }`}
+        >
+          <Sparkles size={13} className={currentEnhanced ? "text-amber-500" : ""} />
+          <span>Enhanced</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("chat")}
+          className={`flex-1 py-2 px-2 text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === "chat"
+              ? "border-primary-600 text-primary-600 dark:text-primary-400"
+              : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+          }`}
+        >
+          <Bot size={13} />
+          <span>Ask AI</span>
+        </button>
+      </div>
+
+      {/* Main Tab Content */}
+      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        {/* 1. Summary Tab */}
+        {activeTab === "summary" && (
+          <div ref={summaryPaneRef} className="space-y-4">
+            {currentSummary ? (
+              <div className="prose dark:prose-invert max-w-none text-xs space-y-3">
+                <TranscriptionTableOfContents items={summaryTOC} containerRef={summaryPaneRef} />
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {currentSummary}
+                </ReactMarkdown>
+
+                <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 not-prose flex items-center justify-between text-[11px] text-zinc-400">
+                  <span>Synthesized with Gemini 3.8 Flash</span>
                   <button
-                    onClick={handleEnhanceNotes}
-                    disabled={isEnhancing}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-95"
-                    title="Enrich your shorthand notes with exact figures, dates, and action items from the audio"
+                    type="button"
+                    onClick={async () => {
+                      const reason = window.prompt("Report inaccurate AI output:\n(e.g., Inaccurate summary, hallucinations)");
+                      if (!reason) return;
+                      try {
+                        await fetch("/api/report-ai", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            content: currentSummary,
+                            reason,
+                            context: "MeetingWorkspace summary",
+                            noteId: activeAudioNode?.id
+                          })
+                        });
+                        toast.success("Thank you. Your report has been submitted.");
+                      } catch {
+                        toast.error("Failed to submit report.");
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 hover:text-red-500 transition-colors cursor-pointer"
+                    title="Report inaccurate AI output"
                   >
-                    <Sparkles size={13} className={isEnhancing ? "animate-spin" : ""} />
-                    <span>{isEnhancing ? "Enhancing..." : "Enhance Notes"}</span>
+                    <Flag size={11} />
+                    <span>Report AI Output</span>
                   </button>
                 </div>
+              </div>
+            ) : (
+              <div className="py-16 text-center text-zinc-400 space-y-2">
+                <CheckSquare size={28} className="mx-auto text-zinc-300 dark:text-zinc-600" />
+                <p className="text-xs font-medium">No executive summary yet.</p>
+                <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                  Record or upload a meeting to generate key takeaways, decisions, and action items.
+                </p>
               </div>
             )}
           </div>
+        )}
 
-          {/* Tab Content Panes */}
-          <div className="flex-1 p-6 overflow-y-auto">
-            {activeTab === "notes" && (
-              <div className="max-w-2xl mx-auto h-full flex flex-col">
-                {showEnhanced && currentEnhanced ? (
-                  <div className="prose dark:prose-invert max-w-none text-sm">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {currentEnhanced}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div className="flex-1 flex flex-col">
-                    <textarea
-                      value={shorthandNotes}
-                      onChange={(e) => {
-                        setShorthandNotes(e.target.value);
-                        if (activeAudioNode?.id) {
-                          updateAudioField(activeAudioNode.id, 'notes', e.target.value);
-                        }
-                      }}
-                      placeholder="Type your notes or bullet points here..."
-                      className="flex-1 w-full bg-transparent resize-none border-none outline-none text-base leading-relaxed text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 font-sans"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+        {/* 2. Transcript Tab */}
+        {activeTab === "transcript" && (
+          <div ref={transcriptPaneRef} className="space-y-3">
+            <div className="relative flex items-center">
+              <Search size={13} className="absolute left-2.5 text-zinc-400" />
+              <input
+                type="text"
+                value={transcriptSearch}
+                onChange={(e) => setTranscriptSearch(e.target.value)}
+                placeholder="Search spoken words in transcript..."
+                className="w-full pl-8 pr-3 py-1.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg text-xs border border-transparent focus:border-primary-500 outline-none"
+              />
+            </div>
 
-            {activeTab === "summary" && (
-              <div ref={summaryPaneRef} className="max-w-2xl mx-auto">
-                {currentSummary ? (
-                  <div className="prose dark:prose-invert max-w-none text-sm space-y-4">
-                    <TranscriptionTableOfContents items={summaryTOC} containerRef={summaryPaneRef} />
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                      {currentSummary}
-                    </ReactMarkdown>
+            {currentTranscript ? (
+              <>
+                <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptPaneRef} title="Topics & Speakers" />
+                <div 
+                  className="text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 font-mono p-3 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 space-y-1 select-text"
+                >
+                  {currentTranscript.split('\n').map((line, idx) => {
+                    if (transcriptSearch && !line.toLowerCase().includes(transcriptSearch.toLowerCase())) {
+                      return null;
+                    }
+                    const trimmed = line.trim();
+                    if (!trimmed) {
+                      return <div key={idx} className="h-1.5" />;
+                    }
 
-                    <div className="pt-6 border-t border-zinc-200 dark:border-zinc-800 not-prose flex items-center justify-between text-[11px] text-zinc-400">
-                      <span>Generated by Gemini AI</span>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const reason = window.prompt("Report inaccurate or inappropriate AI output:\n(e.g., Inaccurate summary, hallucinations, offensive content)");
-                          if (!reason) return;
-                          try {
-                            await fetch("/api/report-ai", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                content: currentSummary,
-                                reason,
-                                context: "MeetingWorkspace summary",
-                                noteId: activeAudioNode?.id
-                              })
-                            });
-                            toast.success("Thank you. Your report has been submitted.");
-                          } catch {
-                            toast.error("Failed to submit report.");
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 hover:text-red-500 transition-colors cursor-pointer"
-                        title="Report Inaccurate or Inappropriate AI Content"
-                      >
-                        <Flag size={12} />
-                        <span>Report AI Output</span>
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="py-24 text-center text-zinc-400 space-y-3">
-                    <CheckSquare size={32} className="mx-auto text-zinc-300 dark:text-zinc-600" />
-                    <p className="text-sm font-medium">No executive summary available yet.</p>
-                    <p className="text-xs text-zinc-500 max-w-md mx-auto">
-                      Record a meeting to generate an autonomous summary with decisions, action items, and takeaways.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+                    // Topic Heading
+                    const headingMatch = trimmed.match(/^#{2,4}\s+(.+)$/);
+                    if (headingMatch) {
+                      const rawHeading = headingMatch[1].trim();
+                      const tsMatch = rawHeading.match(/\[(\d{1,2}:\d{2})\]/);
+                      const cleanTitle = rawHeading.replace(/\[\d{1,2}:\d{2}\]/, '').replace(/[*_`#]/g, '').trim();
 
-            {activeTab === "transcript" && (
-              <div ref={transcriptPaneRef} className="max-w-2xl mx-auto space-y-4">
-                <div className="relative flex items-center">
-                  <Search size={14} className="absolute left-3 text-zinc-400" />
-                  <input
-                    type="text"
-                    value={transcriptSearch}
-                    onChange={(e) => setTranscriptSearch(e.target.value)}
-                    placeholder="Search spoken words in transcript..."
-                    className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl text-xs border border-transparent focus:border-primary-500 outline-none"
-                  />
-                </div>
-
-                {currentTranscript ? (
-                  <>
-                    <TranscriptionTableOfContents items={transcriptTOC} containerRef={transcriptPaneRef} title="Topics & Speakers" />
-                    <div 
-                      ref={transcriptPaneRef}
-                      className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 font-mono text-xs p-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-100 dark:border-zinc-800 max-h-[600px] overflow-y-auto space-y-1 overscroll-contain"
-                      style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
-                    >
-                      {currentTranscript.split('\n').map((line, idx) => {
-                        if (transcriptSearch && !line.toLowerCase().includes(transcriptSearch.toLowerCase())) {
-                          return null;
-                        }
-                        const trimmed = line.trim();
-                        if (!trimmed) {
-                          return <div key={idx} className="h-2" />;
-                        }
-
-                        // Check for Topic Heading (e.g. "### [00:00] Meeting Kickoff" or "### Topic Title")
-                        const headingMatch = trimmed.match(/^#{2,4}\s+(.+)$/);
-                        if (headingMatch) {
-                          const rawHeading = headingMatch[1].trim();
-                          const tsMatch = rawHeading.match(/\[(\d{1,2}:\d{2})\]/);
-                          const cleanTitle = rawHeading.replace(/\[\d{1,2}:\d{2}\]/, '').replace(/[*_`#]/g, '').trim();
-
-                          return (
-                            <div 
-                              key={idx}
-                              id={`transcript-line-${idx}`}
-                              className="pt-4 pb-2 mb-2 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between scroll-mt-3 select-none"
-                            >
-                              <div className="flex items-center gap-2">
-                                <Bookmark size={13} className="text-primary-600 dark:text-primary-400 shrink-0" />
-                                <span className="font-sans font-semibold text-xs tracking-tight text-zinc-900 dark:text-zinc-100">
-                                  {cleanTitle}
-                                </span>
-                              </div>
-                              {tsMatch && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-100/60 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium">
-                                  {tsMatch[1]}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        }
-
-                        const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
-                        return (
-                          <div 
-                            key={idx} 
-                            id={`transcript-line-${idx}`} 
-                            className={`scroll-mt-4 rounded px-1.5 py-0.5 transition-colors ${speakerMatch ? 'font-semibold text-zinc-900 dark:text-zinc-100 mt-2.5 bg-zinc-100/60 dark:bg-zinc-800/40 border-l-2 border-primary-500/50' : ''}`}
-                          >
-                            {line}
+                      return (
+                        <div 
+                          key={idx}
+                          id={`transcript-line-${idx}`}
+                          className="pt-3 pb-1 mb-1 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between scroll-mt-3 select-none"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Bookmark size={12} className="text-primary-600 dark:text-primary-400 shrink-0" />
+                            <span className="font-sans font-semibold text-xs tracking-tight text-zinc-900 dark:text-zinc-100">
+                              {cleanTitle}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="py-24 text-center text-zinc-400 space-y-2">
-                    <Clock size={32} className="mx-auto text-zinc-300 dark:text-zinc-600" />
-                    <p className="text-sm font-medium">No transcript available.</p>
-                    <p className="text-xs text-zinc-500">Record a meeting to capture live transcription.</p>
-                  </div>
-                )}
+                          {tsMatch && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-primary-100/60 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium">
+                              {tsMatch[1]}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    const speakerMatch = trimmed.match(/^(\[?\d{1,2}:\d{2}\]?\s*)?([A-Za-z0-9\s]+?):/);
+                    return (
+                      <div 
+                        key={idx} 
+                        id={`transcript-line-${idx}`} 
+                        className={`scroll-mt-4 rounded px-1.5 py-0.5 transition-colors ${speakerMatch ? 'font-semibold text-zinc-900 dark:text-zinc-100 mt-2 bg-zinc-100/60 dark:bg-zinc-800/40 border-l-2 border-primary-500/50' : ''}`}
+                      >
+                        {line}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="py-16 text-center text-zinc-400 space-y-2">
+                <Clock size={28} className="mx-auto text-zinc-300 dark:text-zinc-600" />
+                <p className="text-xs font-medium">No transcript available.</p>
+                <p className="text-[11px] text-zinc-500">Record a meeting to capture live transcription.</p>
               </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* RIGHT PANE: Meeting HUD (Interactive Q&A + Knowledge Radar) */}
-        <div className="w-80 md:w-96 flex flex-col bg-zinc-50/50 dark:bg-zinc-950/40 shrink-0 overflow-hidden border-l border-zinc-200 dark:border-zinc-800">
-          
-          {/* Section: Ask Meeting AI (Interactive Q&A) */}
-          <div className="flex-1 flex flex-col overflow-hidden p-4">
-            <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-zinc-200 dark:border-zinc-800 text-xs font-bold text-zinc-700 dark:text-zinc-300">
-              <Bot size={15} className="text-primary-500" />
-              <span>Ask Meeting AI (Interactive Q&A)</span>
+        {/* 3. Enhanced Notes Tab */}
+        {activeTab === "enhanced" && (
+          <div ref={enhancedPaneRef} className="space-y-3">
+            {/* Template Selector & Trigger Button */}
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/70 dark:border-zinc-700/60 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                  Synthesis Style:
+                </span>
+                <select
+                  value={synthesisTemplate}
+                  onChange={(e) => setSynthesisTemplate(e.target.value as any)}
+                  className="text-[11px] bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-0.5 outline-none font-medium cursor-pointer"
+                >
+                  <option value="standard">Standard Meeting</option>
+                  <option value="one_on_one">1-on-1 Catch-up</option>
+                  <option value="technical">Technical / Spec</option>
+                  <option value="client">Client / Sales</option>
+                </select>
+              </div>
+
+              <button
+                onClick={handleEnhanceNotes}
+                disabled={isEnhancing}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-primary-600 hover:from-amber-600 hover:to-primary-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-transform active:scale-95"
+              >
+                <Sparkles size={13} className={isEnhancing ? "animate-spin" : ""} />
+                <span>{isEnhancing ? "Synthesizing with Gemini 3.8 Flash..." : (currentEnhanced ? "Re-Enhance from Canvas & Audio" : "Enhance from Canvas & Audio")}</span>
+              </button>
             </div>
 
+            {currentEnhanced ? (
+              <div className="prose dark:prose-invert max-w-none text-xs space-y-3">
+                <TranscriptionTableOfContents items={enhancedTOC} containerRef={enhancedPaneRef} title="Sections" />
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {currentEnhanced}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-zinc-400 space-y-2">
+                <Sparkles size={28} className="mx-auto text-amber-500/50" />
+                <p className="text-xs font-medium">No enhanced notes yet.</p>
+                <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                  Take notes or draw diagrams on the canvas, then tap <strong>Enhance from Canvas & Audio</strong> to weave your notes with the audio transcript.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 4. Ask AI Tab */}
+        {activeTab === "chat" && (
+          <div className="h-full flex flex-col space-y-3">
             {/* Quick Prompt Chips */}
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            <div className="flex flex-wrap gap-1.5">
               {[
                 "Key decisions made?",
                 "List action items",
@@ -743,7 +733,7 @@ export function MeetingWorkspace({
                   key={chip}
                   onClick={() => handleAskQuestion(chip)}
                   disabled={isAsking}
-                  className="px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:border-primary-500 transition-colors shadow-2xs"
+                  className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:border-primary-500 transition-colors shadow-2xs"
                 >
                   {chip}
                 </button>
@@ -753,14 +743,14 @@ export function MeetingWorkspace({
             {/* Chat History */}
             <div 
               ref={chatScrollRef}
-              className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs"
+              className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs min-h-[220px]"
             >
               {chatHistory.length === 0 ? (
-                <div className="py-8 text-center text-zinc-400 space-y-1.5">
+                <div className="py-10 text-center text-zinc-400 space-y-1.5">
                   <MessageSquare size={24} className="mx-auto text-zinc-300 dark:text-zinc-600" />
                   <p className="font-medium text-xs">Hands-off meeting copilot</p>
-                  <p className="text-[11px] text-zinc-500">
-                    Active in the discussion? Don&rsquo;t take notes—ask questions here after the call to retrieve quotes, dates, and agreements.
+                  <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                    Ask questions after the call to retrieve quotes, dates, assignments, and agreements.
                   </p>
                 </div>
               ) : (
@@ -770,10 +760,10 @@ export function MeetingWorkspace({
                     className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
                     <div
-                      className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 leading-relaxed ${
+                      className={`max-w-[92%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
                         msg.role === 'user'
                           ? 'bg-primary-600 text-white rounded-br-none'
-                          : 'bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700/80 rounded-bl-none shadow-2xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700/80 rounded-bl-none shadow-2xs'
                       }`}
                     >
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -787,7 +777,7 @@ export function MeetingWorkspace({
               {isAsking && (
                 <div className="flex items-center gap-2 text-zinc-400 text-xs italic">
                   <Bot size={13} className="animate-spin text-primary-500" />
-                  <span>Analyzing meeting with gemini-3.8-flash...</span>
+                  <span>Thinking with Gemini 3.8 Flash...</span>
                 </div>
               )}
             </div>
@@ -798,14 +788,14 @@ export function MeetingWorkspace({
                 e.preventDefault();
                 handleAskQuestion();
               }}
-              className="mt-3 relative flex items-center"
+              className="relative flex items-center pt-1"
             >
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Ask anything about this meeting..."
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl py-2 pl-3 pr-10 text-xs outline-none focus:ring-1 focus:ring-primary-500 text-zinc-800 dark:text-zinc-200"
+                className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl py-2 pl-3 pr-10 text-xs outline-none focus:ring-1 focus:ring-primary-500 text-zinc-800 dark:text-zinc-200"
               />
               <button
                 type="submit"
@@ -815,44 +805,52 @@ export function MeetingWorkspace({
                 <Send size={12} />
               </button>
             </form>
-          </div>
 
-          {/* Section: Knowledge Radar (Grounding in past notes) */}
-          <div className="h-48 border-t border-zinc-200 dark:border-zinc-800 p-3 flex flex-col overflow-hidden bg-white/50 dark:bg-zinc-900/30">
-            <div className="flex items-center justify-between pb-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300">
-              <div className="flex items-center gap-1.5">
-                <Compass size={14} className="text-amber-500" />
-                <span>Knowledge Radar (Past Context)</span>
-              </div>
-              {isLoadingRadar && <RefreshCw size={11} className="animate-spin text-zinc-400" />}
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {relatedNotes.length === 0 ? (
-                <div className="text-[11px] text-zinc-400 py-3 text-center">
-                  Scanning past notebooks for related project context...
+            {/* Collapsible Knowledge Radar Toggle */}
+            <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowRadar(!showRadar)}
+                className="w-full flex items-center justify-between text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 py-1"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Compass size={13} className="text-amber-500" />
+                  <span>Knowledge Radar (Past Context)</span>
                 </div>
-              ) : (
-                relatedNotes.slice(0, 3).map((note, idx) => (
-                  <div 
-                    key={idx}
-                    className="p-2 rounded-lg bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-xs space-y-1 hover:border-primary-400 transition-colors"
-                  >
-                    <div className="font-semibold text-zinc-800 dark:text-zinc-200 truncate flex items-center justify-between">
-                      <span>{note.pageTitle || "Related Note"}</span>
-                      <span className="text-[10px] text-zinc-400 font-normal">{(note.similarity * 100).toFixed(0)}% match</span>
-                    </div>
-                    <p className="text-[11px] text-zinc-500 line-clamp-2">
-                      {note.snippet || "Relevant discussion found in notebook."}
+                <div className="flex items-center gap-1">
+                  {isLoadingRadar && <RefreshCw size={10} className="animate-spin text-zinc-400" />}
+                  <span>{showRadar ? "Hide" : `View (${relatedNotes.length})`}</span>
+                </div>
+              </button>
+
+              {showRadar && (
+                <div className="space-y-1.5 pt-2 max-h-40 overflow-y-auto">
+                  {relatedNotes.length === 0 ? (
+                    <p className="text-[11px] text-zinc-400 text-center py-2">
+                      No related notes found in other pages.
                     </p>
-                  </div>
-                ))
+                  ) : (
+                    relatedNotes.slice(0, 3).map((note, idx) => (
+                      <div 
+                        key={idx}
+                        className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-xs space-y-0.5"
+                      >
+                        <div className="font-semibold text-zinc-800 dark:text-zinc-200 truncate flex items-center justify-between">
+                          <span className="truncate">{note.pageTitle || "Related Note"}</span>
+                          <span className="text-[10px] text-zinc-400 font-normal shrink-0">{(note.similarity * 100).toFixed(0)}% match</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 line-clamp-2">
+                          {note.snippet || "Relevant discussion found in notebook."}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
             </div>
           </div>
-
-        </div>
+        )}
       </div>
-    </div>
+    </aside>
   );
 }

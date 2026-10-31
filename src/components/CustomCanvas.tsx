@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, PenTool, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers } from "lucide-react";
+import { Pen, PenTool, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers, PanelRight, PanelRightClose } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -1319,6 +1319,16 @@ export function CustomCanvas({
     };
   }, [pan, zoom]);
 
+  const getCanvasNotesText = useCallback(() => {
+    const textParts = (texts || [])
+      .map(t => t.content.replace(/<[^>]*>?/gm, ' ').replace(/&nbsp;/g, ' ').trim())
+      .filter(Boolean);
+    const shapeParts = (shapes || [])
+      .map(s => s.text?.trim())
+      .filter(Boolean);
+    return [...textParts, ...shapeParts].join('\n\n');
+  }, [texts, shapes]);
+
   const handleOpenMeetingWorkspace = useCallback((audioId?: string) => {
     if (audioId) {
       setMeetingWorkspaceAudioId(audioId);
@@ -2587,6 +2597,17 @@ export function CustomCanvas({
         }
       }
 
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'm') {
+        if (!isInputFocused) {
+          e.preventDefault();
+          if (isMeetingWorkspaceOpen) {
+            setIsMeetingWorkspaceOpen(false);
+          } else {
+            handleOpenMeetingWorkspace();
+          }
+        }
+      }
+
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         if (isInputFocused) {
           if (isEditorUsable(activeEditor) && (activeEditor.isFocused || document.activeElement?.closest('.ProseMirror'))) {
@@ -2682,31 +2703,6 @@ export function CustomCanvas({
             </div>
           )}
 
-          {/* Dual-Mode View Switcher (Canvas vs Meeting Mode) */}
-          <div className="flex items-center pb-1 mr-2 shrink-0">
-            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-full border border-zinc-200 dark:border-zinc-700/80 shadow-2xs">
-              <button
-                type="button"
-                className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white rounded-full text-xs font-semibold shadow-2xs cursor-default"
-                title="Current View: Infinite Whiteboard Canvas"
-              >
-                <Layers size={13} className="text-primary-600 dark:text-primary-400" />
-                <span>Canvas</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleOpenMeetingWorkspace()}
-                className="flex items-center gap-1.5 px-3 py-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full text-xs font-semibold transition-colors"
-                title="Switch to Focused Meeting Workspace"
-              >
-                <Mic size={13} className="text-primary-500" />
-                <span>Meeting Mode</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700 mb-2 mr-1 hidden sm:block shrink-0" />
-
           <div className="flex gap-1 shrink-0">
             {(["Home", "Insert", "Record", "Draw", "Flowchart", "History", "View"] as RibbonTab[]).map(tab => (
               <button
@@ -2778,6 +2774,29 @@ export function CustomCanvas({
                 </span>
               </button>
             )}
+
+            {/* Meeting Mode Side Panel Toggle (matching left sidebar toggle design) */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isMeetingWorkspaceOpen) {
+                  setIsMeetingWorkspaceOpen(false);
+                } else {
+                  handleOpenMeetingWorkspace();
+                }
+              }}
+              className={`p-1.5 rounded-md transition-colors flex items-center justify-center shrink-0 ${
+                isMeetingWorkspaceOpen 
+                  ? 'bg-zinc-200 dark:bg-zinc-800 text-primary-600 dark:text-primary-400' 
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+              }`}
+              title={isMeetingWorkspaceOpen ? "Collapse Meeting Panel (Cmd+M)" : "Expand Meeting Panel (Meeting Mode - Cmd+M)"}
+            >
+              {isMeetingWorkspaceOpen ? <PanelRightClose size={16} /> : <PanelRight size={16} />}
+              {isRecording && (
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping ml-1" />
+              )}
+            </button>
 
             {/* Active Realtime Collaborators (Only shows OTHER people connected, Google Docs/Sheets style) */}
             {otherActiveCollaborators.length > 0 && (
@@ -4040,6 +4059,7 @@ export function CustomCanvas({
           onDeleteAudioNode={handleDeleteAudioNode}
           onOpenMeetingWorkspace={(audioId) => handleOpenMeetingWorkspace(audioId)}
           onToggleCollapseAll={toggleCollapseAllAudios}
+          canvasNotesText={getCanvasNotesText()}
         />
         <MediaOverlay
           images={images || []}
@@ -4514,6 +4534,8 @@ export function CustomCanvas({
           toast.success("Meeting takeaways centered on canvas!");
         }}
         pageTitle={pageTitle}
+        canvasNotesText={getCanvasNotesText()}
+        topOffset={isRibbonExpanded ? 88 : 40}
       />
 
       {/* AI Flowchart & List Organizer Modal (Powered by Gemini 3.8 Flash) */}

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import type { AudioNode, ToolType } from "./CustomCanvas";
-import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, Minimize2, Maximize2, Play, Pause, Mic, Flag, Copy } from "lucide-react";
+import { Trash2, GripVertical, Sparkles, Send, Bot, User, Edit3, MessageSquare, AlignLeft, FileText, Clock, Bookmark, Check, Download, FileDown, ChevronDown, Minimize2, Maximize2, Play, Pause, Mic, Flag, Copy, PanelRight } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
@@ -71,9 +71,10 @@ interface AudioOverlayProps {
   onDeleteAudioNode?: (id: string) => void;
   onOpenMeetingWorkspace?: (id: string) => void;
   onToggleCollapseAll?: (collapsed?: boolean) => void;
+  canvasNotesText?: string;
 }
 
-type TabType = 'notes' | 'enhanced' | 'transcript' | 'summary' | 'chat';
+type TabType = 'enhanced' | 'transcript' | 'summary' | 'chat';
 
 function AudioNodeCard({ 
   node, 
@@ -94,7 +95,8 @@ function AudioNodeCard({
   onResumeRecording,
   onStopRecording,
   onOpenMeetingWorkspace,
-  onToggleCollapseAll
+  onToggleCollapseAll,
+  canvasNotesText = ""
 }: {
   node: AudioNode;
   tool: ToolType;
@@ -115,8 +117,9 @@ function AudioNodeCard({
   onStopRecording?: () => void;
   onOpenMeetingWorkspace?: (id: string) => void;
   onToggleCollapseAll?: (collapsed?: boolean) => void;
+  canvasNotesText?: string;
 }) {
-  const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'transcript' : 'summary');
+  const [activeTab, setActiveTab] = useState<TabType>(node.isLiveRecording ? 'transcript' : (node.enhancedNotes ? 'enhanced' : 'summary'));
   const [liveStatus, setLiveStatus] = useState<string>(node.isLiveRecording ? 'listening' : 'idle');
   const [liveStatusMsg, setLiveStatusMsg] = useState<string>('');
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -307,21 +310,39 @@ function AudioNodeCard({
   };
 
   const handleEnhance = async () => {
-    if (!node.notes || !node.transcript) return;
+    const textToEnhance = node.notes?.trim() || canvasNotesText?.trim() || "";
+    if (!textToEnhance && !node.transcript) {
+      toast.error("Add notes on the canvas or record audio first.");
+      return;
+    }
     setIsEnhancing(true);
     setActiveTab('enhanced');
     
     try {
-      const { data, error } = await supabase.functions.invoke('enhance-notes', {
-        body: { notes: node.notes, transcript: node.transcript }
+      const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
+      const res = await fetch('/api/enhance-notes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(customKey ? { 'x-gemini-api-key': customKey } : {}),
+        },
+        body: JSON.stringify({
+          notes: textToEnhance,
+          transcript: node.transcript || "",
+          meetingTitle: node.title || "Meeting Notes",
+          apiKey: customKey || undefined,
+        })
       });
-      if (error) throw error;
-      if (data?.success) {
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Enhancement failed");
+      if (data?.enhancedNotes) {
         updateAudioField(node.id, 'enhancedNotes', data.enhancedNotes);
+        toast.success("Notes enhanced from canvas & transcript!");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Enhance failed:", e);
       updateAudioField(node.id, 'enhancedNotes', "Failed to enhance notes. Please try again.");
+      toast.error("Failed to enhance notes.");
     } finally {
       setIsEnhancing(false);
     }
@@ -520,10 +541,10 @@ function AudioNodeCard({
                   <button
                     onClick={() => onOpenMeetingWorkspace(node.id)}
                     className="flex items-center gap-1 text-[11px] font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/40 px-2 py-1 rounded-lg transition-colors border border-primary-200 dark:border-primary-800/60"
-                    title="Open Meeting Workspace"
+                    title="Open Meeting Side Panel"
                   >
-                    <Sparkles size={12} />
-                    <span>Meeting View</span>
+                    <PanelRight size={12} />
+                    <span>Meeting Panel</span>
                   </button>
                 )}
                 {node.url && (
@@ -738,14 +759,9 @@ function AudioNodeCard({
           <button onClick={() => setActiveTab('summary')} className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-[10px] font-medium rounded-md gap-1 transition-colors ${activeTab === 'summary' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
             <FileText size={14} /> <span>Summary</span>
           </button>
-          <button onClick={() => setActiveTab('notes')} className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-[10px] font-medium rounded-md gap-1 transition-colors ${activeTab === 'notes' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
-            <Edit3 size={14} /> <span>My Notes</span>
+          <button onClick={() => setActiveTab('enhanced')} className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-[10px] font-medium rounded-md gap-1 transition-colors ${activeTab === 'enhanced' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+            <Sparkles size={14} className={activeTab === 'enhanced' ? 'text-amber-500' : ''} /> <span>Enhanced Notes</span>
           </button>
-          {(node.enhancedNotes || isEnhancing) && (
-            <button onClick={() => setActiveTab('enhanced')} className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-[10px] font-medium rounded-md gap-1 transition-colors ${activeTab === 'enhanced' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
-              <Sparkles size={14} className={activeTab === 'enhanced' ? 'text-amber-500' : ''} /> <span>Enhanced Notes</span>
-            </button>
-          )}
           <button onClick={() => setActiveTab('transcript')} className={`flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-[10px] font-medium rounded-md gap-1 transition-colors ${activeTab === 'transcript' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
             <AlignLeft size={14} /> <span>Transcript</span>
           </button>
@@ -759,31 +775,6 @@ function AudioNodeCard({
           className="h-[400px] flex flex-col"
           onWheel={(e) => e.stopPropagation()}
         >
-          {/* Notes Tab */}
-          {activeTab === 'notes' && (
-            <div 
-              className="flex flex-col h-full bg-zinc-50/30 dark:bg-zinc-900/30 overscroll-contain"
-              style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
-              onWheel={(e) => e.stopPropagation()}
-            >
-              <textarea 
-                value={node.notes || ""}
-                onChange={(e) => updateAudioField(node.id, 'notes', e.target.value)}
-                placeholder="Type your shorthand notes here during the meeting..."
-                className="flex-1 w-full p-5 text-sm text-zinc-800 dark:text-zinc-200 bg-transparent border-none outline-none resize-none custom-scrollbar leading-relaxed"
-              />
-              <div className="p-3 border-t border-zinc-200/50 dark:border-zinc-700/50 bg-white/50 dark:bg-zinc-800/50 flex justify-end">
-                <button 
-                  onClick={handleEnhance}
-                  disabled={!node.notes || !node.transcript || isEnhancing}
-                  className="px-4 py-2 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isEnhancing ? <span className="animate-pulse">Enhancing...</span> : <>Enhance Notes <Sparkles size={14} /></>}
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Enhanced Notes Tab */}
           {activeTab === 'enhanced' && (
             <div 
@@ -793,9 +784,19 @@ function AudioNodeCard({
               onWheel={(e) => e.stopPropagation()}
             >
               {!node.enhancedNotes && !isEnhancing ? (
-                <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3">
-                  <Sparkles size={32} className="opacity-20" />
-                  <p className="text-sm">Write notes in the "My Notes" tab and click Enhance.</p>
+                <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3 py-6">
+                  <Sparkles size={28} className="text-amber-500/60" />
+                  <p className="text-xs text-center max-w-xs text-zinc-500">
+                    Take notes, write lists, or draw diagrams on the canvas, then enhance them with the audio transcript.
+                  </p>
+                  <button 
+                    onClick={handleEnhance}
+                    disabled={isEnhancing}
+                    className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-primary-600 hover:from-amber-600 hover:to-primary-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-transform active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Sparkles size={13} />
+                    <span>Enhance Canvas Notes</span>
+                  </button>
                 </div>
               ) : isEnhancing ? (
                 <div className="flex flex-col items-center justify-center h-full text-amber-500 gap-3 animate-pulse">
@@ -1060,7 +1061,8 @@ export function AudioOverlay({
   onStopRecording,
   onDeleteAudioNode,
   onOpenMeetingWorkspace,
-  onToggleCollapseAll
+  onToggleCollapseAll,
+  canvasNotesText
 }: AudioOverlayProps) {
   
   // Dragging state
@@ -1157,6 +1159,7 @@ export function AudioOverlay({
             onStopRecording={onStopRecording}
             onOpenMeetingWorkspace={onOpenMeetingWorkspace}
             onToggleCollapseAll={onToggleCollapseAll}
+            canvasNotesText={canvasNotesText}
             onDragSelectionStart={(id) => {
               if (tool === 'home') {
                 setSelectedIds?.([id]);
