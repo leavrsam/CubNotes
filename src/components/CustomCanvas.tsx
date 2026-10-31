@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, PenTool, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers, PanelRight, PanelRightClose } from "lucide-react";
+import { Pen, PenTool, Pencil, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers, PanelRight, PanelRightClose } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -65,7 +65,7 @@ export type Stroke = {
   points: number[][]; // [x, y, pressure][]
   color: string;
   size: number;
-  type?: 'highlighter' | 'eraser' | 'pen';
+  type?: 'pen' | 'pencil' | 'marker' | 'highlighter' | 'eraser';
   x?: number;
   y?: number;
   width?: number;
@@ -200,10 +200,18 @@ export type RibbonTab = "Home" | "Insert" | "Record" | "Draw" | "Flowchart" | "H
 
 export type ToolPreset = {
   id: string;
-  type: 'pen' | 'highlighter';
+  type: 'pen' | 'pencil' | 'marker' | 'highlighter';
   color: string;
   size: number;
 };
+
+const MarkerIcon = ({ size = 18, color = "currentColor", className = "" }: { size?: number; color?: string; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M14 2l4 4-10 10H4v-4L14 2z" />
+    <path d="M12 4l4 4" />
+    <path d="M3 21h7" />
+  </svg>
+);
 
 export type EraserType = 'stroke' | 'point';
 
@@ -589,10 +597,12 @@ export function CustomCanvas({
 
   const PAGE_COLORS = ['default', '#fef9c3', '#dcfce7', '#e0f2fe', '#f3e8ff', '#fce7f3'];
   const [presets, setPresets] = useState<ToolPreset[]>([
-    { id: '1', type: 'pen', color: '#3f3f46', size: 4 }, // zinc-700
-    { id: '2', type: 'pen', color: '#ef4444', size: 4 }, // red-500
-    { id: '3', type: 'pen', color: '#3b82f6', size: 4 }, // blue-500
-    { id: '4', type: 'highlighter', color: '#eab308', size: 16 } // yellow-500
+    { id: '1', type: 'pen', color: '#3f3f46', size: 3 }, // zinc-700 fine pen
+    { id: '2', type: 'pencil', color: '#52525b', size: 2.5 }, // zinc-600 graphite sketch
+    { id: '3', type: 'marker', color: '#2563eb', size: 8 }, // blue-600 felt-tip marker
+    { id: '4', type: 'highlighter', color: '#eab308', size: 18 }, // yellow-500 chisel
+    { id: '5', type: 'pen', color: '#dc2626', size: 3 }, // red-600 pen
+    { id: '6', type: 'marker', color: '#059669', size: 8 } // emerald-600 marker
   ]);
   const [activePresetId, setActivePresetId] = useState<string>('1');
   const activePreset = presets.find(p => p.id === activePresetId) || presets[0];
@@ -3497,22 +3507,30 @@ export function CustomCanvas({
                         }
                       }}
                       className={`flex flex-col items-center justify-center h-full px-2 rounded min-w-[40px] relative transition-colors ${activePresetId === preset.id && tool === "pen" ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                      title={`${preset.type.charAt(0).toUpperCase() + preset.type.slice(1)} (${preset.size}px)`}
                     >
-                      {preset.type === 'pen' ? (
-                        <Pen size={18} strokeWidth={2} color={preset.color} />
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={preset.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-80"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+                      {preset.type === 'pen' && (
+                        <Pen size={17} strokeWidth={2} color={preset.color} />
+                      )}
+                      {preset.type === 'pencil' && (
+                        <Pencil size={17} strokeWidth={2} color={preset.color} />
+                      )}
+                      {preset.type === 'marker' && (
+                        <MarkerIcon size={17} color={preset.color} />
+                      )}
+                      {preset.type === 'highlighter' && (
+                        <Highlighter size={17} strokeWidth={2} color={preset.color} />
                       )}
                       <div 
-                        className="absolute bottom-1 w-4 h-1 rounded-full" 
-                        style={{ backgroundColor: preset.color, height: Math.max(2, preset.size / 2) + 'px' }}
+                        className="absolute bottom-1 w-4 rounded-full" 
+                        style={{ backgroundColor: preset.color, height: Math.max(2, Math.min(4, preset.size / 2)) + 'px' }}
                       />
                     </button>
                   ))}
                   <button
                     onClick={() => {
                       const newId = String(Date.now());
-                      setPresets([...presets, { id: newId, type: 'pen', color: '#000000', size: 4 }]);
+                      setPresets([...presets, { id: newId, type: 'pen', color: '#000000', size: 3 }]);
                       setActivePresetId(newId);
                       setTool("pen");
                     }}
@@ -3520,6 +3538,79 @@ export function CustomCanvas({
                     title="Add Preset"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+
+                {/* Instrument Tool Switcher for Active Preset */}
+                <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/90 p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700/80 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, type: 'pen', size: p.type === 'pen' ? p.size : 3 } : p));
+                      setTool('pen');
+                    }}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors ${
+                      activePreset.type === 'pen' && tool === 'pen'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                    }`}
+                    title="Pen: Smooth, precise vector ink for handwriting"
+                  >
+                    <Pen size={13} />
+                    <span className="hidden sm:inline">Pen</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, type: 'pencil', size: p.type === 'pencil' ? p.size : 2.5 } : p));
+                      setTool('pen');
+                    }}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors ${
+                      activePreset.type === 'pencil' && tool === 'pen'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                    }`}
+                    title="Pencil: Semi-translucent graphite sketch & tilt shading"
+                  >
+                    <Pencil size={13} />
+                    <span className="hidden sm:inline">Pencil</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, type: 'marker', size: p.type === 'marker' ? p.size : 8 } : p));
+                      setTool('pen');
+                    }}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors ${
+                      activePreset.type === 'marker' && tool === 'pen'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                    }`}
+                    title="Marker: Bold felt-tip marker for titles and diagrams"
+                  >
+                    <MarkerIcon size={13} />
+                    <span className="hidden sm:inline">Marker</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPresets(prev => prev.map(p => p.id === activePresetId ? { ...p, type: 'highlighter', size: p.type === 'highlighter' ? p.size : 18 } : p));
+                      setTool('pen');
+                    }}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors ${
+                      activePreset.type === 'highlighter' && tool === 'pen'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                    }`}
+                    title="Highlighter: Translucent chisel ink with multiply blending"
+                  >
+                    <Highlighter size={13} />
+                    <span className="hidden sm:inline">Highlighter</span>
                   </button>
                 </div>
 
@@ -3550,7 +3641,12 @@ export function CustomCanvas({
                 <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1" />
 
                 <div className="flex items-center gap-1 h-full">
-                  {[2, 4, 8, 12, 16, 24].map(size => (
+                  {(activePreset.type === 'highlighter'
+                    ? [12, 16, 20, 24, 32]
+                    : activePreset.type === 'marker'
+                      ? [4, 6, 8, 12, 16]
+                      : [1, 2, 3, 4, 6, 8]
+                  ).map(size => (
                     <button
                       key={size}
                       onClick={() => { 
@@ -3558,8 +3654,9 @@ export function CustomCanvas({
                         setTool("pen"); 
                       }}
                       className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${presets.find(p => p.id === activePresetId)?.size === size && tool === "pen" ? 'bg-zinc-200 dark:bg-zinc-700' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                      title={`Stroke width: ${size}px`}
                     >
-                      <div className="bg-current rounded-full" style={{ width: Math.max(2, size/2), height: Math.max(2, size/2) }} />
+                      <div className="bg-current rounded-full" style={{ width: Math.max(2, Math.min(18, size / 1.5)), height: Math.max(2, Math.min(18, size / 1.5)) }} />
                     </button>
                   ))}
                 </div>

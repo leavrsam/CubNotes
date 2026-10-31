@@ -24,6 +24,86 @@ function getSvgPathFromStroke(stroke: number[][]) {
   return d.join(" ");
 }
 
+export function getStrokeRenderProps(stroke: { type?: string; size: number; color: string }) {
+  const type = stroke.type || 'pen';
+
+  switch (type) {
+    case 'highlighter':
+      return {
+        options: {
+          size: stroke.size,
+          thinning: 0,
+          smoothing: 0.7,
+          streamline: 0.6,
+          start: { cap: true, taper: 0 },
+          end: { cap: true, taper: 0 },
+        },
+        opacity: 0.38,
+        compositeOperation: 'multiply' as const,
+        fill: stroke.color,
+      };
+
+    case 'pencil':
+      return {
+        options: {
+          size: stroke.size,
+          thinning: 0.45,
+          smoothing: 0.35,
+          streamline: 0.3,
+          start: { cap: true, taper: stroke.size * 0.3 },
+          end: { cap: true, taper: stroke.size * 0.3 },
+        },
+        opacity: 0.72,
+        compositeOperation: 'source-over' as const,
+        fill: stroke.color,
+      };
+
+    case 'marker':
+      return {
+        options: {
+          size: stroke.size,
+          thinning: 0.15,
+          smoothing: 0.6,
+          streamline: 0.5,
+          start: { cap: true, taper: 0 },
+          end: { cap: true, taper: 0 },
+        },
+        opacity: 0.88,
+        compositeOperation: 'source-over' as const,
+        fill: stroke.color,
+      };
+
+    case 'eraser':
+      return {
+        options: {
+          size: stroke.size,
+          thinning: 0.4,
+          smoothing: 0.5,
+          streamline: 0.5,
+        },
+        opacity: 1,
+        compositeOperation: 'destination-out' as const,
+        fill: 'white',
+      };
+
+    case 'pen':
+    default:
+      return {
+        options: {
+          size: stroke.size,
+          thinning: 0.6,
+          smoothing: 0.5,
+          streamline: 0.45,
+          start: { cap: true, taper: stroke.size * 0.5 },
+          end: { cap: true, taper: stroke.size * 0.5 },
+        },
+        opacity: 1.0,
+        compositeOperation: 'source-over' as const,
+        fill: stroke.color,
+      };
+  }
+}
+
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return '0:00';
   const totalSecs = Math.floor(seconds);
@@ -42,7 +122,7 @@ interface SpatialCanvasProps {
   tool: ToolType;
   activeColor: string;
   activeSize: number;
-  activePresetType?: 'pen' | 'highlighter';
+  activePresetType?: 'pen' | 'pencil' | 'marker' | 'highlighter';
   eraserType?: 'stroke' | 'point';
   eraserSize?: number;
   selectedIds?: string[];
@@ -176,7 +256,15 @@ export function SpatialCanvas({
     const rawPressure = e?.evt && typeof (e.evt as any).pressure === 'number'
       ? (e.evt as any).pressure
       : 0;
-    const pressure = rawPressure > 0 ? rawPressure : 0.5;
+    let pressure = rawPressure > 0 ? rawPressure : 0.5;
+
+    // Stylus tilt detection for graphite pencil shading
+    const tiltX = e?.evt && typeof (e.evt as any).tiltX === 'number' ? (e.evt as any).tiltX : 0;
+    const tiltY = e?.evt && typeof (e.evt as any).tiltY === 'number' ? (e.evt as any).tiltY : 0;
+    const maxTilt = Math.max(Math.abs(tiltX), Math.abs(tiltY));
+    if (activePresetType === 'pencil' && maxTilt > 35) {
+      pressure = Math.min(1.0, pressure * (1 + (maxTilt - 35) / 45));
+    }
 
     return {
       x: (pointer.x - pan.x) / zoom,
@@ -565,12 +653,8 @@ export function SpatialCanvas({
       >
         <Layer scaleX={zoom} scaleY={zoom}>
           {visibleStrokes.map((stroke) => {
-            const strokeData = getStroke(stroke.points, {
-              size: stroke.size,
-              thinning: 0.5,
-              smoothing: 0.5,
-              streamline: 0.5,
-            });
+            const renderProps = getStrokeRenderProps(stroke);
+            const strokeData = getStroke(stroke.points, renderProps.options);
             const pathData = getSvgPathFromStroke(strokeData);
             const offsetX = stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].x : 0;
             const offsetY = stroke.blockId && blockOffsetMap && blockOffsetMap[stroke.blockId] ? blockOffsetMap[stroke.blockId].y : 0;
@@ -588,9 +672,9 @@ export function SpatialCanvas({
                 id={stroke.id}
                 ref={isFirstSelected ? selectedNodeRef : undefined}
                 data={pathData}
-                fill={stroke.type === 'eraser' ? 'white' : stroke.color}
-                opacity={stroke.type === 'highlighter' ? 0.4 : 1}
-                globalCompositeOperation={stroke.type === 'eraser' ? 'destination-out' : stroke.type === 'highlighter' ? 'multiply' : 'source-over'}
+                fill={renderProps.fill}
+                opacity={renderProps.opacity}
+                globalCompositeOperation={renderProps.compositeOperation}
                 shadowColor={isEchoActive ? "#6366f1" : undefined}
                 shadowBlur={isEchoActive ? 16 : 0}
                 shadowOpacity={isEchoActive ? 0.95 : 0}
@@ -706,21 +790,19 @@ export function SpatialCanvas({
             );
           })}
           
-          {currentStroke && (
-            <Path
-              data={getSvgPathFromStroke(
-                getStroke(currentStroke.points, {
-                  size: currentStroke.size,
-                  thinning: 0.5,
-                  smoothing: 0.5,
-                  streamline: 0.5,
-                })
-              )}
-              fill={currentStroke.type === 'eraser' ? 'white' : currentStroke.color}
-              opacity={currentStroke.type === 'highlighter' ? 0.4 : 1}
-              globalCompositeOperation={currentStroke.type === 'eraser' ? 'destination-out' : currentStroke.type === 'highlighter' ? 'multiply' : 'source-over'}
-            />
-          )}
+          {currentStroke && (() => {
+            const renderProps = getStrokeRenderProps(currentStroke);
+            const strokeData = getStroke(currentStroke.points, renderProps.options);
+            const pathData = getSvgPathFromStroke(strokeData);
+            return (
+              <Path
+                data={pathData}
+                fill={renderProps.fill}
+                opacity={renderProps.opacity}
+                globalCompositeOperation={renderProps.compositeOperation}
+              />
+            );
+          })()}
 
           {lassoPath.length > 0 && (
             <Path

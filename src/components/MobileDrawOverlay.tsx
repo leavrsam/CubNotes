@@ -2,9 +2,17 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { SpatialCanvas } from './SpatialCanvas';
-import { PenTool, Eraser, Highlighter, Check, File, Image as ImageIcon, Music, Video, FileText } from 'lucide-react';
+import { PenTool, Pencil, Eraser, Highlighter, Check, File, Image as ImageIcon, Music, Video, FileText } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { Stroke } from './CustomCanvas';
+
+const MarkerIcon = ({ size = 18, color = "currentColor", className = "" }: { size?: number; color?: string; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M14 2l4 4-10 10H4v-4L14 2z" />
+    <path d="M12 4l4 4" />
+    <path d="M3 21h7" />
+  </svg>
+);
 
 interface MobileDrawOverlayProps {
   isOpen: boolean;
@@ -26,11 +34,34 @@ const COLOR_PRESETS = [
   { label: 'Yellow', value: '#EAB308' },
 ];
 
-const SIZE_PRESETS = [
-  { label: 'Fine', size: 2, iconSize: 4 },
-  { label: 'Medium', size: 4, iconSize: 8 },
-  { label: 'Thick', size: 8, iconSize: 12 },
-];
+const getSizePresetsForTool = (tool: string) => {
+  if (tool === 'highlighter') {
+    return [
+      { label: 'Fine', size: 12, iconSize: 6 },
+      { label: 'Medium', size: 18, iconSize: 10 },
+      { label: 'Broad', size: 28, iconSize: 14 },
+    ];
+  }
+  if (tool === 'marker') {
+    return [
+      { label: 'Fine', size: 5, iconSize: 5 },
+      { label: 'Medium', size: 8, iconSize: 8 },
+      { label: 'Bold', size: 14, iconSize: 12 },
+    ];
+  }
+  if (tool === 'pencil') {
+    return [
+      { label: 'Sharp', size: 1.5, iconSize: 3 },
+      { label: 'Medium', size: 2.5, iconSize: 6 },
+      { label: 'Soft', size: 4.5, iconSize: 9 },
+    ];
+  }
+  return [
+    { label: 'Fine', size: 2, iconSize: 4 },
+    { label: 'Medium', size: 3.5, iconSize: 7 },
+    { label: 'Bold', size: 6, iconSize: 10 },
+  ];
+};
 
 function getStrokeBoundingBox(stroke: Stroke) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -84,7 +115,7 @@ export function MobileDrawOverlay({
   initialBlockY 
 }: MobileDrawOverlayProps) {
   const { resolvedTheme } = useTheme();
-  const [tool, setTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
+  const [tool, setTool] = useState<'pen' | 'pencil' | 'marker' | 'highlighter' | 'eraser'>('pen');
   const [color, setColor] = useState('#FFFFFF');
   const [size, setSize] = useState(4);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -299,10 +330,10 @@ export function MobileDrawOverlay({
                 setZoom={() => {}}
                 width={cardDims.width}
                 height={effectiveCardHeight}
-                tool={tool}
+                tool={tool === 'eraser' ? 'eraser' : 'pen'}
                 activeColor={color}
                 activeSize={size}
-                activePresetType={tool === 'highlighter' ? 'highlighter' : 'pen'}
+                activePresetType={tool === 'eraser' ? 'pen' : tool}
                 eraserType="stroke"
                 annotateBlockId={annotateBlockId}
                 initialBlockY={initialBlockY}
@@ -320,10 +351,10 @@ export function MobileDrawOverlay({
             setPan={setPan}
             zoom={zoom}
             setZoom={setZoom}
-            tool={tool}
+            tool={tool === 'eraser' ? 'eraser' : 'pen'}
             activeColor={color}
             activeSize={size}
-            activePresetType={tool === 'highlighter' ? 'highlighter' : 'pen'}
+            activePresetType={tool === 'eraser' ? 'pen' : tool}
             eraserType="stroke"
             annotateBlockId={annotateBlockId}
             initialBlockY={initialBlockY}
@@ -336,10 +367,10 @@ export function MobileDrawOverlay({
         className="absolute bottom-0 left-0 right-0 p-3 z-[2200] pointer-events-auto flex flex-col items-center gap-2"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}
       >
-        {/* Tool Size Sub-bar (if pen or highlighter) */}
+        {/* Tool Size Sub-bar (if pen, pencil, marker, or highlighter) */}
         {tool !== 'eraser' && (
           <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3 py-1 rounded-full shadow-md border border-zinc-200/80 dark:border-zinc-800 flex items-center gap-3">
-            {SIZE_PRESETS.map((p) => (
+            {getSizePresetsForTool(tool).map((p) => (
               <button
                 key={p.label}
                 onClick={() => setSize(p.size)}
@@ -348,7 +379,7 @@ export function MobileDrawOverlay({
                     ? 'bg-zinc-200 dark:bg-zinc-700 ring-2 ring-primary-500' 
                     : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200'
                 }`}
-                title={p.label}
+                title={`${p.label} (${p.size}px)`}
               >
                 <div 
                   className="rounded-full bg-current" 
@@ -360,44 +391,68 @@ export function MobileDrawOverlay({
         )}
 
         {/* Main Tool & Color Bar */}
-        <div className="w-full max-w-[360px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/90 dark:border-zinc-800 px-3 py-2 flex items-center justify-between gap-1.5">
+        <div className="w-full max-w-[390px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-zinc-200/90 dark:border-zinc-800 px-3 py-2 flex items-center justify-between gap-1.5">
           
-          {/* Tool Switchers */}
+          {/* Tool Switchers: Pen | Pencil | Marker | Highlighter | Eraser */}
           <div className="flex items-center gap-1">
             <button 
-              onClick={() => setTool('pen')}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+              onClick={() => { setTool('pen'); setSize(3); }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
                 tool === 'pen' 
                   ? 'bg-primary-50 text-primary-600 dark:bg-primary-950/60 dark:text-primary-400 ring-1.5 ring-primary-500' 
                   : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
               title="Pen"
             >
-              <PenTool size={18} />
+              <PenTool size={16} />
+            </button>
+
+            <button 
+              onClick={() => { setTool('pencil'); setSize(2.5); }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                tool === 'pencil' 
+                  ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-100 ring-1.5 ring-zinc-400' 
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title="Pencil"
+            >
+              <Pencil size={16} />
+            </button>
+
+            <button 
+              onClick={() => { setTool('marker'); setSize(8); }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                tool === 'marker' 
+                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 ring-1.5 ring-blue-500' 
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title="Marker"
+            >
+              <MarkerIcon size={16} />
             </button>
             
             <button 
-              onClick={() => setTool('highlighter')}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+              onClick={() => { setTool('highlighter'); setSize(18); }}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
                 tool === 'highlighter' 
                   ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-950/60 dark:text-yellow-400 ring-1.5 ring-yellow-500' 
                   : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
               title="Highlighter"
             >
-              <Highlighter size={18} />
+              <Highlighter size={16} />
             </button>
 
             <button 
               onClick={() => setTool('eraser')}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
                 tool === 'eraser' 
                   ? 'bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 ring-1.5 ring-red-500' 
                   : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
               title="Eraser"
             >
-              <Eraser size={18} />
+              <Eraser size={16} />
             </button>
           </div>
 
