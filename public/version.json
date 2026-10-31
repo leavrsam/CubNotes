@@ -1,12 +1,12 @@
 {
-  "versionCode": 6,
-  "versionName": "1.0.5",
-  "version_code": 6,
-  "version_name": "1.0.5",
+  "versionCode": 7,
+  "versionName": "1.0.6",
+  "version_code": 7,
+  "version_name": "1.0.6",
   "apkUrl": "https://motif.wolfcubventures.com/Motif.apk",
   "apk_url": "https://motif.wolfcubventures.com/Motif.apk",
   "title": "Motif Update Available",
-  "description": "Fix for note loading, real-time multiplayer collaboration with Yjs, live cursors, and mobile keyboard positioning.",
-  "changelog": "• Fixed note loading and editing stability\n• Real-time multiplayer editing: simultaneous collaborative editing without overwriting notes\n• Live collaborator presence: colored user cursors and active collaborator avatars\n• Natural typing positioning: Active line stays right above the keyboard without jumping\n• Instant 0ms offline sync with local IndexedDB persistence",
-  "releaseDate": "2026-10-26"
+  "description": "New brand logo and icon, focused meeting panel, and real-time canvas performance enhancements.",
+  "changelog": "• Updated brand logo & icons across app, launcher, and splash screens\n• Meeting workspace panel and synthesis enhancements\n• Real-time canvas improvements and stability fixes\n• Instant 0ms offline sync with local IndexedDB persistence",
+  "releaseDate": "2026-10-30"
 }
