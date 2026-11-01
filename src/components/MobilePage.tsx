@@ -496,6 +496,16 @@ export function MobilePage({
   // Real-time Yjs CRDT Room & Collaborators
   const { doc: ydoc, provider: yProvider, activeUsers, currentUser: yCurrentUser } = useYjsRoom(pageId, currentUser);
 
+  // Only show OTHER people on this note (matches desktop behavior)
+  const otherActiveCollaborators = useMemo(() => {
+    if (!activeUsers) return [];
+    return activeUsers.filter(u => {
+      if (yCurrentUser?.email && u.email) return u.email !== yCurrentUser.email;
+      if (yCurrentUser?.name && u.name) return u.name !== yCurrentUser.name;
+      return false;
+    });
+  }, [activeUsers, yCurrentUser]);
+
   // Paper & Background Style State
   const [backgroundStyle, setBackgroundStyle] = useState<'none' | 'ruled' | 'grid' | 'dots'>('none');
   const [pageColor, setPageColor] = useState<string>('default');
@@ -1287,108 +1297,41 @@ export function MobilePage({
 
           <div className="flex items-center gap-2">
             {/* Active Realtime Collaborators */}
-            {activeUsers && activeUsers.length > 0 && (
+            {otherActiveCollaborators.length > 0 && (
               <div 
                 className="pointer-events-auto flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all text-xs"
-                title={`${activeUsers.length} collaborator${activeUsers.length > 1 ? 's' : ''} connected`}
+                title={`${otherActiveCollaborators.length} collaborator${otherActiveCollaborators.length > 1 ? 's' : ''} connected`}
               >
                 <span className="flex h-2 w-2 relative mr-0.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <div className="flex items-center -space-x-1.5 overflow-hidden">
-                  {activeUsers.slice(0, 3).map((u, i) => (
+                  {otherActiveCollaborators.slice(0, 3).map((u, i) => (
                     <div
                       key={u.email || u.name || i}
                       className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase ring-1.5 ring-white dark:ring-zinc-900 shadow-xs select-none"
                       style={{ backgroundColor: u.color }}
-                      title={`${u.name}${yCurrentUser && u.email === yCurrentUser.email ? ' (You)' : ''}`}
+                      title={u.name}
                     >
                       {u.name.slice(0, 2)}
                     </div>
                   ))}
                 </div>
                 <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 ml-0.5">
-                  {activeUsers.length > 1 ? `${activeUsers.length}` : 'Live'}
+                  {otherActiveCollaborators.length > 1 ? `${otherActiveCollaborators.length}` : 'Live'}
                 </span>
               </div>
             )}
 
-            <div className="pointer-events-auto flex items-center gap-1.5 p-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all">
-            {isTopMenuOpen && (
-              <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-2 duration-150">
-                {onOpenAskAI && (
-                  <button 
-                    onClick={() => {
-                      setIsTopMenuOpen(false);
-                      onOpenAskAI();
-                    }}
-                    className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-primary-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-                    title="Ask Motif AI"
-                  >
-                    <Bot size={16} />
-                  </button>
-                )}
-
-                {onOpenShare && (
-                  <button 
-                    onClick={() => {
-                      setIsTopMenuOpen(false);
-                      onOpenShare();
-                    }}
-                    className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-primary-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-                    title="Share & Collaborate"
-                  >
-                    <Share2 size={16} />
-                  </button>
-                )}
-
-                <button 
-                  onClick={() => {
-                    setIsTopMenuOpen(false);
-                    fetchVersions();
-                    setIsVersionsModalOpen(true);
-                  }}
-                  className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-                  title="Version History"
-                >
-                  <History size={16} />
-                </button>
-
-                <button 
-                  onClick={() => {
-                    setIsTopMenuOpen(false);
-                    setIsRearranging(true);
-                    toast.success("Rearrange Mode Activated", { id: 'rearrange-toast', duration: 1500 });
-                  }}
-                  className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-                  title="Rearrange Blocks"
-                >
-                  <GripVertical size={16} />
-                </button>
-
-                <button 
-                  onClick={() => {
-                    setIsTopMenuOpen(false);
-                    if (onOpenSettings) {
-                      onOpenSettings();
-                    } else {
-                      setIsInternalSettingsOpen(true);
-                    }
-                  }}
-                  className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
-                  title="Settings"
-                >
-                  <Settings size={16} />
-                </button>
-
-                <div className="w-px h-4 bg-zinc-300 dark:bg-zinc-700 mx-0.5" />
-              </div>
-            )}
-
-            {!isTopMenuOpen && onOpenAskAI && (
+            <div className="relative pointer-events-auto">
+            <div className="flex items-center gap-1.5 p-1 rounded-full bg-white/75 dark:bg-zinc-900/75 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 ring-1 ring-black/5 dark:ring-white/5 transition-all">
+            {onOpenAskAI && (
               <button 
-                onClick={() => onOpenAskAI()}
+                onClick={() => {
+                  setIsTopMenuOpen(false);
+                  onOpenAskAI();
+                }}
                 className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 hover:text-primary-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-95 transition-all"
                 title="Ask Motif AI"
               >
@@ -1404,9 +1347,84 @@ export function MobilePage({
                   : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'
               }`}
               title={isTopMenuOpen ? "Close Menu" : "More Options"}
+              aria-expanded={isTopMenuOpen}
+              aria-haspopup="menu"
             >
               <MoreHorizontal size={18} />
             </button>
+            </div>
+
+            {isTopMenuOpen && (
+              <>
+                {/* Tap-outside-to-close backdrop */}
+                <div
+                  className="fixed inset-0 z-[-1]"
+                  onClick={() => setIsTopMenuOpen(false)}
+                  aria-hidden="true"
+                />
+                {/* Dropdown anchored to the right edge so it never runs off screen */}
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 w-52 max-w-[calc(100vw-2rem)] p-1.5 rounded-2xl bg-white/95 dark:bg-zinc-900/95 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-xl shadow-black/10 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/5 animate-in fade-in slide-in-from-top-1 duration-150"
+                >
+                  {onOpenShare && (
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        setIsTopMenuOpen(false);
+                        onOpenShare();
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:bg-zinc-100 dark:active:bg-zinc-800 text-left transition-colors"
+                    >
+                      <Share2 size={16} />
+                      <span>Share & Collaborate</span>
+                    </button>
+                  )}
+
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setIsTopMenuOpen(false);
+                      fetchVersions();
+                      setIsVersionsModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:bg-zinc-100 dark:active:bg-zinc-800 text-left transition-colors"
+                  >
+                    <History size={16} />
+                    <span>Version History</span>
+                  </button>
+
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setIsTopMenuOpen(false);
+                      setIsRearranging(true);
+                      toast.success("Rearrange Mode Activated", { id: 'rearrange-toast', duration: 1500 });
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:bg-zinc-100 dark:active:bg-zinc-800 text-left transition-colors"
+                  >
+                    <GripVertical size={16} />
+                    <span>Rearrange Blocks</span>
+                  </button>
+
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setIsTopMenuOpen(false);
+                      if (onOpenSettings) {
+                        onOpenSettings();
+                      } else {
+                        setIsInternalSettingsOpen(true);
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 active:bg-zinc-100 dark:active:bg-zinc-800 text-left transition-colors"
+                  >
+                    <Settings size={16} />
+                    <span>Settings</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

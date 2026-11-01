@@ -1,9 +1,11 @@
 import os
+import sys
+import math
 import base64
 from io import BytesIO
 from PIL import Image, ImageDraw
 
-SOURCE_IMAGE_PATH = "/Users/samuelleavitt/.gemini/antigravity/brain/8076e0bb-94b9-42f1-978d-73c248a9abb7/.user_uploaded/media_1793404623236_cac1de05.png"
+SOURCE_IMAGE_PATH = sys.argv[1] if len(sys.argv) > 1 else "/Users/samuelleavitt/.gemini/antigravity/brain/8076e0bb-94b9-42f1-978d-73c248a9abb7/.user_uploaded/media_1793404623236_cac1de05.png"
 DARK_BG = (11, 14, 23, 255) # #0B0E17
 
 def create_transparent_logo(cropped_logo, size, margin_ratio=0.06):
@@ -21,6 +23,40 @@ def create_transparent_logo(cropped_logo, size, margin_ratio=0.06):
     paste_y = (h - nh) // 2
     canvas.paste(resized, (paste_x, paste_y), resized)
     return canvas
+
+def max_logo_radius(cropped_logo, alpha_threshold=40):
+    """Farthest visible pixel from the logo's center, in source pixels."""
+    lw, lh = cropped_logo.size
+    cx, cy = lw / 2, lh / 2
+    alpha = cropped_logo.getchannel("A").load()
+    r = 0.0
+    for y in range(lh):
+        for x in range(lw):
+            if alpha[x, y] > alpha_threshold:
+                r = max(r, math.hypot(x + 0.5 - cx, y + 0.5 - cy))
+    return r
+
+def create_safe_zone_icon(cropped_logo, size, radius_fraction, bg_color=None, round_bg=False):
+    """Scale the logo so every visible pixel sits inside a centered circle of
+    radius `radius_fraction * size`. Used for icons the OS crops to a circle
+    (Android adaptive/round icons, PWA maskable icons) so nothing gets cut off."""
+    w, h = size
+    sf = 4
+    cw, ch = w * sf, h * sf
+    canvas = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+    if bg_color is not None:
+        draw = ImageDraw.Draw(canvas)
+        if round_bg:
+            draw.ellipse([(0, 0), (cw - 1, ch - 1)], fill=bg_color)
+        else:
+            draw.rectangle([(0, 0), (cw, ch)], fill=bg_color)
+
+    ratio = (radius_fraction * min(cw, ch)) / max_logo_radius(cropped_logo)
+    lw, lh = cropped_logo.size
+    nw, nh = max(1, int(lw * ratio)), max(1, int(lh * ratio))
+    resized = cropped_logo.resize((nw, nh), Image.Resampling.LANCZOS)
+    canvas.paste(resized, ((cw - nw) // 2, (ch - nh) // 2), resized)
+    return canvas.resize((w, h), Image.Resampling.LANCZOS)
 
 def create_solid_bg_icon(cropped_logo, size, bg_color=DARK_BG, logo_scale=0.68, corner_radius=0):
     w, h = size
@@ -89,13 +125,31 @@ def create_splash(cropped_logo, size, bg_color=DARK_BG):
     canvas.paste(resized, (paste_x, paste_y), resized)
     return canvas
 
-def main():
-    print(f"Loading source logo from {SOURCE_IMAGE_PATH}...")
-    src = Image.open(SOURCE_IMAGE_PATH).convert("RGBA")
-    
+def load_cropped_logo(path=SOURCE_IMAGE_PATH):
+    print(f"Loading source logo from {path}...")
+    src = Image.open(path).convert("RGBA")
     bbox = src.getchannel("A").getbbox()
     print(f"Cropping transparent padding. Bbox: {bbox}")
-    cropped = src.crop(bbox)
+    return src.crop(bbox)
+
+def generate_masked_icons(cropped):
+    """Regenerate only the icons that get cropped to a circle by the OS."""
+    icon_maskable = create_safe_zone_icon(cropped, (512, 512), radius_fraction=0.37, bg_color=DARK_BG)
+    icon_maskable.save("public/icon-maskable.png", format="PNG")
+    for density, (fg_size, icon_size) in {
+        "mdpi": (108, 48), "hdpi": (162, 72), "xhdpi": (216, 96),
+        "xxhdpi": (324, 144), "xxxhdpi": (432, 192),
+    }.items():
+        base_dir = f"android/app/src/main/res/mipmap-{density}"
+        if not os.path.exists(base_dir):
+            continue
+        create_safe_zone_icon(cropped, (fg_size, fg_size), radius_fraction=0.28).save(
+            f"{base_dir}/ic_launcher_foreground.png", format="PNG")
+        create_safe_zone_icon(cropped, (icon_size, icon_size), radius_fraction=0.40, bg_color=DARK_BG, round_bg=True).save(
+            f"{base_dir}/ic_launcher_round.png", format="PNG")
+
+def main():
+    cropped = load_cropped_logo()
     
     # 1. Web & PWA Logos
     print("Generating Web & PWA assets...")
@@ -126,7 +180,8 @@ def main():
     icon_512.save("src/app/icon.png", format="PNG")
     
     # Icon maskable (512x512 with safe padding ~60% for Android/PWA maskable spec)
-    icon_maskable = create_solid_bg_icon(cropped, (512, 512), bg_color=DARK_BG, logo_scale=0.60)
+    # Maskable safe zone is a circle of radius 40% of the icon; stay inside it.
+    icon_maskable = create_safe_zone_icon(cropped, (512, 512), radius_fraction=0.37, bg_color=DARK_BG)
     icon_maskable.save("public/icon-maskable.png", format="PNG")
     
     # 192x192 PWA Icon
@@ -166,8 +221,10 @@ def main():
         if not os.path.exists(base_dir):
             continue
             
-        # Foreground: transparent canvas, logo centered at ~65%
-        fg = create_transparent_logo(cropped, cfg["fg"], margin_ratio=0.18)
+        # Foreground: Android masks adaptive icons (often to a circle). The safe
+        # zone is a 66dp-diameter circle on the 108dp canvas (radius ~0.305), so
+        # keep every visible pixel inside radius 0.28 to avoid clipping.
+        fg = create_safe_zone_icon(cropped, cfg["fg"], radius_fraction=0.28)
         fg.save(f"{base_dir}/ic_launcher_foreground.png", format="PNG")
         
         # Launcher icon (rounded squircle)
@@ -175,7 +232,7 @@ def main():
         licon.save(f"{base_dir}/ic_launcher.png", format="PNG")
         
         # Launcher round icon (circle)
-        ricon = create_round_icon(cropped, cfg["icon"], bg_color=DARK_BG, logo_scale=0.68)
+        ricon = create_safe_zone_icon(cropped, cfg["icon"], radius_fraction=0.40, bg_color=DARK_BG, round_bg=True)
         ricon.save(f"{base_dir}/ic_launcher_round.png", format="PNG")
         
     # Android Splash Screens
@@ -212,4 +269,9 @@ def main():
     print("All base image assets generated successfully!")
 
 if __name__ == "__main__":
-    main()
+    # `python scripts/generate-all-logos.py <source.png> --masked-only` regenerates
+    # just the circle-cropped icons (Android launcher + PWA maskable).
+    if "--masked-only" in sys.argv:
+        generate_masked_icons(load_cropped_logo())
+    else:
+        main()
