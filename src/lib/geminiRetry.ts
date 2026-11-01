@@ -65,11 +65,11 @@ export function formatGeminiErrorMessage(error: any, fallback = "AI request fail
   const lower = extractedMsg.toLowerCase();
 
   if (lower.includes('503') || lower.includes('unavailable') || lower.includes('high demand') || lower.includes('spikes in demand')) {
-    return "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+    return "Motif AI is experiencing high demand right now. Please try again in a few moments.";
   }
 
   if (lower.includes('429') || lower.includes('resource exhausted') || lower.includes('resource_exhausted') || lower.includes('rate limit')) {
-    return "Google Gemini rate limit reached. Please wait a moment or configure your own Gemini API key in Settings.";
+    return "Motif AI is busy right now. Please wait a moment and try again.";
   }
 
   if (lower.includes('api key') && (lower.includes('invalid') || lower.includes('not found') || lower.includes('expired') || lower.includes('unauthorized'))) {

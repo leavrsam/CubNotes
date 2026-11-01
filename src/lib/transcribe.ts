@@ -227,7 +227,7 @@ async function callGeminiDirect(
       }
 
       lastError = isTransient 
-        ? new Error("Google Gemini is currently experiencing temporary high demand. Please try again in a few moments.")
+        ? new Error("Motif AI is experiencing high demand right now. Please try again in a few moments.")
         : new Error(errMsg);
     } catch (e: any) {
       const errMsg = e?.message || String(e);
@@ -239,12 +239,12 @@ async function callGeminiDirect(
         continue;
       }
       lastError = isTransient
-        ? new Error("Google Gemini is currently experiencing temporary high demand. Please try again in a few moments.")
+        ? new Error("Motif AI is experiencing high demand right now. Please try again in a few moments.")
         : e;
     }
   }
 
-  throw lastError || new Error('Google Gemini API request failed.');
+  throw lastError || new Error('AI request failed. Please try again.');
 }
 
 /**
@@ -446,7 +446,7 @@ export async function processAudioTranscription(params: TranscribeParams): Promi
       throw new Error("The recording took longer than expected to process on the server (HTTP 504 Gateway Timeout). Please add your Google Gemini API key in Motif Settings > AI to transcribe recordings directly without server limits.");
     }
     if (message.includes('503') || message.includes('high demand') || message.includes('UNAVAILABLE')) {
-      throw new Error("Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.");
+      throw new Error("Motif AI is experiencing high demand right now. Please try again in a few moments.");
     }
 
     throw new Error(formatGeminiErrorMessage(message, "AI Processing failed. Please try again."));

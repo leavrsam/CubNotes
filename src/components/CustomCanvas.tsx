@@ -851,7 +851,7 @@ export function CustomCanvas({
     setIsGeneratingFlowchart(true);
     const targetMode = customMode || aiFlowchartMode;
     const modeLabel = targetMode === 'todo' ? 'categorized list flowchart' : 'flowchart';
-    const toastId = toast.loading(`Organizing ${modeLabel} with Gemini 3.8 Flash...`);
+    const toastId = toast.loading(`Organizing ${modeLabel}...`);
 
     try {
       const centerX = (-pan.x + (typeof window !== 'undefined' ? window.innerWidth / 3 : 300)) / zoom;
@@ -907,7 +907,7 @@ export function CustomCanvas({
       const rawMsg = err?.message || String(err);
       let cleanMsg = rawMsg;
       if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
-        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+        cleanMsg = "Motif AI is experiencing high demand right now. Please try again in a few moments.";
       } else if (rawMsg.trim().startsWith('{') && rawMsg.includes('"message"')) {
         try {
           const parsed = JSON.parse(rawMsg);
@@ -2043,7 +2043,7 @@ export function CustomCanvas({
       const rawMsg = err?.message || String(err);
       let cleanMsg = rawMsg;
       if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
-        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+        cleanMsg = "Motif AI is experiencing high demand right now. Please try again in a few moments.";
       }
       toast.error(cleanMsg || "Failed to organize chaos.", { id: toastId });
     }
@@ -2053,7 +2053,7 @@ export function CustomCanvas({
     const selectedStrokes = strokes.filter(s => selectedIds.includes(s.id));
     if (selectedStrokes.length === 0) return;
 
-    const toastId = toast.loading("Converting handwriting via Gemini Flash...");
+    const toastId = toast.loading("Converting handwriting...");
     try {
       const bounds = getSelectionBounds();
       if (!bounds) {
@@ -3791,7 +3791,7 @@ export function CustomCanvas({
                   <button
                     onClick={() => setIsAiFlowchartModalOpen(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium text-xs shadow-xs transition-transform active:scale-95"
-                    title="Generate Flowcharts & Organize To-Do Lists with Gemini 3.8 Flash"
+                    title="Generate Flowcharts & Organize To-Do Lists with AI"
                   >
                     <Workflow size={14} className="text-blue-100" />
                     <span>AI Flowchart</span>
@@ -4396,7 +4396,7 @@ export function CustomCanvas({
                       handleConvertHandwriting();
                     }}
                     className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 rounded-full shadow-sm transition-all active:scale-95"
-                    title="Convert handwritten strokes into formatted text or action items via Gemini Flash"
+                    title="Convert handwritten strokes into formatted text or action items"
                   >
                     <PenTool size={13} />
                     <span>Convert Handwriting</span>
@@ -4635,7 +4635,7 @@ export function CustomCanvas({
         topOffset={isRibbonExpanded ? 88 : 40}
       />
 
-      {/* AI Flowchart & List Organizer Modal (Powered by Gemini 3.8 Flash) */}
+      {/* AI Flowchart & List Organizer Modal */}
       {isAiFlowchartModalOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 pointer-events-auto animate-in fade-in duration-150"
@@ -4653,7 +4653,7 @@ export function CustomCanvas({
                 </div>
                 <div>
                   <h3 className="font-semibold text-base">AI Flowchart & List Organizer</h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Powered by Google Gemini 3.8 Flash</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Turn messy notes into flowcharts and to-do lists</p>
                 </div>
               </div>
               <button
@@ -4843,7 +4843,7 @@ export function CustomCanvas({
                 {isGeneratingFlowchart ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Organizing with Gemini 3.8 Flash...</span>
+                    <span>Organizing...</span>
                   </>
                 ) : (
                   <>

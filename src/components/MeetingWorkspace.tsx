@@ -184,7 +184,7 @@ export function MeetingWorkspace({
     }
 
     setIsEnhancing(true);
-    const toastId = toast.loading("Synthesizing canvas notes with audio transcript via Gemini 3.8 Flash...");
+    const toastId = toast.loading("Combining your canvas notes with the audio transcript...");
 
     try {
       const customKey = typeof window !== 'undefined' ? (localStorage.getItem('motif_gemini_api_key') || localStorage.getItem('cubnotes_gemini_api_key')) : null;
@@ -216,7 +216,7 @@ export function MeetingWorkspace({
       const rawMsg = err?.message || String(err);
       let cleanMsg = rawMsg;
       if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
-        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+        cleanMsg = "Motif AI is experiencing high demand right now. Please try again in a few moments.";
       }
       toast.error(cleanMsg || "Failed to enhance notes", { id: toastId });
     } finally {
@@ -269,7 +269,7 @@ export function MeetingWorkspace({
       const rawMsg = err?.message || String(err);
       let cleanMsg = rawMsg;
       if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
-        cleanMsg = "Google Gemini is currently experiencing a temporary demand spike. Please try again in a few moments.";
+        cleanMsg = "Motif AI is experiencing high demand right now. Please try again in a few moments.";
       }
       const errHistory = [...newHistory, { role: 'assistant' as const, text: `Error: ${cleanMsg || "Unable to answer question."}` }];
       setChatHistory(errHistory);
@@ -546,7 +546,7 @@ export function MeetingWorkspace({
                 </ReactMarkdown>
 
                 <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 not-prose flex items-center justify-between text-[11px] text-zinc-400">
-                  <span>Synthesized with Gemini 3.8 Flash</span>
+                  <span>Synthesized by Motif AI</span>
                   <button
                     type="button"
                     onClick={async () => {
@@ -695,7 +695,7 @@ export function MeetingWorkspace({
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-primary-600 hover:from-amber-600 hover:to-primary-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-transform active:scale-95"
               >
                 <Sparkles size={13} className={isEnhancing ? "animate-spin" : ""} />
-                <span>{isEnhancing ? "Synthesizing with Gemini 3.8 Flash..." : (currentEnhanced ? "Re-Enhance from Canvas & Audio" : "Enhance from Canvas & Audio")}</span>
+                <span>{isEnhancing ? "Synthesizing..." : (currentEnhanced ? "Re-Enhance from Canvas & Audio" : "Enhance from Canvas & Audio")}</span>
               </button>
             </div>
 
@@ -777,7 +777,7 @@ export function MeetingWorkspace({
               {isAsking && (
                 <div className="flex items-center gap-2 text-zinc-400 text-xs italic">
                   <Bot size={13} className="animate-spin text-primary-500" />
-                  <span>Thinking with Gemini 3.8 Flash...</span>
+                  <span>Thinking...</span>
                 </div>
               )}
             </div>

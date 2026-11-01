@@ -797,10 +797,10 @@ export function SettingsModal({
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Sparkles size={18} className="text-amber-500" />
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Google Gemini AI</h3>
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">AI</h3>
                   </div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Motif is powered by <strong>Gemini 3.8 Flash</strong> for speaker-diarized audio meeting transcriptions, structured executive summaries, and intelligent note organization.
+                    Motif AI handles meeting transcriptions, summaries, and note organization. Optionally, add your own Google AI key below to use your own quota.
                   </p>
                 </div>
 

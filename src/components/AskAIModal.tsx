@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Sparkles, X, ArrowUp, BookOpen, ChevronRight, Copy, Check,
   ChevronDown, RotateCcw, Loader2,
@@ -33,12 +33,55 @@ interface AskAIModalProps {
   initialQuery?: string;
 }
 
-const PRESET_QUERIES = [
-  "Where are my notes on osteoporosis?",
-  "What has been the main topic of all the meetings in the Jellyfish notebook?",
-  "What are all action items across my recent meetings?",
-  "Summarize key decisions made this month",
+const GENERIC_SUGGESTIONS = [
+  "What action items came out of my recent meetings?",
+  "Summarize what I worked on this week",
+  "What key decisions have I made this month?",
+  "What follow-ups am I forgetting?",
 ];
+
+const isUsableTitle = (t?: string | null) => {
+  const title = (t || "").trim();
+  return title.length > 0 && !/^untitled/i.test(title);
+};
+
+const shorten = (t: string, max = 40) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
+
+/**
+ * Build suggestions from the user's own notebooks and pages, padded with
+ * generic prompts so new users still get useful ideas.
+ */
+function buildSuggestions(notebooks: Notebook[], selectedNotebookId: string): string[] {
+  const live = notebooks.filter((nb) => !nb.deleted_at);
+  const scoped = selectedNotebookId === "all" ? live : live.filter((nb) => nb.id === selectedNotebookId);
+
+  const pagesOf = (nb: Notebook) =>
+    (nb.sections || []).filter((s) => !s.deleted_at).flatMap((s) => (s.pages || []).filter((p) => !p.deleted_at));
+
+  const personal: string[] = [];
+
+  // Most recent note with a real title
+  const latestPage = scoped
+    .flatMap(pagesOf)
+    .filter((p) => isUsableTitle(p.title))
+    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+  if (latestPage) personal.push(`Summarize my note "${shorten(latestPage.title.trim())}"`);
+
+  // Busiest (non-journal) notebook
+  const topNotebook = scoped
+    .filter((nb) => !nb.is_journal && isUsableTitle(nb.title))
+    .map((nb) => ({ nb, count: pagesOf(nb).length }))
+    .filter((x) => x.count > 0)
+    .sort((a, b) => b.count - a.count)[0]?.nb;
+  if (topNotebook) personal.push(`What are the main topics in ${shorten(topNotebook.title.trim(), 30)}?`);
+
+  const suggestions = [...personal];
+  for (const g of GENERIC_SUGGESTIONS) {
+    if (suggestions.length >= 4) break;
+    suggestions.push(g);
+  }
+  return suggestions;
+}
 
 export function AskAIModal({
   isOpen,
@@ -152,7 +195,7 @@ export function AskAIModal({
         {
           id: `ai-err-${Date.now()}`,
           role: "assistant",
-          text: `**Error**: ${err.message || "Could not analyze notes. Please check your internet connection or Gemini API key in Settings."}`,
+          text: `**Error**: ${err.message || "Could not analyze notes. Please check your internet connection and try again."}`,
           timestamp: Date.now(),
         },
       ]);
@@ -173,6 +216,11 @@ export function AskAIModal({
     onClose();
     toast.success("Opened referenced note", { id: "opened-note", duration: 1500 });
   };
+
+  const suggestions = useMemo(
+    () => buildSuggestions(notebooks, selectedNotebookId),
+    [notebooks, selectedNotebookId]
+  );
 
   if (!isOpen) return null;
 
@@ -246,7 +294,7 @@ export function AskAIModal({
                   Suggestions
                 </p>
                 <div className="flex flex-col divide-y divide-zinc-800/80 rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-                  {PRESET_QUERIES.map((preset, idx) => (
+                  {suggestions.map((preset, idx) => (
                     <button
                       key={idx}
                       type="button"
@@ -415,7 +463,7 @@ export function AskAIModal({
           </form>
 
           <p className="mt-2 text-center text-[11px] text-zinc-600">
-            Powered by Gemini 3.8 Flash · Answers can be wrong, so check the sources.
+            Answers can be wrong, so check the sources.
           </p>
         </div>
       </div>

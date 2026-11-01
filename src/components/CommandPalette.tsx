@@ -186,7 +186,7 @@ export function CommandPalette({
         id: 'action-settings',
         type: 'action',
         title: 'Settings & Cloud Storage',
-        subtitle: 'Configure S3 sync, Gemini API key, and appearance',
+        subtitle: 'Configure sync, AI, and appearance',
         icon: <Settings size={16} className="text-zinc-400" />,
         action: () => {
           onOpenSettings?.();

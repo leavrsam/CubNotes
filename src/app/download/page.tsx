@@ -386,7 +386,7 @@ export default function DownloadPage() {
             <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-3 mx-auto sm:mx-0">
               <Zap size={18} />
             </div>
-            <h4 className="font-bold text-sm text-white mb-1">Gemini 3.8 Flash</h4>
+            <h4 className="font-bold text-sm text-white mb-1">Built-in AI</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
               Instant transcripts, structured executive summaries, and interactive meeting chat.
             </p>

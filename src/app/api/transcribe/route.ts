@@ -232,7 +232,7 @@ Return ONLY valid JSON matching this schema:
         if (isTransient) {
           return NextResponse.json({
             success: false,
-            error: "Google Gemini is currently experiencing temporary high demand. Please try again in a few moments."
+            error: "Motif AI is experiencing high demand right now. Please try again in a few moments."
           }, { status: 503 });
         }
 

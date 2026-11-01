@@ -1528,7 +1528,7 @@ export function FlowchartOverlay({
               onClick={() => handleAIExpand(activeSingleShape)}
               disabled={isExpandingAI}
               className="flex items-center gap-1 px-1.5 py-1 text-xs font-semibold rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400 transition-colors"
-              title="Brainstorm 4 Subtopics with Gemini AI"
+              title="Brainstorm 4 Subtopics with AI"
             >
               {isExpandingAI ? (
                 <Loader2 size={13} className="animate-spin" />

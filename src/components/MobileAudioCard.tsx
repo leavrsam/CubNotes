@@ -524,7 +524,7 @@ export function MobileAudioCard({
                     </span>
                   ) : liveStatus === 'mic_busy' || liveStatus === 'unsupported' ? (
                     <span className="italic text-zinc-400 text-[11px] leading-relaxed">
-                      Microphone is actively recording audio. Gemini 3.8 Flash will transcribe and summarize the full conversation as soon as you tap Stop.
+                      Microphone is actively recording audio. Motif will transcribe and summarize the full conversation as soon as you tap Stop.
                     </span>
                   ) : (
                     <span className="italic text-zinc-400 text-[11px] leading-relaxed">
