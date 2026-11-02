@@ -1409,13 +1409,23 @@ export function CustomCanvas({
           url: publicUrl
         }]);
       } else if (type === 'audio') {
+        const audioPos = getVisibleCanvasCenter(500, 240);
+        const newAudioId = uuidv4();
         setAudios(prev => [...(prev || []), {
-          id: uuidv4(),
-          x: center.x - 160, // 320px wide player
-          y: center.y - 40,
+          id: newAudioId,
+          x: audioPos.x,
+          y: Math.max(80, audioPos.y),
+          width: 500,
           url: publicUrl,
-          title: file.name
+          title: file.name,
+          summary: "",
+          transcript: "",
+          notes: "",
+          audioCreatedAt: Date.now(),
+          audioExpiresAt: isJournal ? undefined : Date.now() + 7 * 24 * 60 * 60 * 1000,
+          isAudioSavedPermanently: isJournal ? true : false,
         }]);
+        setMeetingWorkspaceAudioId(newAudioId);
       } else {
         setFiles(prev => [...(prev || []), {
           id: uuidv4(),
@@ -1435,7 +1445,7 @@ export function CustomCanvas({
 
 
   // Recording Logic
-  const startRecording = async () => {
+  const startRecording = async (customTitle?: string | React.MouseEvent) => {
     try {
       if (isNativeAndroid()) {
         await startNativeRecording();
@@ -1452,19 +1462,23 @@ export function CustomCanvas({
         console.warn("Live speech recognizer not started:", speechErr);
       }
 
-      const center = getCanvasCenter();
+      const pos = getVisibleCanvasCenter(500, 240);
       const nodeId = uuidv4();
       activeRecordingNodeIdRef.current = nodeId;
       setMeetingWorkspaceAudioId(nodeId);
 
-      // Spawn Audio Card immediately so user can type notes in real-time
+      const titleString = typeof customTitle === 'string' ? customTitle.trim() : undefined;
+      const defaultTitle = isJournal ? `Journal Entry - ${format(new Date(), 'MMM d, yyyy')}` : `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`;
+      const finalTitle = titleString || defaultTitle;
+
+      // Spawn Audio Card immediately centered in visible canvas
       setAudios(prev => [...(prev || []), {
         id: nodeId,
-        x: center.x - 220,
-        y: isJournal ? 240 : Math.max(240, center.y - 100),
+        x: pos.x,
+        y: isJournal ? 240 : Math.max(80, pos.y),
         width: 500,
         url: "",
-        title: isJournal ? `Journal Entry - ${format(new Date(), 'MMM d, yyyy')}` : `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
+        title: finalTitle,
         summary: "",
         transcript: "",
         notes: "",
@@ -2141,14 +2155,14 @@ export function CustomCanvas({
       const customEvent = e as CustomEvent<{ id: string }>;
       const { id } = customEvent.detail;
       activeRecordingManager.start(id);
-      const center = getCanvasCenter();
+      const pos = getVisibleCanvasCenter(500, 240);
       setAudios(prev => {
         if (prev.some(a => a.id === id)) return prev;
         return [...(prev || []), {
           id,
           url: "",
-          x: center.x - 220,
-          y: center.y - 100,
+          x: pos.x,
+          y: Math.max(80, pos.y),
           width: 500,
           title: `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`,
           summary: "",
@@ -2277,7 +2291,7 @@ export function CustomCanvas({
       window.removeEventListener('live-transcript-broadcast', handleLiveTranscriptBroadcast);
       window.removeEventListener('motif-focus-time-ink', handleFocusTimeInk);
     };
-  }, [getCanvasCenter, setAudios, setPan, zoom, strokes]);
+  }, [getVisibleCanvasCenter, setAudios, setPan, zoom, strokes]);
 
   const getSelectionBounds = useCallback(() => {
     if (selectedIds.length === 0) return null;
@@ -5065,6 +5079,7 @@ export function CustomCanvas({
         onResumeRecording={resumeRecording}
         onStopRecording={stopRecording}
         onStartRecording={startRecording}
+        onTriggerAudioUpload={() => audioInputRef.current?.click()}
         audios={audios || []}
         onSelectAudioNode={(id) => setMeetingWorkspaceAudioId(id)}
         onExplodeToCanvas={(notesText, summaryText) => {

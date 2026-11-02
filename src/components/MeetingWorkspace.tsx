@@ -27,11 +27,12 @@ interface MeetingWorkspaceProps {
   onPauseRecording?: () => void;
   onResumeRecording?: () => void;
   onStopRecording?: () => void;
-  onStartRecording?: () => void;
+  onStartRecording?: (customTitle?: string) => void;
+  onTriggerAudioUpload?: () => void;
   onExplodeToCanvas?: (notes: string, summary: string) => void;
   pageTitle: string;
   audios?: AudioNode[];
-  onSelectAudioNode?: (id: string) => void;
+  onSelectAudioNode?: (id: string | null) => void;
   canvasNotesText?: string;
   topOffset?: number;
 }
@@ -50,6 +51,7 @@ export function MeetingWorkspace({
   onResumeRecording,
   onStopRecording,
   onStartRecording,
+  onTriggerAudioUpload,
   onExplodeToCanvas,
   pageTitle,
   audios = [],
@@ -62,6 +64,15 @@ export function MeetingWorkspace({
   );
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [synthesisTemplate, setSynthesisTemplate] = useState<'standard' | 'one_on_one' | 'technical' | 'client'>('standard');
+  const [pendingMeetingTitle, setPendingMeetingTitle] = useState(() => `Meeting - ${format(new Date(), 'MMM d, yyyy')}`);
+
+  useEffect(() => {
+    if (activeAudioNode?.title) {
+      setPendingMeetingTitle(activeAudioNode.title);
+    } else if (!activeAudioNode) {
+      setPendingMeetingTitle(`Meeting - ${format(new Date(), 'MMM d, yyyy')}`);
+    }
+  }, [activeAudioNode?.id, activeAudioNode?.title]);
   
   // Interactive Chat / Q&A state
   const [chatInput, setChatInput] = useState("");
@@ -339,40 +350,32 @@ export function MeetingWorkspace({
 
   return (
     <aside 
-      className="fixed right-0 bottom-0 z-40 w-[420px] max-w-[100vw] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden text-zinc-900 dark:text-zinc-100 font-sans pointer-events-auto transition-all"
+      className="fixed right-0 bottom-0 z-40 w-[420px] max-w-[100vw] bg-white/95 dark:bg-[#0c0f1f]/95 backdrop-blur-2xl border-l border-zinc-200/90 dark:border-cyan-500/25 shadow-[-16px_0_40px_-8px_rgba(0,0,0,0.45)] dark:shadow-[-24px_0_60px_-10px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden text-zinc-900 dark:text-zinc-100 font-sans pointer-events-auto transition-all"
       style={{ top: topOffset || 88 }}
     >
+      {/* Left Glowing Accent Spine */}
+      <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-gradient-to-b from-primary-500 via-cyan-400 to-indigo-500 shadow-[0_0_14px_rgba(6,182,212,0.8)] z-50 pointer-events-none" />
+
       {/* Top Header Bar of the Side Panel */}
-      <header className="h-12 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/50 backdrop-blur px-3 flex items-center justify-between shrink-0 select-none">
+      <header className="h-12 border-b border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-zinc-50 via-zinc-100/70 to-zinc-50 dark:from-[#11162b] dark:via-[#141b36] dark:to-[#11162b] px-3 flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-          <div className="w-6 h-6 rounded-lg bg-primary-100 dark:bg-primary-950/50 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
-            <Mic size={13} />
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary-100/80 dark:bg-primary-950/70 border border-primary-200 dark:border-primary-800/60 text-primary-600 dark:text-primary-400 font-bold text-[10px] tracking-wide uppercase shrink-0">
+            <span className={`w-1.5 h-1.5 rounded-full ${isLiveRecording ? 'bg-red-500 animate-ping' : 'bg-primary-500'}`} />
+            <span>Meeting</span>
           </div>
           <input 
             type="text"
-            value={activeAudioNode?.title || pageTitle}
+            value={activeAudioNode ? activeAudioNode.title : pendingMeetingTitle}
             onChange={(e) => {
+              const val = e.target.value;
+              setPendingMeetingTitle(val);
               if (activeAudioNode?.id) {
-                updateAudioField(activeAudioNode.id, 'title', e.target.value);
+                updateAudioField(activeAudioNode.id, 'title', val);
               }
             }}
             className="text-xs font-bold bg-transparent border-none outline-none text-zinc-900 dark:text-zinc-100 px-1 hover:bg-black/5 dark:hover:bg-white/5 rounded flex-1 min-w-0 truncate tracking-tight"
             placeholder="Meeting Title..."
           />
-          {audios.length > 1 && onSelectAudioNode && (
-            <select
-              value={activeAudioNode?.id || ""}
-              onChange={(e) => onSelectAudioNode(e.target.value)}
-              className="text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 outline-none max-w-[110px] truncate"
-              title="Switch between recordings on this page"
-            >
-              {audios.map((a, idx) => (
-                <option key={a.id} value={a.id}>
-                  {a.title || `Recording #${idx + 1}`}
-                </option>
-              ))}
-            </select>
-          )}
         </div>
 
         {/* Quick Action Buttons & Close Panel */}
@@ -380,7 +383,8 @@ export function MeetingWorkspace({
           {onExplodeToCanvas && (
             <button
               onClick={() => onExplodeToCanvas(currentEnhanced || canvasNotesText || activeAudioNode?.notes || "", currentSummary)}
-              className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              disabled={!activeAudioNode || (!currentEnhanced && !currentSummary && !canvasNotesText)}
+              className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-600 dark:text-zinc-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
               title="Explode takeaways & tasks onto canvas"
             >
               <Layers size={14} />
@@ -389,7 +393,8 @@ export function MeetingWorkspace({
 
           <button
             onClick={handleCopySummary}
-            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+            disabled={!activeAudioNode || (!currentSummary && !currentEnhanced)}
+            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
             title="Copy clean formatted takeaways (Slack, Email, Docs)"
           >
             <Copy size={14} />
@@ -397,7 +402,8 @@ export function MeetingWorkspace({
 
           <button
             onClick={handleExportMarkdown}
-            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+            disabled={!activeAudioNode}
+            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
             title="Download Markdown Report"
           >
             <Download size={14} />
@@ -416,11 +422,55 @@ export function MeetingWorkspace({
         </div>
       </header>
 
+      {/* Meeting Selector / Switcher Bar */}
+      <div className="px-3 py-1.5 bg-zinc-100/70 dark:bg-[#13172e] border-b border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 shrink-0">
+            Active:
+          </span>
+          <select
+            value={activeAudioNode ? activeAudioNode.id : "__new__"}
+            onChange={(e) => {
+              if (e.target.value === "__new__") {
+                onSelectAudioNode?.(null);
+              } else {
+                onSelectAudioNode?.(e.target.value);
+              }
+            }}
+            className="text-xs font-medium bg-white dark:bg-[#191f3a] text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700/80 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-primary-500 min-w-0 flex-1 truncate cursor-pointer shadow-xs"
+            title="Select meeting to display in workspace"
+          >
+            <option value="__new__">✨ + New Meeting (Ready to start)</option>
+            {audios && audios.length > 0 && (
+              <optgroup label="Canvas Recordings">
+                {audios.map((a, idx) => (
+                  <option key={a.id} value={a.id}>
+                    {a.title || `Recording #${idx + 1}`} {a.durationMs ? `(${Math.floor(a.durationMs / 60000)}m)` : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+
+        <button
+          onClick={() => onSelectAudioNode?.(null)}
+          className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition-colors shrink-0 shadow-xs ${
+            !activeAudioNode
+              ? 'bg-primary-600 text-white shadow-primary-500/20'
+              : 'bg-white dark:bg-[#1a203b] border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-primary-600 dark:hover:text-primary-400'
+          }`}
+          title="Switch to New Meeting"
+        >
+          <span>+ New</span>
+        </button>
+      </div>
+
       {/* Recording HUD / Audio Player Bar */}
-      <div className="px-3 py-2 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900 shrink-0">
+      <div className="px-3 py-2.5 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-[#0f1325] shrink-0">
         {isLiveRecording ? (
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between px-3 py-1.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl">
+            <div className="flex items-center justify-between px-3 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl shadow-xs">
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full bg-red-500 ${!isRecordingPaused ? 'animate-ping' : ''}`} />
                 <span className="text-xs font-bold text-red-600 dark:text-red-400">
@@ -449,7 +499,7 @@ export function MeetingWorkspace({
                 {onStopRecording && (
                   <button 
                     onClick={onStopRecording}
-                    className="px-2.5 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-[11px] font-bold shadow-2xs"
+                    className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md text-[11px] font-bold shadow-xs active:scale-95 transition-transform"
                   >
                     Stop & Process
                   </button>
@@ -458,32 +508,51 @@ export function MeetingWorkspace({
             </div>
           </div>
         ) : activeAudioNode?.url ? (
-          <AudioPlayer 
-            url={activeAudioNode.url}
-            audioBlockId={activeAudioNode.id}
-            initialDurationMs={activeAudioNode.durationMs}
-            className="w-full"
-          />
+          <div className="space-y-1.5">
+            <AudioPlayer 
+              url={activeAudioNode.url}
+              audioBlockId={activeAudioNode.id}
+              initialDurationMs={activeAudioNode.durationMs}
+              className="w-full"
+            />
+          </div>
         ) : (
-          onStartRecording && (
-            <div className="flex items-center justify-between py-0.5">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                Live canvas strokes are audio-synced.
-              </span>
-              <button
-                onClick={onStartRecording}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-transform active:scale-95"
-              >
-                <Mic size={13} />
-                <span>Record Meeting</span>
-              </button>
+          <div className="p-3 bg-gradient-to-br from-primary-500/10 via-cyan-500/5 to-indigo-500/10 dark:from-primary-950/40 dark:via-cyan-950/20 dark:to-indigo-950/30 border border-primary-200/70 dark:border-cyan-500/25 rounded-xl space-y-2.5 shadow-xs">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-primary-500 shrink-0" />
+                  <span>Ready to Record</span>
+                </h4>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5 leading-snug">
+                  Strokes written while recording are synced to audio playback. Audio is transcribed live with Gemini 3.8 Flash.
+                </p>
+              </div>
             </div>
-          )
+            <div className="flex items-center gap-2 pt-0.5">
+              <button
+                onClick={() => onStartRecording?.(pendingMeetingTitle)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm shadow-primary-500/25 transition-transform active:scale-[0.98]"
+              >
+                <Mic size={14} className="animate-pulse" />
+                <span>Start Recording</span>
+              </button>
+              {onTriggerAudioUpload && (
+                <button
+                  onClick={onTriggerAudioUpload}
+                  className="py-2 px-3 bg-white dark:bg-[#161b32] border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-[#1a203c] text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+                  title="Upload pre-recorded audio file"
+                >
+                  Upload File
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
       {/* Segmented Tab Navigation Bar */}
-      <div className="flex items-center px-2 pt-1 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-950/40 shrink-0 text-xs font-semibold">
+      <div className="flex items-center px-2 pt-1 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-[#0f1325]/80 shrink-0 text-xs font-semibold">
         <button
           onClick={() => setActiveTab("summary")}
           className={`flex-1 py-2 px-2 text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
@@ -576,12 +645,33 @@ export function MeetingWorkspace({
                   </button>
                 </div>
               </div>
+            ) : !activeAudioNode ? (
+              <div className="py-14 text-center text-zinc-400 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-primary-50 dark:bg-primary-950/40 border border-primary-200/50 dark:border-primary-800/40 flex items-center justify-center mx-auto text-primary-500">
+                  <CheckSquare size={22} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">No meeting active yet</p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto leading-relaxed">
+                    Start a recording or select an existing recording above to generate executive takeaways, decisions, and action items.
+                  </p>
+                </div>
+                <button
+                  onClick={() => onStartRecording?.(pendingMeetingTitle)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-transform active:scale-95"
+                >
+                  <Mic size={13} />
+                  <span>Start Recording Now</span>
+                </button>
+              </div>
             ) : (
               <div className="py-16 text-center text-zinc-400 space-y-2">
                 <CheckSquare size={28} className="mx-auto text-zinc-300 dark:text-zinc-600" />
-                <p className="text-xs font-medium">No executive summary yet.</p>
+                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">No executive summary yet.</p>
                 <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
-                  Record or upload a meeting to generate key takeaways, decisions, and action items.
+                  {isLiveRecording 
+                    ? "Summary will generate automatically once the recording is stopped."
+                    : "Record or upload audio to generate key takeaways, decisions, and action items."}
                 </p>
               </div>
             )}
@@ -658,10 +748,37 @@ export function MeetingWorkspace({
                   })}
                 </div>
               </>
+            ) : isLiveRecording ? (
+              <div className="py-14 text-center text-zinc-400 space-y-2.5">
+                <div className="w-3 h-3 rounded-full bg-red-500 animate-ping mx-auto" />
+                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Listening to conversation...</p>
+                <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                  Spoken words are transcribed live with Gemini 3.8 Flash and appear here in real-time.
+                </p>
+              </div>
+            ) : !activeAudioNode ? (
+              <div className="py-14 text-center text-zinc-400 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center mx-auto text-zinc-400">
+                  <Clock size={22} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">No transcript available</p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
+                    Live speech is transcribed automatically with Gemini 3.8 Flash and synced to your notes.
+                  </p>
+                </div>
+                <button
+                  onClick={() => onStartRecording?.(pendingMeetingTitle)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-transform active:scale-95"
+                >
+                  <Mic size={13} />
+                  <span>Start Recording Now</span>
+                </button>
+              </div>
             ) : (
               <div className="py-16 text-center text-zinc-400 space-y-2">
                 <Clock size={28} className="mx-auto text-zinc-300 dark:text-zinc-600" />
-                <p className="text-xs font-medium">No transcript available.</p>
+                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">No transcript available.</p>
                 <p className="text-[11px] text-zinc-500">Record a meeting to capture live transcription.</p>
               </div>
             )}
@@ -672,32 +789,34 @@ export function MeetingWorkspace({
         {activeTab === "enhanced" && (
           <div ref={enhancedPaneRef} className="space-y-3">
             {/* Template Selector & Trigger Button */}
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/70 dark:border-zinc-700/60 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                  Synthesis Style:
-                </span>
-                <select
-                  value={synthesisTemplate}
-                  onChange={(e) => setSynthesisTemplate(e.target.value as any)}
-                  className="text-[11px] bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-0.5 outline-none font-medium cursor-pointer"
-                >
-                  <option value="standard">Standard Meeting</option>
-                  <option value="one_on_one">1-on-1 Catch-up</option>
-                  <option value="technical">Technical / Spec</option>
-                  <option value="client">Client / Sales</option>
-                </select>
-              </div>
+            {activeAudioNode && (
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/70 dark:border-zinc-700/60 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                    Synthesis Style:
+                  </span>
+                  <select
+                    value={synthesisTemplate}
+                    onChange={(e) => setSynthesisTemplate(e.target.value as any)}
+                    className="text-[11px] bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-0.5 outline-none font-medium cursor-pointer"
+                  >
+                    <option value="standard">Standard Meeting</option>
+                    <option value="one_on_one">1-on-1 Catch-up</option>
+                    <option value="technical">Technical / Spec</option>
+                    <option value="client">Client / Sales</option>
+                  </select>
+                </div>
 
-              <button
-                onClick={handleEnhanceNotes}
-                disabled={isEnhancing}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-primary-600 hover:from-amber-600 hover:to-primary-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-transform active:scale-95"
-              >
-                <Sparkles size={13} className={isEnhancing ? "animate-spin" : ""} />
-                <span>{isEnhancing ? "Synthesizing..." : (currentEnhanced ? "Re-Enhance from Canvas & Audio" : "Enhance from Canvas & Audio")}</span>
-              </button>
-            </div>
+                <button
+                  onClick={handleEnhanceNotes}
+                  disabled={isEnhancing}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-primary-600 hover:from-amber-600 hover:to-primary-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-transform active:scale-95"
+                >
+                  <Sparkles size={13} className={isEnhancing ? "animate-spin" : ""} />
+                  <span>{isEnhancing ? "Synthesizing..." : (currentEnhanced ? "Re-Enhance from Canvas & Audio" : "Enhance from Canvas & Audio")}</span>
+                </button>
+              </div>
+            )}
 
             {currentEnhanced ? (
               <div className="prose dark:prose-invert max-w-none text-xs space-y-3">
@@ -706,10 +825,22 @@ export function MeetingWorkspace({
                   {currentEnhanced}
                 </ReactMarkdown>
               </div>
+            ) : !activeAudioNode ? (
+              <div className="py-14 text-center text-zinc-400 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/50 dark:border-amber-800/40 flex items-center justify-center mx-auto text-amber-500">
+                  <Sparkles size={22} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Synthesize Notes + Audio</p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto leading-relaxed">
+                    Combine canvas diagrams, sticky notes, and text blocks with your meeting transcript into unified notes.
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="py-12 text-center text-zinc-400 space-y-2">
                 <Sparkles size={28} className="mx-auto text-amber-500/50" />
-                <p className="text-xs font-medium">No enhanced notes yet.</p>
+                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">No enhanced notes yet.</p>
                 <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
                   Take notes or draw diagrams on the canvas, then tap <strong>Enhance from Canvas & Audio</strong> to weave your notes with the audio transcript.
                 </p>
@@ -722,23 +853,25 @@ export function MeetingWorkspace({
         {activeTab === "chat" && (
           <div className="h-full flex flex-col space-y-3">
             {/* Quick Prompt Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                "Key decisions made?",
-                "List action items",
-                "Draft email recap",
-                "Pricing discussed?"
-              ].map(chip => (
-                <button
-                  key={chip}
-                  onClick={() => handleAskQuestion(chip)}
-                  disabled={isAsking}
-                  className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:border-primary-500 transition-colors shadow-2xs"
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
+            {activeAudioNode && (
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  "Key decisions made?",
+                  "List action items",
+                  "Draft email recap",
+                  "Pricing discussed?"
+                ].map(chip => (
+                  <button
+                    key={chip}
+                    onClick={() => handleAskQuestion(chip)}
+                    disabled={isAsking}
+                    className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:border-primary-500 transition-colors shadow-2xs"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Chat History */}
             <div 
@@ -746,12 +879,20 @@ export function MeetingWorkspace({
               className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs min-h-[220px]"
             >
               {chatHistory.length === 0 ? (
-                <div className="py-10 text-center text-zinc-400 space-y-1.5">
-                  <MessageSquare size={24} className="mx-auto text-zinc-300 dark:text-zinc-600" />
-                  <p className="font-medium text-xs">Hands-off meeting copilot</p>
-                  <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
-                    Ask questions after the call to retrieve quotes, dates, assignments, and agreements.
-                  </p>
+                <div className="py-12 text-center text-zinc-400 space-y-2">
+                  <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center mx-auto text-primary-500">
+                    <Bot size={22} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-bold text-xs text-zinc-800 dark:text-zinc-200">
+                      {activeAudioNode ? "Hands-off meeting copilot" : "Ask Meeting Copilot"}
+                    </p>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto leading-relaxed">
+                      {activeAudioNode 
+                        ? "Ask questions to retrieve quotes, dates, assignments, and agreements using Gemini 3.8 Flash."
+                        : "Once a meeting is recorded or selected, you can ask questions, verify facts, and extract action items."}
+                    </p>
+                  </div>
                 </div>
               ) : (
                 chatHistory.map((msg, i) => (
@@ -794,12 +935,13 @@ export function MeetingWorkspace({
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask anything about this meeting..."
-                className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl py-2 pl-3 pr-10 text-xs outline-none focus:ring-1 focus:ring-primary-500 text-zinc-800 dark:text-zinc-200"
+                disabled={!activeAudioNode}
+                placeholder={activeAudioNode ? "Ask anything about this meeting..." : "Start or select a meeting to ask questions..."}
+                className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl py-2 pl-3 pr-10 text-xs outline-none focus:ring-1 focus:ring-primary-500 text-zinc-800 dark:text-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
-                disabled={!chatInput.trim() || isAsking}
+                disabled={!chatInput.trim() || isAsking || !activeAudioNode}
                 className="absolute right-1.5 p-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white transition-colors"
               >
                 <Send size={12} />
@@ -807,47 +949,49 @@ export function MeetingWorkspace({
             </form>
 
             {/* Collapsible Knowledge Radar Toggle */}
-            <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
-              <button
-                type="button"
-                onClick={() => setShowRadar(!showRadar)}
-                className="w-full flex items-center justify-between text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 py-1"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Compass size={13} className="text-amber-500" />
-                  <span>Knowledge Radar (Past Context)</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {isLoadingRadar && <RefreshCw size={10} className="animate-spin text-zinc-400" />}
-                  <span>{showRadar ? "Hide" : `View (${relatedNotes.length})`}</span>
-                </div>
-              </button>
+            {activeAudioNode && (
+              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRadar(!showRadar)}
+                  className="w-full flex items-center justify-between text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 py-1"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Compass size={13} className="text-amber-500" />
+                    <span>Knowledge Radar (Past Context)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isLoadingRadar && <RefreshCw size={10} className="animate-spin text-zinc-400" />}
+                    <span>{showRadar ? "Hide" : `View (${relatedNotes.length})`}</span>
+                  </div>
+                </button>
 
-              {showRadar && (
-                <div className="space-y-1.5 pt-2 max-h-40 overflow-y-auto">
-                  {relatedNotes.length === 0 ? (
-                    <p className="text-[11px] text-zinc-400 text-center py-2">
-                      No related notes found in other pages.
-                    </p>
-                  ) : (
-                    relatedNotes.slice(0, 3).map((note, idx) => (
-                      <div 
-                        key={idx}
-                        className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-xs space-y-0.5"
-                      >
-                        <div className="font-semibold text-zinc-800 dark:text-zinc-200 truncate flex items-center justify-between">
-                          <span className="truncate">{note.pageTitle || "Related Note"}</span>
-                          <span className="text-[10px] text-zinc-400 font-normal shrink-0">{(note.similarity * 100).toFixed(0)}% match</span>
+                {showRadar && (
+                  <div className="space-y-1.5 pt-2 max-h-40 overflow-y-auto">
+                    {relatedNotes.length === 0 ? (
+                      <p className="text-[11px] text-zinc-400 text-center py-2">
+                        No related notes found in other pages.
+                      </p>
+                    ) : (
+                      relatedNotes.slice(0, 3).map((note, idx) => (
+                        <div 
+                          key={idx}
+                          className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-xs space-y-0.5"
+                        >
+                          <div className="font-semibold text-zinc-800 dark:text-zinc-200 truncate flex items-center justify-between">
+                            <span className="truncate">{note.pageTitle || "Related Note"}</span>
+                            <span className="text-[10px] text-zinc-400 font-normal shrink-0">{(note.similarity * 100).toFixed(0)}% match</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 line-clamp-2">
+                            {note.snippet || "Relevant discussion found in notebook."}
+                          </p>
                         </div>
-                        <p className="text-[11px] text-zinc-500 line-clamp-2">
-                          {note.snippet || "Relevant discussion found in notebook."}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

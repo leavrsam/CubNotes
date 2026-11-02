@@ -182,8 +182,21 @@ export function GlobalMindMapView({
       const rawEdges: GraphEdge[] = [];
       const tagCounts: Map<string, number> = new Map();
       const pageTagMap: Map<string, Set<string>> = new Map();
+      const pageNoteLinksMap: Map<string, Set<string>> = new Map();
 
-      // Collect all tags and pages
+      // Quick lookup map of all page titles to IDs for [[Wiki Link]] matching
+      const allPagesByTitle = new Map<string, { id: string; title: string }>();
+      for (const nb of notebooks) {
+        for (const sec of nb.sections || []) {
+          for (const page of sec.pages || []) {
+            if (page.title) {
+              allPagesByTitle.set(page.title.trim().toLowerCase(), { id: page.id, title: page.title });
+            }
+          }
+        }
+      }
+
+      // Collect all tags, pages, and direct note links
       for (const nb of notebooks) {
         const nbColor = getNotebookColor(nb.title);
         const center = notebookCenters.get(nb.title) || { x: 0, y: 0, color: nbColor };
@@ -219,6 +232,40 @@ export function GlobalMindMapView({
                 const hashtags = extractInlineHashtags(b.content || "");
                 for (const t of hashtags) {
                   bTags.add(t);
+                }
+
+                // Extract direct note links: data-page-id, data-page-link, or [[Title]]
+                const blockContent = b.content || "";
+                if (blockContent.includes("data-page-id") || blockContent.includes("data-page-link") || blockContent.includes("[[")) {
+                  const dataPageMatches = blockContent.matchAll(/data-page-id=["']([^"']+)["']/g);
+                  for (const match of dataPageMatches) {
+                    const targetId = match[1];
+                    if (targetId && targetId !== page.id) {
+                      if (!pageNoteLinksMap.has(page.id)) pageNoteLinksMap.set(page.id, new Set());
+                      pageNoteLinksMap.get(page.id)!.add(targetId);
+                    }
+                  }
+
+                  const dataLinkMatches = blockContent.matchAll(/data-page-link=["']([^"']+)["']/g);
+                  for (const match of dataLinkMatches) {
+                    const targetId = match[1];
+                    if (targetId && targetId !== page.id) {
+                      if (!pageNoteLinksMap.has(page.id)) pageNoteLinksMap.set(page.id, new Set());
+                      pageNoteLinksMap.get(page.id)!.add(targetId);
+                    }
+                  }
+
+                  const wikiMatches = blockContent.matchAll(/\[\[(.*?)\]\]/g);
+                  for (const match of wikiMatches) {
+                    const targetTitle = match[1]?.trim().toLowerCase();
+                    if (targetTitle) {
+                      const matched = allPagesByTitle.get(targetTitle);
+                      if (matched && matched.id !== page.id) {
+                        if (!pageNoteLinksMap.has(page.id)) pageNoteLinksMap.set(page.id, new Set());
+                        pageNoteLinksMap.get(page.id)!.add(matched.id);
+                      }
+                    }
+                  }
                 }
 
                 if (bTags.size > 0) {
@@ -399,6 +446,23 @@ export function GlobalMindMapView({
             color: getTagColor(tagId, registry).color,
             weight: 1.5
           });
+        }
+      }
+
+      // Create Edges: Direct Note-to-Note Links (bi-directional links / backlinks)
+      const existingPageNodeIds = new Set(rawNodes.filter(n => n.type === 'page').map(n => n.id));
+      for (const [sourcePageId, targetIds] of pageNoteLinksMap.entries()) {
+        for (const targetPageId of targetIds) {
+          if (existingPageNodeIds.has(`page-${targetPageId}`)) {
+            rawEdges.push({
+              id: `edge-notelink-${sourcePageId}-${targetPageId}`,
+              source: `page-${sourcePageId}`,
+              target: `page-${targetPageId}`,
+              color: '#38bdf8', // Vibrant sky blue for direct note links
+              weight: 2.2,
+              isNotebookLink: true
+            });
+          }
         }
       }
 
@@ -688,15 +752,32 @@ export function GlobalMindMapView({
       if (!source || !target) continue;
 
       const isConnectedToFocus = focusId ? (edge.source === focusId || edge.target === focusId) : true;
-      const alpha = focusId ? (isConnectedToFocus ? 0.85 : 0.05) : 0.22;
+      const alpha = focusId 
+        ? (isConnectedToFocus ? 0.95 : 0.05) 
+        : (edge.isNotebookLink ? 0.55 : 0.22);
 
       ctx.beginPath();
       ctx.moveTo(source.x, source.y);
       ctx.lineTo(target.x, target.y);
-      ctx.strokeStyle = edge.color || '#94a3b8';
+      ctx.strokeStyle = edge.isNotebookLink ? '#38bdf8' : (edge.color || '#94a3b8');
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = isConnectedToFocus && focusId ? 2.2 : 1.0;
+      ctx.lineWidth = isConnectedToFocus && focusId 
+        ? (edge.isNotebookLink ? 3.0 : 2.2) 
+        : (edge.isNotebookLink ? 1.8 : 1.0);
       ctx.stroke();
+
+      // Subtle directional indicator for note links
+      if (edge.isNotebookLink && alpha > 0.1) {
+        const midX = (source.x + target.x) / 2;
+        const midY = (source.y + target.y) / 2;
+        const angle = Math.atan2(target.y - source.y, target.x - source.x);
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
+        ctx.lineTo(midX - 7 * Math.cos(angle - Math.PI / 6), midY - 7 * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(midX, midY);
+        ctx.lineTo(midX - 7 * Math.cos(angle + Math.PI / 6), midY - 7 * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+      }
     }
     ctx.globalAlpha = 1.0;
 
@@ -1011,6 +1092,23 @@ export function GlobalMindMapView({
     return nodes.find(n => n.id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
 
+  // Outgoing and Backlink connections for selected page
+  const pageConnections = useMemo(() => {
+    if (!activeSelectedNode || activeSelectedNode.type !== 'page' || !activeSelectedNode.pageId) {
+      return { outgoing: [] as GraphNode[], backlinks: [] as GraphNode[] };
+    }
+    const currentId = `page-${activeSelectedNode.pageId}`;
+    const outgoing = edges
+      .filter(e => e.isNotebookLink && e.source === currentId)
+      .map(e => nodes.find(n => n.id === e.target))
+      .filter((n): n is GraphNode => Boolean(n));
+    const backlinks = edges
+      .filter(e => e.isNotebookLink && e.target === currentId)
+      .map(e => nodes.find(n => n.id === e.source))
+      .filter((n): n is GraphNode => Boolean(n));
+    return { outgoing, backlinks };
+  }, [activeSelectedNode, edges, nodes]);
+
   return (
     <div className="fixed inset-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col font-sans select-none overflow-hidden">
       {/* 1. Header Toolbar */}
@@ -1053,6 +1151,12 @@ export function GlobalMindMapView({
               <span>{nodes.filter(n => n.type === 'page').length} notes</span>
               <span>·</span>
               <span>{nodes.filter(n => n.type === 'tag').length} tags</span>
+              {edges.some(e => e.isNotebookLink) && (
+                <>
+                  <span>·</span>
+                  <span className="text-sky-400 font-semibold">{edges.filter(e => e.isNotebookLink).length} links</span>
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -1392,6 +1496,56 @@ export function GlobalMindMapView({
                 ) : (
                   <div className="text-[11px] text-zinc-500 italic bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/60">
                     No tags attached yet. Add tags in the note to connect it to other ideas!
+                  </div>
+                )}
+
+                {/* Outgoing Note Links */}
+                {pageConnections.outgoing.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-sky-400 block mb-1">
+                      Links to ({pageConnections.outgoing.length}):
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {pageConnections.outgoing.map(targetNode => (
+                        <button
+                          key={targetNode.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedNodeId(targetNode.id);
+                            setPan({ x: -targetNode.x * zoom, y: -targetNode.y * zoom });
+                          }}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-sky-950/60 text-sky-300 border border-sky-800/60 hover:bg-sky-900/40 hover:border-sky-700 transition-colors truncate max-w-[200px]"
+                          title={targetNode.label}
+                        >
+                          → {targetNode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Backlinks */}
+                {pageConnections.backlinks.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 block mb-1">
+                      Linked from ({pageConnections.backlinks.length}):
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {pageConnections.backlinks.map(sourceNode => (
+                        <button
+                          key={sourceNode.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedNodeId(sourceNode.id);
+                            setPan({ x: -sourceNode.x * zoom, y: -sourceNode.y * zoom });
+                          }}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 hover:bg-emerald-900/40 hover:border-emerald-700 transition-colors truncate max-w-[200px]"
+                          title={sourceNode.label}
+                        >
+                          ← {sourceNode.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
