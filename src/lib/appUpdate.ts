@@ -29,14 +29,22 @@ export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
 
   try {
     // 1. Fetch latest server version info (never cached)
-    let res = await fetch(`/version.json?_t=${Date.now()}`, {
+    let res = await fetch(`https://motif.wolfcubventures.com/version.json?_t=${Date.now()}`, {
       cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' }
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
     }).catch(() => null);
 
     if (!res || !res.ok) {
-      res = await fetch(`https://motif.wolfcubventures.com/version.json?_t=${Date.now()}`, {
-        cache: 'no-store'
+      res = await fetch(`https://cub-notes.vercel.app/version.json?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      }).catch(() => null);
+    }
+
+    if (!res || !res.ok) {
+      res = await fetch(`/version.json?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
       }).catch(() => null);
     }
 

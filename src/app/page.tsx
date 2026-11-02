@@ -112,6 +112,15 @@ export default function Home() {
   const selectedPageIdRef = useRef<string | null>(null);
   selectedPageIdRef.current = selectedPageId;
 
+  // Re-open settings modal if page was refreshed from the updates tab
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const reopenTab = sessionStorage.getItem('reopen_settings_tab');
+    if (reopenTab) {
+      setIsSettingsOpen(true);
+    }
+  }, []);
+
   const mobileViewRef = useRef<'folders' | 'notes'>('folders');
   mobileViewRef.current = mobileView;
 

@@ -1,12 +1,12 @@
 {
-  "versionCode": 7,
-  "versionName": "1.0.6",
-  "version_code": 7,
-  "version_name": "1.0.6",
+  "versionCode": 8,
+  "versionName": "1.0.7",
+  "version_code": 8,
+  "version_name": "1.0.7",
   "apkUrl": "https://motif.wolfcubventures.com/Motif.apk",
   "apk_url": "https://motif.wolfcubventures.com/Motif.apk",
   "title": "Motif Update Available",
-  "description": "New brand logo and icon, focused meeting panel, and real-time canvas performance enhancements.",
-  "changelog": "• Updated brand logo & icons across app, launcher, and splash screens\n• Meeting workspace panel and synthesis enhancements\n• Real-time canvas improvements and stability fixes\n• Instant 0ms offline sync with local IndexedDB persistence",
-  "releaseDate": "2026-10-30"
+  "description": "Redesigned Meeting Mode workspace, dynamic card centering, and Insert tab tools.",
+  "changelog": "• Distinct elevated Meeting Mode workspace with glowing spine and quick switcher\n• Default new meeting setup and centered canvas placement\n• Insert tab enhancements: Interactive tables, LaTeX math, stickers, and quick shapes\n• Performance optimizations and instant local sync",
+  "releaseDate": "2026-11-02"
 }

@@ -46,9 +46,16 @@ export function SettingsModal({
   const { theme, setTheme } = useTheme();
   const { accentColor, setAccentColor } = useAccent();
   const { showMinimap, setShowMinimap } = useMinimapSettings();
-  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "page" | "ai" | "account" | "updates">(
-    activePageId ? "page" : "profile"
-  );
+  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "page" | "ai" | "account" | "updates">(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = sessionStorage.getItem('reopen_settings_tab') as any;
+      if (savedTab) {
+        sessionStorage.removeItem('reopen_settings_tab');
+        return savedTab;
+      }
+    }
+    return activePageId ? "page" : "profile";
+  });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [geminiApiKey, setGeminiApiKey] = useState("");
@@ -57,7 +64,7 @@ export function SettingsModal({
 
   const handleCheckUpdates = async () => {
     setIsUpdating(true);
-    toast.loading("Checking for updates...", { id: "update-check" });
+    toast.loading("Refreshing web cache...", { id: "update-check" });
     try {
       if ('caches' in window) {
         const cacheNames = await caches.keys();
@@ -69,10 +76,12 @@ export function SettingsModal({
           await reg.update();
         }
       }
-      toast.success("Updated to the latest version! Reloading...", { id: "update-check" });
+      // Re-open this tab upon page reload
+      sessionStorage.setItem("reopen_settings_tab", "updates");
+      toast.success("Web cache cleared! Reloading...", { id: "update-check" });
       setTimeout(() => {
         window.location.reload();
-      }, 700);
+      }, 600);
     } catch (e: any) {
       toast.error("Failed to update cache: " + (e?.message || "Unknown error"), { id: "update-check" });
       setIsUpdating(false);
@@ -957,111 +966,143 @@ export function SettingsModal({
 
             {activeTab === "updates" && (
               <div className="space-y-6">
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
-                    <RefreshCw size={16} className="text-primary-500" />
-                    {isNativeApp() ? "App Updates & Cache Refresh" : "Web App & Service Worker Updates"}
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
-                    {isNativeApp() 
-                      ? "Motif automatically loads the latest live cloud features. Click below to refresh cached assets and sync with the newest build."
-                      : "Motif runs as an offline-first PWA. If new features or bug fixes aren't showing up immediately, click below to force-refresh cached assets and sync with the latest build."}
-                  </p>
-                  <button
-                    onClick={handleCheckUpdates}
-                    disabled={isUpdating}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all disabled:opacity-50"
-                  >
-                    <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} />
-                    <span>{isUpdating ? "Checking & Updating..." : "Check for Updates & Reload"}</span>
-                  </button>
-                </div>
-
                 {isNativeAndroid() ? (
-                  <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/25 border border-emerald-200/80 dark:border-emerald-800/50 rounded-2xl flex items-start gap-3 text-xs text-emerald-800 dark:text-emerald-300">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
-                        <Smartphone size={18} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <p className="font-bold text-emerald-900 dark:text-emerald-200 text-sm">Motif Android App Active</p>
-                          <span className="text-[11px] font-mono font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">
-                            v{appUpdateStatus?.installedVersionName || '1.0'}
-                          </span>
+                  <div className="space-y-5">
+                    {/* Primary Android Native App Update Card */}
+                    <div className="p-4 bg-gradient-to-br from-emerald-500/10 via-primary-500/5 to-cyan-500/10 dark:from-emerald-950/40 dark:via-primary-950/30 dark:to-cyan-950/30 border border-emerald-300 dark:border-emerald-700/60 rounded-2xl shadow-xs space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                          <Smartphone size={22} />
                         </div>
-                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400/90 mt-0.5">
-                          Screen-off audio recording, wake locks, and native background services are running.
-                        </p>
-
-                        {/* Update status inside Android App */}
-                        <div className="mt-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-800/40 flex items-center justify-between gap-2 flex-wrap">
-                          {appUpdateStatus?.hasUpdate ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                                Update available: v{appUpdateStatus.serverInfo?.versionName}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  downloadAndInstallApk(appUpdateStatus.serverInfo?.apkUrl, appUpdateStatus.serverInfo?.versionName);
-                                  toast.success("Downloading update... Tap notification to install.");
-                                }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors"
-                              >
-                                <Download size={13} />
-                                <span>Update App</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
-                                <Check size={13} />
-                                Native code is up to date
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                              <span>Motif for Android</span>
+                            </h4>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full">
+                                Installed: v{appUpdateStatus?.installedVersionName || '1.0.6'} (Build {appUpdateStatus?.installedVersionCode || 7})
                               </span>
                             </div>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={handleManualUpdateCheck}
-                            disabled={isCheckingUpdate}
-                            className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 p-1 rounded transition-colors flex items-center gap-1 shrink-0"
-                            title="Check for updates"
-                          >
-                            <RefreshCw size={12} className={isCheckingUpdate ? "animate-spin" : ""} />
-                            Check
-                          </button>
+                          </div>
+                          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 leading-snug">
+                            Native features: Screen-off audio recording, wake locks, audio playback sync, and auto-updates.
+                          </p>
                         </div>
                       </div>
+
+                      {/* Update status and action */}
+                      <div className="pt-2.5 border-t border-emerald-200/60 dark:border-emerald-800/40 flex items-center justify-between gap-3 flex-wrap">
+                        {appUpdateStatus?.hasUpdate ? (
+                          <div className="flex-1 flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                              <p className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                <Sparkles size={13} className="text-amber-500" />
+                                <span>New Update Available: v{appUpdateStatus.serverInfo?.versionName} (Build {appUpdateStatus.serverInfo?.versionCode})</span>
+                              </p>
+                              {appUpdateStatus.serverInfo?.description && (
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                  {appUpdateStatus.serverInfo.description}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                downloadAndInstallApk(appUpdateStatus.serverInfo?.apkUrl, appUpdateStatus.serverInfo?.versionName);
+                                toast.success("Downloading update... Check notification bar to install.");
+                              }}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-primary-600 hover:from-amber-500 hover:to-primary-500 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-95"
+                            >
+                              <Download size={14} />
+                              <span>Download & Install v{appUpdateStatus.serverInfo?.versionName}</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex items-center justify-between gap-2">
+                            <span className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1.5">
+                              <Check size={14} className="text-emerald-500" />
+                              <span>Native app is up to date with latest server release</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleManualUpdateCheck}
+                              disabled={isCheckingUpdate}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold rounded-lg shadow-xs transition-colors shrink-0"
+                            >
+                              <RefreshCw size={12} className={isCheckingUpdate ? "animate-spin" : ""} />
+                              <span>{isCheckingUpdate ? "Checking..." : "Check for App Update"}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Secondary Web Cache Refresh */}
+                    <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                      <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 mb-1 flex items-center gap-1.5">
+                        <RefreshCw size={13} className="text-zinc-500" />
+                        <span>Web & Offline Cache</span>
+                      </h4>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-2.5">
+                        Motif live code updates deploy continuously over the cloud. If you made edits on desktop that aren't appearing on your phone yet:
+                      </p>
+                      <button
+                        onClick={handleCheckUpdates}
+                        disabled={isUpdating}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-300 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw size={12} className={isUpdating ? "animate-spin" : ""} />
+                        <span>{isUpdating ? "Refreshing..." : "Refresh Web Cache"}</span>
+                      </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="pt-5 border-t border-zinc-200 dark:border-zinc-800">
+                  <div>
                     <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
-                      <Smartphone size={16} className="text-primary-500" />
-                      Screen-Off & Background Recording (Android APK)
+                      <RefreshCw size={16} className="text-primary-500" />
+                      {isNativeApp() ? "App Updates & Cache Refresh" : "Web App & Service Worker Updates"}
                     </h3>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-                      Mobile web browsers aggressively pause audio recording when your phone screen turns off or when you switch apps. Install the standalone Motif Android APK to keep recording long lectures, meetings, and voice memos uninterrupted in the background.
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+                      {isNativeApp() 
+                        ? "Motif automatically loads the latest live cloud features. Click below to refresh cached assets and sync with the newest build."
+                        : "Motif runs as an offline-first PWA. If new features or bug fixes aren't showing up immediately, click below to force-refresh cached assets and sync with the latest build."}
                     </p>
-                    <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 mb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
-                      <p className="font-semibold text-zinc-800 dark:text-zinc-200">APK Features:</p>
-                      <ul className="list-disc list-inside space-y-0.5 ml-1">
-                        <li>Continuous recording with screen locked / turned off</li>
-                        <li>Background audio capture while using other apps</li>
-                        <li>Foreground recording status notification in Android drawer</li>
-                        <li>Auto-loads latest live features seamlessly</li>
-                      </ul>
-                    </div>
-                    <a
-                      href="/Motif.apk"
-                      download="Motif.apk"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-sm rounded-xl shadow-sm transition-all"
+                    <button
+                      onClick={handleCheckUpdates}
+                      disabled={isUpdating}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all disabled:opacity-50"
                     >
-                      <Download size={15} />
-                      <span>Download Android App (Motif.apk)</span>
-                    </a>
+                      <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} />
+                      <span>{isUpdating ? "Checking & Updating..." : "Check for Updates & Reload"}</span>
+                    </button>
+
+                    <div className="pt-5 mt-5 border-t border-zinc-200 dark:border-zinc-800">
+                      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
+                        <Smartphone size={16} className="text-primary-500" />
+                        Screen-Off & Background Recording (Android APK)
+                      </h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+                        Mobile web browsers aggressively pause audio recording when your phone screen turns off or when you switch apps. Install the standalone Motif Android APK to keep recording long lectures, meetings, and voice memos uninterrupted in the background.
+                      </p>
+                      <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 mb-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+                        <p className="font-semibold text-zinc-800 dark:text-zinc-200">APK Features:</p>
+                        <ul className="list-disc list-inside space-y-0.5 ml-1">
+                          <li>Continuous recording with screen locked / turned off</li>
+                          <li>Background audio capture while using other apps</li>
+                          <li>Foreground recording status notification in Android drawer</li>
+                          <li>Auto-loads latest live features seamlessly</li>
+                        </ul>
+                      </div>
+                      <a
+                        href="/Motif.apk"
+                        download="Motif.apk"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-medium text-sm rounded-xl shadow-sm transition-all"
+                      >
+                        <Download size={15} />
+                        <span>Download Android App (Motif.apk)</span>
+                      </a>
+                    </div>
                   </div>
                 )}
 
