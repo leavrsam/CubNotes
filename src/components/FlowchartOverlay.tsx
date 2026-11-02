@@ -110,6 +110,8 @@ function getShapeContentInset(type?: FlowchartShapeType) {
       return { top: '20%', bottom: '14%', left: '10%', right: '10%' };
     case 'note':
       return { top: '10%', bottom: '10%', left: '12%', right: '12%' };
+    case 'triangle':
+      return { top: '35%', bottom: '10%', left: '18%', right: '18%' };
     default:
       return { top: '8px', bottom: '8px', left: '10px', right: '10px' };
   }
@@ -858,6 +860,88 @@ export function FlowchartOverlay({
               stroke={stroke}
               strokeWidth={strokeWidth}
             />
+          </g>
+        );
+      }
+      case 'triangle': {
+        const points = `${w / 2},0 ${w},${h} 0,${h}`;
+        return (
+          <polygon
+            points={points}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeDasharray={strokeDash}
+            className="transition-colors"
+          />
+        );
+      }
+      case 'star': {
+        // 5-point star
+        const cx = w / 2;
+        const cy = h / 2;
+        const outerR = Math.min(w, h) / 2;
+        const innerR = outerR * 0.42;
+        let points = '';
+        for (let i = 0; i < 10; i++) {
+          const r = i % 2 === 0 ? outerR : innerR;
+          const angle = (i * Math.PI) / 5 - Math.PI / 2;
+          const px = cx + r * Math.cos(angle);
+          const py = cy + r * Math.sin(angle);
+          points += `${px},${py} `;
+        }
+        return (
+          <polygon
+            points={points.trim()}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeDasharray={strokeDash}
+            className="transition-colors"
+          />
+        );
+      }
+      case 'axes2d': {
+        const ox = 26;
+        const oy = h - 22;
+        return (
+          <g className="transition-colors">
+            <rect x={0} y={0} width={w} height={h} rx={6} fill={fill} stroke={stroke} strokeWidth={1} opacity={0.2} />
+            {/* Grid hint */}
+            <line x1={ox} y1={h / 2} x2={w - 14} y2={h / 2} stroke={stroke} strokeWidth={1} strokeDasharray="3,3" opacity={0.35} />
+            <line x1={w / 2} y1={14} x2={w / 2} y2={oy} stroke={stroke} strokeWidth={1} strokeDasharray="3,3" opacity={0.35} />
+            {/* Y axis */}
+            <line x1={ox} y1={oy} x2={ox} y2={12} stroke={stroke} strokeWidth={strokeWidth} />
+            <polyline points={`${ox - 4},18 ${ox},12 ${ox + 4},18`} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+            {/* X axis */}
+            <line x1={ox} y1={oy} x2={w - 12} y2={oy} stroke={stroke} strokeWidth={strokeWidth} />
+            <polyline points={`${w - 18},${oy - 4} ${w - 12},${oy} ${w - 18},${oy + 4}`} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+            {/* Labels */}
+            <text x={ox + 6} y={18} fill={stroke} fontSize={10} fontWeight="bold">y</text>
+            <text x={w - 16} y={oy - 6} fill={stroke} fontSize={10} fontWeight="bold">x</text>
+            <text x={ox - 10} y={oy + 14} fill={stroke} fontSize={10} opacity={0.6}>0</text>
+          </g>
+        );
+      }
+      case 'axes3d': {
+        const ox = w / 2;
+        const oy = h / 2 + 10;
+        return (
+          <g className="transition-colors">
+            <rect x={0} y={0} width={w} height={h} rx={6} fill={fill} stroke={stroke} strokeWidth={1} opacity={0.2} />
+            {/* Z axis (up) */}
+            <line x1={ox} y1={oy} x2={ox} y2={12} stroke={stroke} strokeWidth={strokeWidth} />
+            <polyline points={`${ox - 4},18 ${ox},12 ${ox + 4},18`} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+            {/* X axis (bottom left) */}
+            <line x1={ox} y1={oy} x2={16} y2={h - 14} stroke={stroke} strokeWidth={strokeWidth} />
+            <polyline points={`${24},${h - 12} ${16},${h - 14} ${18},${h - 22}`} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+            {/* Y axis (bottom right) */}
+            <line x1={ox} y1={oy} x2={w - 14} y2={oy + 12} stroke={stroke} strokeWidth={strokeWidth} />
+            <polyline points={`${w - 20},${oy + 8} ${w - 14},${oy + 12} ${w - 20},${oy + 16}`} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+            {/* Labels */}
+            <text x={ox + 6} y={18} fill={stroke} fontSize={10} fontWeight="bold">z</text>
+            <text x={14} y={h - 20} fill={stroke} fontSize={10} fontWeight="bold">x</text>
+            <text x={w - 16} y={oy + 8} fill={stroke} fontSize={10} fontWeight="bold">y</text>
           </g>
         );
       }

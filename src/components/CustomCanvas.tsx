@@ -39,6 +39,12 @@ import { liveSpeechRecognizer } from "@/lib/liveSpeech";
 import { useYjsRoom } from "@/lib/yjs/useYjsRoom";
 import { activeRecordingManager } from "@/lib/activeRecordingManager";
 import { audioPlaybackSyncBus } from "@/lib/audioPlaybackSync";
+import { TableInsertPopover } from "./canvas/insert/TableInsertPopover";
+import { EquationInsertPopover } from "./canvas/insert/EquationInsertPopover";
+import { LinkInsertPopover, NotebookPageItem } from "./canvas/insert/LinkInsertPopover";
+import { StickersInsertPopover, StickerBadgeItem } from "./canvas/insert/StickersInsertPopover";
+import { QuickShapesPalette } from "./canvas/insert/QuickShapesPalette";
+import { Camera, FileText, CalendarClock, CalendarCheck, Paperclip, Pi, Calendar as CalendarIcon, Smile } from "lucide-react";
 
 export interface CustomCanvasProps {
   pageId: string;
@@ -52,6 +58,8 @@ export interface CustomCanvasProps {
   onClearTargetJump?: () => void;
   onSharePage?: () => void;
   isSidebarOpen?: boolean;
+  notebooks?: any[];
+  onSelectPage?: (pageId: string) => void;
 }
 
 export type ShapeMeta = {
@@ -153,7 +161,11 @@ export type FlowchartShapeType =
   | 'circle'          // Connector / Event
   | 'parallelogram'   // Input / Output
   | 'cylinder'        // Database
-  | 'note';           // Sticky Note
+  | 'note'            // Sticky Note
+  | 'triangle'        // Triangle
+  | 'axes2d'          // 2D Coordinate Graph
+  | 'axes3d'          // 3D Coordinate Graph
+  | 'star';           // Star
 
 export type AnchorPosition = 'top' | 'right' | 'bottom' | 'left';
 export type ConnectorRouting = 'curved' | 'orthogonal' | 'straight';
@@ -376,7 +388,9 @@ export function CustomCanvas({
   targetJumpCoordinates,
   onClearTargetJump,
   onSharePage,
-  isSidebarOpen
+  isSidebarOpen,
+  notebooks,
+  onSelectPage
 }: CustomCanvasProps) {
   // Real-time Yjs CRDT Collaboration Room
   const { doc: ydoc, provider: yProvider, activeUsers, currentUser: yCurrentUser } = useYjsRoom(pageId, currentUser);
@@ -1320,14 +1334,38 @@ export function CustomCanvas({
 
   const { showMinimap, setShowMinimap } = useMinimapSettings();
 
-  const getCanvasCenter = useCallback(() => {
-    const screenCenterX = window.innerWidth / 2;
-    const screenCenterY = window.innerHeight / 2;
+  const getVisibleCanvasCenter = useCallback((itemWidth: number = 0, itemHeight: number = 0) => {
+    const container = canvasContainerRef.current;
+    const containerWidth = container?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 1200);
+    const containerHeight = container?.clientHeight || (typeof window !== 'undefined' ? window.innerHeight : 800);
+
+    // When the meeting workspace side panel is open, it occupies 420px on the right side of the canvas
+    const rightOccludedWidth = isMeetingWorkspaceOpen ? Math.min(420, containerWidth * 0.85) : 0;
+    const visibleWidth = Math.max(100, containerWidth - rightOccludedWidth);
+    
+    // In container screen pixel coordinates:
+    const visibleCenterX = visibleWidth / 2;
+    const visibleCenterY = containerHeight / 2;
+
+    // Convert to canvas world coordinates accounting for pan & zoom:
+    const worldCenterX = (visibleCenterX - pan.x) / zoom;
+    const worldCenterY = (visibleCenterY - pan.y) / zoom;
+
     return {
-      x: (screenCenterX - pan.x) / zoom,
-      y: (screenCenterY - pan.y) / zoom
+      x: worldCenterX - (itemWidth / 2),
+      y: worldCenterY - (itemHeight / 2),
+      worldCenterX,
+      worldCenterY
     };
-  }, [pan, zoom]);
+  }, [pan, zoom, isMeetingWorkspaceOpen]);
+
+  const getCanvasCenter = useCallback(() => {
+    const visible = getVisibleCanvasCenter(0, 0);
+    return {
+      x: visible.worldCenterX,
+      y: visible.worldCenterY
+    };
+  }, [getVisibleCanvasCenter]);
 
   const getCanvasNotesText = useCallback(() => {
     const textParts = (texts || [])
@@ -1342,32 +1380,16 @@ export function CustomCanvas({
   const handleOpenMeetingWorkspace = useCallback((audioId?: string) => {
     if (audioId) {
       setMeetingWorkspaceAudioId(audioId);
+    } else if (isRecording && activeRecordingNodeIdRef.current) {
+      // If a recording is actively live, focus on that recording
+      setMeetingWorkspaceAudioId(activeRecordingNodeIdRef.current);
     } else {
-      const existing = (audios || []).find(a => a.isLiveRecording) || (audios && audios.length > 0 ? audios[audios.length - 1] : null);
-      if (existing) {
-        setMeetingWorkspaceAudioId(existing.id);
-      } else {
-        const center = getCanvasCenter();
-        const newId = uuidv4();
-        const newAudio: AudioNode = {
-          id: newId,
-          x: center.x - 220,
-          y: isJournal ? 240 : Math.max(240, center.y - 100),
-          width: 500,
-          url: "",
-          title: `Meeting - ${format(new Date(), 'MMM d, yyyy')}`,
-          summary: "",
-          transcript: "",
-          notes: "",
-          audioCreatedAt: Date.now(),
-          isAudioSavedPermanently: true,
-        };
-        setAudios(prev => [...(prev || []), newAudio]);
-        setMeetingWorkspaceAudioId(newId);
-      }
+      // Default to a fresh new meeting!
+      // Do NOT create an audio card on the canvas yet — only create it once a recording is started.
+      setMeetingWorkspaceAudioId(null);
     }
     setIsMeetingWorkspaceOpen(true);
-  }, [audios, getCanvasCenter, isJournal, setAudios]);
+  }, [isRecording]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'file' | 'image' | 'audio') => {
     const file = e.target.files?.[0];
@@ -1650,6 +1672,387 @@ export function CustomCanvas({
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   };
+
+  const printoutInputRef = useRef<HTMLInputElement>(null);
+  const [insertPopoverOpen, setInsertPopoverOpen] = useState<'table' | 'link' | 'equation' | 'stickers' | null>(null);
+
+  // Available pages for internal notebook linking
+  const availablePagesList = useMemo<NotebookPageItem[]>(() => {
+    if (!notebooks) return [];
+    const list: NotebookPageItem[] = [];
+    notebooks.forEach((nb: any) => {
+      nb.sections?.forEach((sec: any) => {
+        sec.pages?.forEach((p: any) => {
+          if (p.id !== pageId) {
+            list.push({
+              id: p.id,
+              title: p.title || "Untitled Note",
+              notebookTitle: `${nb.title} › ${sec.title}`,
+            });
+          }
+        });
+      });
+    });
+    return list;
+  }, [notebooks, pageId]);
+
+  // Internal page navigation click listener
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement)?.closest('a[data-page-id], [data-page-link]') as HTMLElement | null;
+      if (target) {
+        e.preventDefault();
+        const targetPageId = target.getAttribute('data-page-id') || target.getAttribute('data-page-link');
+        if (targetPageId) {
+          if (onSelectPage) {
+            onSelectPage(targetPageId);
+          } else {
+            window.dispatchEvent(new CustomEvent('motif-navigate-page', { detail: { pageId: targetPageId } }));
+          }
+        }
+      }
+    };
+    document.addEventListener('click', handleDocumentClick);
+    return () => document.removeEventListener('click', handleDocumentClick);
+  }, [onSelectPage]);
+
+  // Insert Table handler (inserts into active editor or spawns a new text/table node on canvas)
+  const handleInsertTable = useCallback((rows: number, cols: number, presetType?: 'standard' | 'comparison') => {
+    if (activeEditor) {
+      activeEditor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+      toast.success(`Inserted ${cols}×${rows} Table`);
+      return;
+    }
+
+    const center = getCanvasCenter();
+    let headerCells = '';
+    if (presetType === 'comparison') {
+      const compHeaders = ["Feature / Criteria", "Option A", "Option B", "Notes"];
+      for (let j = 0; j < cols; j++) {
+        headerCells += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; background: rgba(59, 130, 246, 0.08); font-weight: 600;">${compHeaders[j] || `Column ${j + 1}`}</th>`;
+      }
+    } else {
+      for (let j = 1; j <= cols; j++) {
+        headerCells += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; background: rgba(0,0,0,0.05); font-weight: 600;">Header ${j}</th>`;
+      }
+    }
+
+    let bodyRows = '';
+    for (let i = 1; i < rows; i++) {
+      let cells = '';
+      for (let j = 1; j <= cols; j++) {
+        cells += `<td style="border: 1px solid #cbd5e1; padding: 8px 12px;">Cell</td>`;
+      }
+      bodyRows += `<tr>${cells}</tr>`;
+    }
+
+    const tableHtml = `<table style="border-collapse: collapse; width: 100%;"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table><p></p>`;
+    const width = Math.max(380, cols * 95);
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - width / 2),
+      y: Math.round(center.y - 100),
+      content: tableHtml,
+      width,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success(`Inserted ${cols}×${rows} Table`);
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  // Insert Equation handler (LaTeX + KaTeX preview)
+  const handleInsertEquation = useCallback((latex: string, renderedHtml: string) => {
+    const equationHtml = `<div class="motif-math-block my-2 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-700/80 text-center select-all shadow-2xs" data-latex="${latex.replace(/"/g, '&quot;')}"><div class="py-1 overflow-x-auto">${renderedHtml}</div><div class="text-[10px] font-mono text-zinc-400 mt-1 select-all border-t border-zinc-200/50 dark:border-zinc-750 pt-1">${latex}</div></div><p></p>`;
+    if (activeEditor) {
+      activeEditor.chain().focus().insertContent(equationHtml).run();
+      toast.success("Equation inserted into note");
+      return;
+    }
+
+    const center = getCanvasCenter();
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - 175),
+      y: Math.round(center.y - 60),
+      content: equationHtml,
+      width: 350,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success("Equation card dropped onto canvas");
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  // Insert Link handlers (Web link or Note link)
+  const handleInsertWebLink = useCallback((url: string, displayText: string) => {
+    if (activeEditor) {
+      if (activeEditor.state.selection.empty) {
+        activeEditor.chain().focus().insertContent(`<a href="${url}" target="_blank" rel="noopener noreferrer">${displayText}</a> `).run();
+      } else {
+        activeEditor.chain().focus().setLink({ href: url }).run();
+      }
+      toast.success("Link inserted into note");
+      return;
+    }
+
+    const center = getCanvasCenter();
+    const linkHtml = `<div class="p-3 bg-white dark:bg-zinc-850 rounded-xl border border-zinc-200 dark:border-zinc-750 shadow-2xs"><a href="${url}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold text-sm no-underline hover:underline"><span>🔗</span><span>${displayText || url}</span></a><span class="text-[10px] text-zinc-400 block truncate mt-1">${url}</span></div><p></p>`;
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - 140),
+      y: Math.round(center.y - 40),
+      content: linkHtml,
+      width: 280,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success("Link card dropped onto canvas");
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  const handleInsertPageLink = useCallback((targetPageId: string, targetTitle: string) => {
+    const pageLinkHtml = `<a href="#" data-page-id="${targetPageId}" class="motif-internal-link inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold text-xs border border-zinc-200 dark:border-zinc-700 hover:border-primary-400 no-underline transition-colors">📄 ${targetTitle}</a> `;
+    if (activeEditor) {
+      activeEditor.chain().focus().insertContent(pageLinkHtml).run();
+      toast.success(`Linked to "${targetTitle}"`);
+      return;
+    }
+
+    const center = getCanvasCenter();
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - 120),
+      y: Math.round(center.y - 30),
+      content: `<p>${pageLinkHtml}</p><p></p>`,
+      width: 240,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success(`Note link dropped onto canvas`);
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  // Insert Date & Date & Time handler
+  const handleInsertDate = useCallback((includeTime = false) => {
+    const dateStr = includeTime 
+      ? format(new Date(), 'MMM d, yyyy · h:mm a')
+      : format(new Date(), 'EEEE, MMMM d, yyyy');
+
+    if (activeEditor) {
+      activeEditor.chain().focus().insertContent(`<strong>${dateStr}</strong> `).run();
+      toast.success(`Inserted ${includeTime ? 'Date & Time' : 'Date'}`);
+      return;
+    }
+
+    const center = getCanvasCenter();
+    const bannerHtml = `<div class="px-3.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-bold border border-zinc-200 dark:border-zinc-700 shadow-2xs inline-block text-xs"><span class="text-[9px] uppercase tracking-wider text-zinc-400 block font-semibold leading-none mb-0.5">${includeTime ? 'Timestamp' : 'Date'}</span>${dateStr}</div><p></p>`;
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - 120),
+      y: Math.round(center.y - 30),
+      content: bannerHtml,
+      width: 240,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success(`Inserted ${includeTime ? 'Date & Time' : 'Date'}`);
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  // Insert Meeting Details structured template
+  const handleInsertMeetingDetails = useCallback(() => {
+    const formattedDate = format(new Date(), 'EEEE, MMMM d, yyyy · h:mm a');
+    const meetingHtml = `
+      <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.25rem;">Meeting Notes</h2>
+      <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 0.75rem;"><strong>Date & Time:</strong> ${formattedDate}</p>
+      
+      <h3 style="font-size: 1rem; font-weight: 600; margin-top: 0.75rem;">Attendees</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><p>Attendee 1</p></div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><p>Attendee 2</p></div></li>
+      </ul>
+
+      <h3 style="font-size: 1rem; font-weight: 600; margin-top: 0.75rem;">Agenda</h3>
+      <ol>
+        <li>Project review & current status</li>
+        <li>Key decisions & architectural direction</li>
+        <li>Milestone deliverables</li>
+      </ol>
+
+      <h3 style="font-size: 1rem; font-weight: 600; margin-top: 0.75rem;">Discussion & Notes</h3>
+      <ul>
+        <li>Discussion point: </li>
+      </ul>
+
+      <h3 style="font-size: 1rem; font-weight: 600; margin-top: 0.75rem;">Action Items</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><p>Next steps & follow-up</p></div></li>
+      </ul>
+      <p></p>
+    `;
+
+    if (activeEditor) {
+      activeEditor.chain().focus().insertContent(meetingHtml).run();
+      toast.success("Meeting Details template inserted");
+      return;
+    }
+
+    const center = getCanvasCenter();
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - 240),
+      y: Math.round(center.y - 180),
+      content: meetingHtml,
+      width: 480,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success("Meeting Details template created on canvas");
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  // Screen Clipping / Screenshot capture
+  const handleScreenshotCapture = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        toast.error("Screen clipping is not supported in this browser window");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true
+      });
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      await video.play();
+
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not access canvas context");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      stream.getTracks().forEach(t => t.stop());
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `screenshot-${Date.now()}.png`, { type: "image/png" });
+        const toastId = toast.loading("Saving screenshot to canvas...");
+        try {
+          const result = await uploadMediaFile(file, pageId);
+          const center = getCanvasCenter();
+          const maxW = Math.min(520, canvas.width);
+          const maxH = Math.round((maxW / canvas.width) * canvas.height);
+          setImages(prev => [...(prev || []), {
+            id: uuidv4(),
+            x: Math.round(center.x - maxW / 2),
+            y: Math.round(center.y - maxH / 2),
+            url: result.url,
+            width: maxW,
+            height: maxH
+          }]);
+          toast.success("Screenshot placed on canvas!", { id: toastId });
+        } catch (err: any) {
+          toast.error("Failed to upload screenshot: " + err.message, { id: toastId });
+        }
+      }, "image/png");
+    } catch (err: any) {
+      if (err.name !== "NotAllowedError") {
+        console.warn("Screenshot capture error:", err);
+        toast.error("Screenshot capture failed");
+      }
+    }
+  }, [getCanvasCenter, pageId, setImages]);
+
+  // Stickers, Sticky Notes & Callout handlers
+  const handleInsertStickerBadge = useCallback((badge: StickerBadgeItem) => {
+    const badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] tracking-wider border select-none my-0.5" style="background-color: ${badge.bgLight}; border-color: ${badge.borderLight}; color: ${badge.color};">${badge.label}</span> `;
+    if (activeEditor) {
+      activeEditor.chain().focus().insertContent(badgeHtml).run();
+      toast.success(`Inserted ${badge.label} badge`);
+      return;
+    }
+
+    const center = getCanvasCenter();
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - 80),
+      y: Math.round(center.y - 25),
+      content: `<p>${badgeHtml}</p><p></p>`,
+      width: 160,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success(`Dropped ${badge.label} badge`);
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  const handleInsertStickyNote = useCallback((fill: string, stroke: string) => {
+    const center = getCanvasCenter();
+    const newShape: ShapeNode = {
+      id: uuidv4(),
+      type: 'note',
+      x: Math.round(center.x - 70),
+      y: Math.round(center.y - 70),
+      width: 140,
+      height: 140,
+      text: "",
+      fillColor: fill,
+      strokeColor: stroke,
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      fontSize: 14,
+      textAlign: 'left'
+    };
+    setShapes(prev => [...prev, newShape]);
+    setSelectedShapeId(newShape.id);
+    setSelectedIds([newShape.id]);
+    setTool("home");
+    toast.success("Sticky note dropped on canvas");
+  }, [getCanvasCenter, setShapes, setSelectedShapeId, setSelectedIds, setTool]);
+
+  const handleInsertCallout = useCallback((calloutType: 'info' | 'warning' | 'tip' | 'quote') => {
+    const config = {
+      info: { bg: 'rgba(59, 130, 246, 0.08)', border: '#3b82f6', title: 'NOTE', text: 'Important information or context here...' },
+      warning: { bg: 'rgba(245, 158, 11, 0.08)', border: '#f59e0b', title: 'WARNING', text: 'Critical caution or prerequisite here...' },
+      tip: { bg: 'rgba(168, 85, 247, 0.08)', border: '#a855f7', title: 'PRO TIP', text: 'Helpful shortcut or best practice here...' },
+      quote: { bg: 'rgba(0, 0, 0, 0.04)', border: '#71717a', title: 'QUOTE', text: 'Key quote or takeaway here...' },
+    }[calloutType];
+
+    const calloutHtml = `<div class="p-3 my-2 rounded-xl border-l-4 text-xs select-text" style="background-color: ${config.bg}; border-color: ${config.border};"><div class="font-bold tracking-wider text-[10px] uppercase mb-1" style="color: ${config.border};">${config.title}</div><p>${config.text}</p></div><p></p>`;
+
+    if (activeEditor) {
+      activeEditor.chain().focus().insertContent(calloutHtml).run();
+      toast.success(`Inserted ${config.title} callout`);
+      return;
+    }
+
+    const center = getCanvasCenter();
+    const newText: TextNode = {
+      id: uuidv4(),
+      x: Math.round(center.x - 170),
+      y: Math.round(center.y - 50),
+      content: calloutHtml,
+      width: 340,
+    };
+    setTexts(prev => [...(prev || []), newText]);
+    setSelectedIds([newText.id]);
+    toast.success(`Dropped ${config.title} callout on canvas`);
+  }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
+
+  // Quick connector line insertion from shapes palette
+  const handleInsertConnectorQuick = useCallback((routing: ConnectorRouting, arrowEnd: ConnectorEnd, label?: string) => {
+    const center = getCanvasCenter();
+    const newConn: ConnectorNode = {
+      id: uuidv4(),
+      fromPoint: { x: Math.round(center.x - 70), y: Math.round(center.y) },
+      toPoint: { x: Math.round(center.x + 70), y: Math.round(center.y) },
+      routing,
+      arrowEnd,
+      strokeColor: '#3b82f6',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      label
+    };
+    setConnectors(prev => [...prev, newConn]);
+    setSelectedConnectorId(newConn.id);
+    setSelectedShapeId(null);
+    setTool("home");
+    toast.success("Connector placed on canvas");
+  }, [getCanvasCenter, setConnectors, setSelectedConnectorId, setSelectedShapeId, setTool]);
 
   const handleInsertVideo = () => {
     const url = prompt("Enter YouTube URL:");
@@ -3356,67 +3759,237 @@ export function CustomCanvas({
             )}
 
             {activeTab === "Insert" && (
-              <div className="flex items-center gap-4 h-full py-1">
+              <div className="flex items-center gap-2 h-full py-1">
+                {/* Hidden File Inputs */}
                 <input type="file" ref={imageInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} />
                 <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => handleFileUpload(e, 'file')} />
-                <div className="flex items-center h-full">
+                <input type="file" ref={printoutInputRef} accept=".pdf,application/pdf" className="hidden" onChange={(e) => handleFileUpload(e, 'file')} />
+
+                {/* 1. TABLE (Interactive Grid & Presets) */}
+                <div className="relative h-full flex items-center">
                   <button
-                    onClick={() => imageInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
+                    onClick={() => setInsertPopoverOpen(prev => prev === 'table' ? null : 'table')}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${
+                      insertPopoverOpen === 'table'
+                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-semibold'
+                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                    }`}
+                    title="Insert Table (Interactive Grid & Presets)"
                   >
-                    <ImageIcon size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Image</span>
+                    <div className="flex items-center gap-0.5">
+                      <TableIcon size={15} strokeWidth={2} />
+                      <ChevronDown size={10} className="text-zinc-400" />
+                    </div>
+                    <span className="text-[9px] font-medium mt-0.5">Table</span>
                   </button>
+                  <TableInsertPopover
+                    isOpen={insertPopoverOpen === 'table'}
+                    onClose={() => setInsertPopoverOpen(null)}
+                    onInsertTable={handleInsertTable}
+                  />
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+
+                {/* 2. FILES & MEDIA (File, Printout, Picture, Screenshot) */}
+                <div className="flex items-center h-full gap-0.5">
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Attach File (Any document, code, or data file)"
                   >
-                    <FileIcon size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">File</span>
+                    <Paperclip size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">File</span>
                   </button>
+
                   <button
-                    onClick={handleInsertVideo}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300`}
+                    onClick={() => printoutInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Insert PDF Printout (Interactive slides with Unpack to Grid)"
                   >
-                    <Video size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Video</span>
+                    <FileText size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Printout</span>
+                  </button>
+
+                  <button
+                    onClick={() => imageInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Insert Image (Photo, diagram, or illustration)"
+                  >
+                    <ImageIcon size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Picture</span>
+                  </button>
+
+                  <button
+                    onClick={handleScreenshotCapture}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Screen Clipping (Take instant screenshot of window, tab, or screen)"
+                  >
+                    <div className="relative">
+                      <Camera size={15} strokeWidth={2} />
+                      <span className="absolute -top-1 -right-1 text-[8px] text-emerald-500 font-bold">+</span>
+                    </div>
+                    <span className="text-[9px] font-medium mt-0.5">Screenshot</span>
                   </button>
                 </div>
 
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
 
-                {/* Spatial Tags & Mind Mapping */}
-                <div className="flex items-center h-full">
+                {/* 3. LINKS & MATH EQUATIONS */}
+                <div className="flex items-center h-full gap-0.5">
+                  <div className="relative h-full flex items-center">
+                    <button
+                      onClick={() => setInsertPopoverOpen(prev => prev === 'link' ? null : 'link')}
+                      className={`flex flex-col items-center justify-center h-full px-2 rounded transition-colors ${
+                        insertPopoverOpen === 'link'
+                          ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-semibold'
+                          : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                      }`}
+                      title="Insert Link (Web URL or Internal Note Link)"
+                    >
+                      <Link2 size={15} strokeWidth={2} />
+                      <span className="text-[9px] font-medium mt-0.5">Link</span>
+                    </button>
+                    <LinkInsertPopover
+                      isOpen={insertPopoverOpen === 'link'}
+                      onClose={() => setInsertPopoverOpen(null)}
+                      availablePages={availablePagesList}
+                      hasSelectedText={Boolean(activeEditor && !activeEditor.state.selection.empty)}
+                      onInsertWebLink={handleInsertWebLink}
+                      onInsertPageLink={handleInsertPageLink}
+                    />
+                  </div>
+
+                  <div className="relative h-full flex items-center">
+                    <button
+                      onClick={() => setInsertPopoverOpen(prev => prev === 'equation' ? null : 'equation')}
+                      className={`flex flex-col items-center justify-center h-full px-2 rounded transition-colors ${
+                        insertPopoverOpen === 'equation'
+                          ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-semibold'
+                          : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                      }`}
+                      title="Insert Math Equation (LaTeX & KaTeX Formula)"
+                    >
+                      <Pi size={16} strokeWidth={2.2} />
+                      <span className="text-[9px] font-medium mt-0.5">Equation</span>
+                    </button>
+                    <EquationInsertPopover
+                      isOpen={insertPopoverOpen === 'equation'}
+                      onClose={() => setInsertPopoverOpen(null)}
+                      onInsertEquation={handleInsertEquation}
+                    />
+                  </div>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+
+                {/* 4. DATE & TIME STAMPS */}
+                <div className="flex items-center h-full gap-0.5">
+                  <button
+                    onClick={() => handleInsertDate(false)}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Insert Today's Date (e.g. Friday, October 30, 2026)"
+                  >
+                    <CalendarIcon size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Date</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleInsertDate(true)}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Insert Current Date & Time (e.g. Oct 30, 2026 · 7:30 PM)"
+                  >
+                    <CalendarClock size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Date & Time</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+
+                {/* 5. QUICK SHAPES PALETTE (Matching OneNote visual palette) */}
+                <QuickShapesPalette
+                  onInsertShape={(type, label) => handleInsertShape(type, label)}
+                  onInsertConnector={handleInsertConnectorQuick}
+                />
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+
+                {/* 6. AUDIO RECORDING & MEETING DETAILS */}
+                <div className="flex items-center h-full gap-0.5">
+                  <button
+                    onClick={startRecording}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Audio Recording (Record meeting audio directly into page)"
+                  >
+                    <div className="relative">
+                      <Mic size={15} strokeWidth={2} />
+                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    </div>
+                    <span className="text-[9px] font-medium mt-0.5">Recording</span>
+                  </button>
+
+                  <button
+                    onClick={handleInsertMeetingDetails}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Meeting Details (Structured agenda, attendees & action items template)"
+                  >
+                    <CalendarCheck size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Meeting</span>
+                  </button>
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+
+                {/* 7. STICKERS & BADGES */}
+                <div className="relative h-full flex items-center">
+                  <button
+                    onClick={() => setInsertPopoverOpen(prev => prev === 'stickers' ? null : 'stickers')}
+                    className={`flex flex-col items-center justify-center h-full px-2.5 rounded transition-colors ${
+                      insertPopoverOpen === 'stickers'
+                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-semibold'
+                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                    }`}
+                    title="Stickers & Badges (Status badges, sticky notes & callouts)"
+                  >
+                    <Smile size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Stickers</span>
+                  </button>
+                  <StickersInsertPopover
+                    isOpen={insertPopoverOpen === 'stickers'}
+                    onClose={() => setInsertPopoverOpen(null)}
+                    onInsertBadge={handleInsertStickerBadge}
+                    onInsertStickyNote={handleInsertStickyNote}
+                    onInsertCallout={handleInsertCallout}
+                  />
+                </div>
+
+                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+
+                {/* 8. MOTIF SPATIAL WORKSPACE (Tag Pin, Mind Map, Video) */}
+                <div className="flex items-center h-full gap-0.5">
                   <button
                     onClick={handleInsertTagPin}
-                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-purple-600 dark:text-purple-400"
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-purple-600 dark:text-purple-400 transition-colors"
                     title="Drop a spatial tag pin on canvas"
                   >
-                    <MapPin size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Tag Pin</span>
+                    <MapPin size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Tag Pin</span>
                   </button>
                   <button
                     onClick={handleInsertMindMapRoot}
-                    className="flex flex-col items-center justify-center h-full px-3 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-blue-600 dark:text-blue-400"
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-blue-600 dark:text-blue-400 transition-colors"
                     title="Create Mind Map Root Node"
                   >
-                    <GitBranch size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Mind Map</span>
+                    <GitBranch size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Mind Map</span>
                   </button>
-                </div>
-
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
-
-                <div className="flex items-center h-full">
                   <button
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => activeEditor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-                    disabled={!activeEditor}
-                    className={`flex flex-col items-center justify-center h-full px-3 rounded ${activeEditor ? 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300' : 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed'}`}
-                    title={!activeEditor ? "Click inside a text block first" : "Insert Table"}
+                    onClick={handleInsertVideo}
+                    className="flex flex-col items-center justify-center h-full px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors"
+                    title="Embed Video (YouTube / web video)"
                   >
-                    <TableIcon size={16} strokeWidth={2} />
-                    <span className="text-[10px] font-medium mt-0.5">Table</span>
+                    <Video size={15} strokeWidth={2} />
+                    <span className="text-[9px] font-medium mt-0.5">Video</span>
                   </button>
                 </div>
               </div>

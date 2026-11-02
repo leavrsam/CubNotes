@@ -152,6 +152,19 @@ export default function Home() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Handle internal note navigation events from links inside notes or canvas
+  useEffect(() => {
+    const handleNavigatePage = (e: Event) => {
+      const customEvent = e as CustomEvent<{ pageId: string }>;
+      if (customEvent.detail?.pageId) {
+        setSelectedPageId(customEvent.detail.pageId);
+        setActiveWorkspaceView('canvas');
+      }
+    };
+    window.addEventListener('motif-navigate-page', handleNavigatePage);
+    return () => window.removeEventListener('motif-navigate-page', handleNavigatePage);
+  }, []);
+
   // Native Android hardware/gesture back button listener via Capacitor
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -834,6 +847,11 @@ export default function Home() {
               onClearTargetJump={() => setTargetJumpCoordinates(null)}
               onSharePage={() => handleOpenShare('page', selectedPageId, activePageTitle)}
               isSidebarOpen={isSidebarOpen}
+              notebooks={notebooks}
+              onSelectPage={(id) => {
+                setSelectedPageId(id);
+                setActiveWorkspaceView('canvas');
+              }}
               headerControls={
                 <>
                   <button
