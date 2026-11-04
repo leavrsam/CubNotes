@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useAccent, AccentColor } from "./AccentProvider";
-import { X, Moon, Sun, Monitor, LogOut, Check, User as UserIcon, Upload, Loader2, Trash2, BookOpen, Folder, Edit2, FileText, Sparkles, Key, RefreshCw, Smartphone, Download } from "lucide-react";
+import { X, Moon, Sun, Monitor, LogOut, Check, User as UserIcon, Upload, Loader2, Trash2, BookOpen, Folder, Edit2, FileText, Sparkles, Key, RefreshCw, Smartphone, Download, Copy, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 import { useMinimapSettings } from "@/hooks/useMinimapSettings";
@@ -130,6 +130,86 @@ export function SettingsModal({
         toast.success("Gemini API key removed.");
       }
     }
+  };
+
+  // User-scoped API Key state for Jarvis & external assistant integrations
+  const [userApiKey, setUserApiKey] = useState<string | null>(null);
+  const [isLoadingApiKey, setIsLoadingApiKey] = useState(false);
+  const [isGeneratingApiKey, setIsGeneratingApiKey] = useState(false);
+  const [isKeyVisible, setIsKeyVisible] = useState(false);
+  const [hasCopiedApiKey, setHasCopiedApiKey] = useState(false);
+
+  const fetchUserApiKey = async () => {
+    try {
+      setIsLoadingApiKey(true);
+      const res = await fetch("/api/user/keys");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setUserApiKey(data.apiKey || null);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load user API key:", err);
+    } finally {
+      setIsLoadingApiKey(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && activeTab === "account") {
+      fetchUserApiKey();
+    }
+  }, [isOpen, activeTab]);
+
+  const handleGenerateApiKey = async () => {
+    try {
+      setIsGeneratingApiKey(true);
+      const res = await fetch("/api/user/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Jarvis Voice Assistant" }),
+      });
+      const data = await res.json();
+      if (data.success && data.apiKey) {
+        setUserApiKey(data.apiKey);
+        setIsKeyVisible(true);
+        toast.success("Personal API key generated!");
+      } else {
+        toast.error(data.error || "Failed to generate API key");
+      }
+    } catch (err) {
+      toast.error("Network error generating API key");
+    } finally {
+      setIsGeneratingApiKey(false);
+    }
+  };
+
+  const handleRevokeApiKey = async () => {
+    if (!window.confirm("Are you sure you want to revoke this API key? Any assistant using this key will immediately lose access.")) return;
+    try {
+      setIsGeneratingApiKey(true);
+      const res = await fetch("/api/user/keys", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setUserApiKey(null);
+        toast.success("API key revoked");
+      } else {
+        toast.error(data.error || "Failed to revoke API key");
+      }
+    } catch (err) {
+      toast.error("Network error revoking API key");
+    } finally {
+      setIsGeneratingApiKey(false);
+    }
+  };
+
+  const handleCopyApiKey = () => {
+    if (!userApiKey) return;
+    navigator.clipboard.writeText(userApiKey);
+    setHasCopiedApiKey(true);
+    toast.success("API key copied to clipboard!");
+    setTimeout(() => setHasCopiedApiKey(false), 2500);
   };
 
   // Page Style state (synced with active note)
@@ -864,6 +944,103 @@ export function SettingsModal({
                 <div>
                   <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">Signed in as</h3>
                   <div className="text-lg font-medium text-zinc-900 dark:text-zinc-100">{userEmail || "Loading..."}</div>
+                </div>
+
+                {/* Voice Assistant & Jarvis API Key */}
+                <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Key size={16} className="text-indigo-600 dark:text-indigo-400" />
+                        <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                          Jarvis & Voice Integrations
+                        </h3>
+                      </div>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        Connect home assistants (Jarvis via n8n) to manage your Motif notes, canvas, and shopping lists.
+                      </p>
+                    </div>
+                  </div>
+
+                  {isLoadingApiKey ? (
+                    <div className="flex items-center gap-2 text-xs text-zinc-500 py-2">
+                      <Loader2 size={14} className="animate-spin text-indigo-500" />
+                      <span>Checking API keys...</span>
+                    </div>
+                  ) : userApiKey ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type={isKeyVisible ? "text" : "password"}
+                            readOnly
+                            value={userApiKey}
+                            className="w-full pl-3 pr-10 py-2 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700/80 rounded-xl text-xs font-mono text-zinc-800 dark:text-zinc-200 select-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setIsKeyVisible(!isKeyVisible)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                            title={isKeyVisible ? "Hide key" : "Show key"}
+                          >
+                            {isKeyVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopyApiKey}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                        >
+                          {hasCopiedApiKey ? <Check size={14} /> : <Copy size={14} />}
+                          <span>{hasCopiedApiKey ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 pt-1">
+                        <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          <ShieldCheck size={13} />
+                          <span>Private to your account ({userEmail || "current user"})</span>
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            disabled={isGeneratingApiKey}
+                            onClick={() => {
+                              if (window.confirm("Regenerate this key? Your previous key will immediately stop working.")) {
+                                handleGenerateApiKey();
+                              }
+                            }}
+                            className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 text-xs font-medium underline transition-colors disabled:opacity-50"
+                          >
+                            {isGeneratingApiKey ? "Regenerating..." : "Regenerate"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isGeneratingApiKey}
+                            onClick={handleRevokeApiKey}
+                            className="text-red-500 hover:text-red-700 dark:hover:text-red-400 text-xs font-medium underline transition-colors disabled:opacity-50"
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/80 dark:border-zinc-800 rounded-xl space-y-2">
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                        No API key generated yet. Generate your personal key to connect Jarvis to your shopping lists and canvas notes.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={isGeneratingApiKey}
+                        onClick={handleGenerateApiKey}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm disabled:opacity-60"
+                      >
+                        {isGeneratingApiKey ? <Loader2 size={13} className="animate-spin" /> : <Key size={13} />}
+                        <span>{isGeneratingApiKey ? "Generating Key..." : "Generate Personal API Key"}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Trash & Data Recovery Options */}
