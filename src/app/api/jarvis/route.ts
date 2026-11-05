@@ -638,6 +638,11 @@ export async function POST(req: NextRequest) {
                 : textContent;
 
               if (texts.length > 0) {
+                // If existing note card is positioned behind/under the page title header, adjust it down cleanly
+                if (typeof texts[0].y === "number" && texts[0].y < 250) {
+                  texts[0].y = 280;
+                  texts[0].x = 64;
+                }
                 const currentContent = texts[0].content || "";
                 if (currentContent.includes("<p>") || currentContent.includes("<li>")) {
                   const htmlItem = `<p>${escapeHtml(formattedItem)}</p>`;
@@ -648,9 +653,9 @@ export async function POST(req: NextRequest) {
               } else {
                 texts.push({
                   id: uuidv4(),
-                  x: 100,
-                  y: 100,
-                  width: 380,
+                  x: 64,
+                  y: 280,
+                  width: 480,
                   content: isList ? `<p>${escapeHtml(formattedItem)}</p>` : `<p>${escapeHtml(textContent)}</p>`,
                 });
               }
@@ -694,9 +699,9 @@ export async function POST(req: NextRequest) {
             texts: [
               {
                 id: uuidv4(),
-                x: 100,
-                y: 100,
-                width: 380,
+                x: 64,
+                y: 280,
+                width: 480,
                 content: initialHtml,
               },
             ],
@@ -841,9 +846,9 @@ export async function POST(req: NextRequest) {
             texts: [
               {
                 id: uuidv4(),
-                x: 100,
-                y: 100,
-                width: 380,
+                x: 64,
+                y: 280,
+                width: 480,
                 content: initialHtml,
               },
             ],

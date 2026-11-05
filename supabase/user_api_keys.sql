@@ -242,6 +242,14 @@ BEGIN
         v_texts := COALESCE(v_doc_state->'texts', '[]'::jsonb);
 
         IF jsonb_array_length(v_texts) > 0 THEN
+            -- If note card was positioned underneath title header (y < 250), adjust it down cleanly
+            IF COALESCE((v_texts->0->>'y')::numeric, 0) < 250 THEN
+                v_texts := jsonb_set(
+                    jsonb_set(v_texts, '{0,y}', '280'::jsonb),
+                    '{0,x}', '64'::jsonb
+                );
+            END IF;
+
             v_current_content := COALESCE(v_texts->0->>'content', '');
             v_texts := jsonb_set(
                 v_texts,
@@ -252,9 +260,9 @@ BEGIN
             v_texts := jsonb_build_array(
                 jsonb_build_object(
                     'id', gen_random_uuid(),
-                    'x', 100,
-                    'y', 100,
-                    'width', 380,
+                    'x', 64,
+                    'y', 280,
+                    'width', 480,
                     'content', v_item_html
                 )
             );
@@ -280,9 +288,9 @@ BEGIN
             'texts', jsonb_build_array(
                 jsonb_build_object(
                     'id', gen_random_uuid(),
-                    'x', 100,
-                    'y', 100,
-                    'width', 380,
+                    'x', 64,
+                    'y', 280,
+                    'width', 480,
                     'content', v_item_html
                 )
             )
@@ -325,9 +333,9 @@ BEGIN
         'texts', jsonb_build_array(
             jsonb_build_object(
                 'id', gen_random_uuid(),
-                'x', 100,
-                'y', 100,
-                'width', 380,
+                'x', 64,
+                'y', 280,
+                'width', 480,
                 'content', v_html
             )
         )
@@ -351,3 +359,14 @@ GRANT EXECUTE ON FUNCTION public.jarvis_read_user_page TO anon, authenticated, s
 GRANT EXECUTE ON FUNCTION public.jarvis_get_or_create_section TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_append_or_create_page TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_create_page TO anon, authenticated, service_role;
+
+-- 10. Auto-fix existing pages: move any note cards positioned under the title header down to y=280
+UPDATE public.pages
+SET document_state = jsonb_set(
+    jsonb_set(document_state, '{texts,0,y}', '280'::jsonb),
+    '{texts,0,x}',
+    '64'::jsonb
+)
+WHERE document_state->'texts' IS NOT NULL
+  AND jsonb_array_length(document_state->'texts') > 0
+  AND COALESCE((document_state->'texts'->0->>'y')::numeric, 0) < 250;
