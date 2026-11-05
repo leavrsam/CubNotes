@@ -1222,18 +1222,11 @@ export function CustomCanvas({
     setSelectedIds(ids);
   }, [findIntersectingIds]);
 
-  // Audio Recording State
+  // Audio Recording State (defaults to System + Mic audio)
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [audioSourceMode, setAudioSourceMode] = useState<'mic' | 'system'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('motif_audio_source_mode') as 'mic' | 'system') || 'mic';
-    }
-    return 'mic';
-  });
-  const [isAudioSourceDropdownOpen, setIsAudioSourceDropdownOpen] = useState(false);
 
   const recorderRef = useRef<WebAudioRecorder | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1471,10 +1464,10 @@ export function CustomCanvas({
   };
 
 
-  // Recording Logic
-  const startRecording = async (customTitle?: string | React.MouseEvent, forceSystemAudio?: boolean) => {
+  // Recording Logic (defaults to System + Mic audio for Zoom, Meet, Teams and local speech)
+  const startRecording = async (customTitle?: string | React.MouseEvent, forceSystemAudio: boolean = true) => {
     try {
-      const useSystemAudio = forceSystemAudio ?? (audioSourceMode === 'system');
+      const useSystemAudio = forceSystemAudio !== false;
 
       if (isNativeAndroid()) {
         await startNativeRecording();
@@ -3804,73 +3797,17 @@ export function CustomCanvas({
                 
                 <div className="flex items-center h-full gap-2">
                   {!isRecording ? (
-                    <div className="relative flex items-center h-full">
-                      <button
-                        onClick={() => startRecording(undefined, audioSourceMode === 'system')}
-                        className="flex flex-col items-center justify-center h-full px-3 py-1 rounded-l hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-primary-600 dark:text-primary-400 font-semibold"
-                        title={audioSourceMode === 'system' ? "Start Zoom / System Meeting (Mic + Zoom Audio)" : "Start Meeting (Microphone Only)"}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          {audioSourceMode === 'system' ? <Laptop size={17} strokeWidth={2} /> : <Mic size={17} strokeWidth={2} />}
-                          <span className="text-[11px] font-bold">
-                            {audioSourceMode === 'system' ? 'Start Zoom Meeting' : 'Start Meeting'}
-                          </span>
-                        </div>
-                        <span className="text-[9px] text-zinc-400 font-normal">
-                          {audioSourceMode === 'system' ? 'System Audio + Mic' : 'Microphone Only'}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => setIsAudioSourceDropdownOpen(prev => !prev)}
-                        className="h-full px-1.5 border-l border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-r text-zinc-500"
-                        title="Choose audio source: Microphone or Zoom/System"
-                      >
-                        <ChevronDown size={12} />
-                      </button>
-
-                      {isAudioSourceDropdownOpen && (
-                        <div 
-                          className="absolute top-full left-0 mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 p-1.5 min-w-[240px] flex flex-col gap-1"
-                          onMouseLeave={() => setIsAudioSourceDropdownOpen(false)}
-                        >
-                          <div className="px-2 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                            Audio Input Source
-                          </div>
-                          <button
-                            onClick={() => {
-                              setAudioSourceMode('mic');
-                              if (typeof window !== 'undefined') localStorage.setItem('motif_audio_source_mode', 'mic');
-                              setIsAudioSourceDropdownOpen(false);
-                            }}
-                            className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
-                              audioSourceMode === 'mic' ? 'bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 font-medium' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200'
-                            }`}
-                          >
-                            <Mic size={16} className="shrink-0 mt-0.5" />
-                            <div>
-                              <div className="text-xs font-semibold">Microphone Only</div>
-                              <div className="text-[10px] text-zinc-400">In-person meetings, lectures, personal voice memos</div>
-                            </div>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setAudioSourceMode('system');
-                              if (typeof window !== 'undefined') localStorage.setItem('motif_audio_source_mode', 'system');
-                              setIsAudioSourceDropdownOpen(false);
-                            }}
-                            className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
-                              audioSourceMode === 'system' ? 'bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 font-medium' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200'
-                            }`}
-                          >
-                            <Laptop size={16} className="shrink-0 mt-0.5" />
-                            <div>
-                              <div className="text-xs font-semibold">Zoom / System Audio + Mic</div>
-                              <div className="text-[10px] text-zinc-400">Captures remote participants in Zoom, Meet, Teams + your mic</div>
-                            </div>
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => startRecording()}
+                      className="flex flex-col items-center justify-center h-full px-4 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-primary-600 dark:text-primary-400 font-semibold"
+                      title="Start Meeting Recording (Captures Zoom/system audio + microphone by default)"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Mic size={17} strokeWidth={2} />
+                        <span className="text-[11px] font-bold">Start Meeting</span>
+                      </div>
+                      <span className="text-[9px] text-zinc-400 font-normal">System + Mic</span>
+                    </button>
                   ) : (
                     <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
                       <button

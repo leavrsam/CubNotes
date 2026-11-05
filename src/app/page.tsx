@@ -50,7 +50,15 @@ export default function Home() {
     trash, restoreItem, permanentDeleteItem, emptyTrash, resurrectOrphanedPages,
     refreshNotebooks
   } = useNotebooks();
-  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlPageId = urlParams.get('pageId') || urlParams.get('page');
+      if (urlPageId) return urlPageId;
+      return localStorage.getItem('lastSelectedPageId') || null;
+    }
+    return null;
+  });
   const [activeWorkspaceView, setActiveWorkspaceView] = useState<'canvas' | 'tag-hub' | 'mind-map'>('canvas');
   const [targetJumpCoordinates, setTargetJumpCoordinates] = useState<{ x: number; y: number } | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
@@ -306,6 +314,7 @@ export default function Home() {
   const handleSelectPage = (id: string) => {
     setSelectedPageId(id);
     if (typeof window !== 'undefined') {
+      localStorage.setItem('lastSelectedPageId', id);
       window.history.pushState({ cubType: 'page', id }, '');
     }
   };
@@ -410,71 +419,75 @@ export default function Home() {
     };
   }, [router, supabase, refreshNotebooks]);
 
-  // Save selected page to localStorage (or clear it when navigating back to main notebook organization page)
+  // Save selected page to localStorage whenever a page is open so it persists across refreshes and restarts
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (selectedPageId) {
       localStorage.setItem('lastSelectedPageId', selectedPageId);
-    } else {
-      localStorage.removeItem('lastSelectedPageId');
     }
   }, [selectedPageId]);
 
-  // Remember last page or open to the main notebook organization page on startup
+  // Remember last opened page on startup: check selectedPageId / URL / localStorage first before falling back to top note
   const hasAutoSelected = React.useRef(false);
   useEffect(() => {
-    if (hasAutoSelected.current) return;
-    if (!selectedPageId && notebooks.length > 0) {
-      let targetPageId: string | null = null;
+    if (hasAutoSelected.current || notebooks.length === 0) return;
 
-      // 1. Check if URL specifies a target pageId or notebookId (e.g. from an invite link)
-      if (typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlPageId = urlParams.get('pageId') || urlParams.get('page');
-        if (urlPageId) {
-          const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === urlPageId)));
-          if (exists) targetPageId = urlPageId;
-        } else if (urlParams.get('notebookId')) {
-          const urlNbId = urlParams.get('notebookId');
-          const targetNb = notebooks.find(nb => nb.id === urlNbId);
-          if (targetNb && targetNb.sections[0]?.pages[0]) {
-            targetPageId = targetNb.sections[0].pages[0].id;
-          }
-        }
+    // 1. If selectedPageId is already set (from useState initial localStorage read or URL)
+    if (selectedPageId) {
+      const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === selectedPageId)));
+      if (exists) {
+        hasAutoSelected.current = true;
+        return;
       }
-
-      // 2. Check if user previously had a note open
-      const lastSelectedId = typeof window !== 'undefined' ? localStorage.getItem('lastSelectedPageId') : null;
-      if (!targetPageId && lastSelectedId) {
-        // Verify it still exists in the loaded notebooks
-        const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === lastSelectedId)));
-        if (exists) {
-          targetPageId = lastSelectedId;
-        } else {
-          localStorage.removeItem('lastSelectedPageId');
-        }
-      }
-
-      // 3. Fallback: on desktop (screen >= 768px), default to first available page so canvas isn't blank.
-      // On mobile (screen < 768px), keep targetPageId = null so it opens directly to the main notebook organization view!
-      const isDesktopScreen = typeof window !== 'undefined' && window.innerWidth >= 768;
-      if (!targetPageId && isDesktopScreen) {
-        for (const nb of notebooks) {
-          for (const sec of nb.sections) {
-            if (sec.pages.length > 0) {
-              targetPageId = sec.pages[0].id;
-              break;
-            }
-          }
-          if (targetPageId) break;
-        }
-      }
-
-      if (targetPageId) {
-        setSelectedPageId(targetPageId);
-      }
-      hasAutoSelected.current = true;
     }
+
+    let targetPageId: string | null = null;
+
+    // 2. Check if URL specifies a target pageId or notebookId (e.g. from an invite link or query string)
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlPageId = urlParams.get('pageId') || urlParams.get('page');
+      if (urlPageId) {
+        const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === urlPageId)));
+        if (exists) targetPageId = urlPageId;
+      } else if (urlParams.get('notebookId')) {
+        const urlNbId = urlParams.get('notebookId');
+        const targetNb = notebooks.find(nb => nb.id === urlNbId);
+        if (targetNb && targetNb.sections[0]?.pages[0]) {
+          targetPageId = targetNb.sections[0].pages[0].id;
+        }
+      }
+    }
+
+    // 3. Check if user previously had a note open in localStorage
+    const lastSelectedId = typeof window !== 'undefined' ? localStorage.getItem('lastSelectedPageId') : null;
+    if (!targetPageId && lastSelectedId) {
+      const exists = notebooks.some(nb => nb.sections.some(sec => sec.pages.some(p => p.id === lastSelectedId)));
+      if (exists) {
+        targetPageId = lastSelectedId;
+      } else {
+        localStorage.removeItem('lastSelectedPageId');
+      }
+    }
+
+    // 4. Fallback: on desktop (screen >= 768px), default to first available page so canvas isn't blank
+    const isDesktopScreen = typeof window !== 'undefined' && window.innerWidth >= 768;
+    if (!targetPageId && isDesktopScreen) {
+      for (const nb of notebooks) {
+        for (const sec of nb.sections) {
+          if (sec.pages.length > 0) {
+            targetPageId = sec.pages[0].id;
+            break;
+          }
+        }
+        if (targetPageId) break;
+      }
+    }
+
+    if (targetPageId) {
+      setSelectedPageId(targetPageId);
+    }
+    hasAutoSelected.current = true;
   }, [notebooks, selectedPageId]);
 
   const activeRecordingAudioIdRef = useRef<string | null>(null);

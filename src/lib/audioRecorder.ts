@@ -66,7 +66,7 @@ export class WebAudioRecorder {
     return this.isSystemAudioActive;
   }
 
-  public async start(specificDeviceId?: string, captureSystemAudio: boolean = false): Promise<void> {
+  public async start(specificDeviceId?: string, captureSystemAudio: boolean = true): Promise<void> {
     this.isStopping = false;
     this.isSystemAudioActive = false;
 
