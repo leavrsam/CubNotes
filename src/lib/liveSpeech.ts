@@ -25,6 +25,7 @@ export class LiveSpeechRecognizer {
   private recognition: any = null;
   private isListening: boolean = false;
   private isPaused: boolean = false;
+  private hasSuccessfullyStarted: boolean = false;
   private baseTranscript: string = '';
   private currentSessionFinal: string = '';
   private interimTranscript: string = '';
@@ -34,20 +35,25 @@ export class LiveSpeechRecognizer {
   public statusMessage: string = '';
 
   constructor() {
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && this.isListening && !this.isPaused && this.status !== 'permission_denied') {
-          console.log('[LiveSpeech] Document visible again, restarting speech recognizer...');
-          this.status = 'listening';
-          this.statusMessage = 'Listening live...';
+    if (typeof window !== 'undefined') {
+      const handleWakeup = () => {
+        if (this.isListening && !this.isPaused && this.status !== 'permission_denied') {
+          console.log('[LiveSpeech] Window/tab focused, ensuring speech recognizer is active...');
           clearTimeout(this.restartTimeout);
           this.restartTimeout = setTimeout(() => {
             if (this.isListening && !this.isPaused) {
+              this.status = 'listening';
+              this.statusMessage = 'Listening live...';
               this.initRecognition();
             }
-          }, 250);
+          }, 200);
         }
+      };
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') handleWakeup();
       });
+      window.addEventListener('focus', handleWakeup);
     }
   }
 
@@ -73,6 +79,7 @@ export class LiveSpeechRecognizer {
     // Stop previous instance cleanly without broadcasting idle
     this.isListening = false;
     this.isPaused = false;
+    this.hasSuccessfullyStarted = false;
     clearTimeout(this.restartTimeout);
     if (this.recognition) {
       try {
@@ -129,6 +136,7 @@ export class LiveSpeechRecognizer {
 
       recognition.onstart = () => {
         if (this.isListening) {
+          this.hasSuccessfullyStarted = true;
           this.status = 'listening';
           this.statusMessage = 'Listening live...';
           this.broadcastUpdate(this.getFullTranscript(), '', false);
@@ -167,13 +175,15 @@ export class LiveSpeechRecognizer {
 
       recognition.onerror = (event: any) => {
         const err = event.error;
-        if (err === 'not-allowed') {
-          // Chrome background tab throttle emits 'not-allowed' or 'aborted'.
-          // If document is hidden, do NOT mark permission as permanently denied.
-          if (typeof document !== 'undefined' && document.hidden) {
-            console.log('[LiveSpeech] Speech recognition paused by Chrome while tab is backgrounded.');
+        if (err === 'not-allowed' || err === 'aborted') {
+          // In Chrome, if recognition already started, any 'not-allowed' or 'aborted'
+          // event is triggered by the tab being unfocused, moved to another desktop, or occluded.
+          // It is NOT a permanent user permission denial. Keep this.isListening = true!
+          const isWindowUnfocused = typeof document !== 'undefined' && (document.hidden || !document.hasFocus());
+          if (this.hasSuccessfullyStarted || isWindowUnfocused) {
+            console.log('[LiveSpeech] Speech recognition paused by Chrome (unfocused or background desktop/window).');
             this.status = 'idle';
-            this.statusMessage = 'Live transcription paused in background tab (audio continues recording)';
+            this.statusMessage = 'Live transcription paused in background (audio continues recording)';
             this.broadcastUpdate(this.getFullTranscript(), this.interimTranscript, false);
             return;
           }
@@ -186,7 +196,7 @@ export class LiveSpeechRecognizer {
         } else if (err === 'network') {
           this.status = 'error';
           this.statusMessage = 'Speech recognition network required on this device';
-        } else if (err !== 'no-speech' && err !== 'aborted') {
+        } else if (err !== 'no-speech') {
           this.status = 'error';
           this.statusMessage = `Speech status: ${err}`;
         }
@@ -202,8 +212,8 @@ export class LiveSpeechRecognizer {
           this.interimTranscript = '';
         }
 
-        // If tab is currently backgrounded, don't spam restarts; the visibilitychange listener will cleanly restart it
-        if (typeof document !== 'undefined' && document.hidden) {
+        // If window/tab is currently backgrounded or unfocused, do not spin in a tight restart loop that Chrome blocks.
+        if (typeof document !== 'undefined' && (document.hidden || !document.hasFocus())) {
           return;
         }
 

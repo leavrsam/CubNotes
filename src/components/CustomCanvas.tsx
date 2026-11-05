@@ -1477,6 +1477,11 @@ export function CustomCanvas({
         recorderRef.current = recorder;
       }
 
+      const isSystemActuallyActive = recorderRef.current ? recorderRef.current.isCapturingSystemAudio() : false;
+      if (useSystemAudio && !isSystemActuallyActive && !isNativeAndroid()) {
+        toast("System audio sharing was cancelled — recording with microphone only.");
+      }
+
       // Start live speech recognizer for real-time transcription
       try {
         liveSpeechRecognizer.start();
@@ -1510,7 +1515,7 @@ export function CustomCanvas({
         transcript: "",
         notes: "",
         isLiveRecording: true,
-        captureMode: useSystemAudio ? 'system' : 'mic',
+        captureMode: isSystemActuallyActive ? 'system' : 'mic',
         recordingStartedAt,
         audioCreatedAt: recordingStartedAt,
         audioExpiresAt: isJournal ? undefined : recordingStartedAt + 7 * 24 * 60 * 60 * 1000,
@@ -1674,12 +1679,20 @@ export function CustomCanvas({
       console.error("Recording processing failed:", error);
       const errMsg = error?.message || "Processing failed";
       toast.error(`Recording processing failed: ${errMsg}`, { id: toastId, duration: 7000 });
+      
+      const recoveredTranscript = (liveTranscript || result.liveTranscript || '').trim();
+      const isCreditDepleted = errMsg.toLowerCase().includes('prepayment') || errMsg.toLowerCase().includes('credits are depleted');
+      const fallbackSummary = recoveredTranscript
+        ? `### Meeting Transcript\n\n${recoveredTranscript}\n\n---\n*AI Summary could not be generated: ${isCreditDepleted ? 'Google Gemini prepayment credits are depleted. Please top up your project billing in Google AI Studio or check your API key in Settings.' : errMsg}*`
+        : `### Audio Recording Saved\n\nAI Transcription failed: ${isCreditDepleted ? 'Google Gemini prepayment credits are depleted. Please top up your project billing in Google AI Studio or check your API key in Settings.' : errMsg}\n\nYou can listen to your recording above.`;
+
       setAudios(prev => prev.map(a => a.id === nodeId ? { 
         ...a, 
+        transcript: a.transcript || recoveredTranscript,
         isLiveRecording: false, 
         isTranscribing: false, 
         url: audioUrl,
-        summary: `### Audio Saved\n\nAI Transcription failed: ${errMsg}\n\nYou can still listen to your recording above.`
+        summary: fallbackSummary,
       } : a));
     } finally {
       setIsTranscribing(false);
@@ -1921,7 +1934,8 @@ export function CustomCanvas({
     }
 
     const center = getCanvasCenter();
-    const linkHtml = `<div class="p-3 bg-white dark:bg-zinc-850 rounded-xl border border-zinc-200 dark:border-zinc-750 shadow-2xs"><a href="${url}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold text-sm no-underline hover:underline"><span>🔗</span><span>${displayText || url}</span></a><span class="text-[10px] text-zinc-400 block truncate mt-1">${url}</span></div><p></p>`;
+    const linkIconSvg = `<svg class="w-3.5 h-3.5 inline-block text-primary-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
+    const linkHtml = `<div class="p-3 bg-white dark:bg-zinc-850 rounded-xl border border-zinc-200 dark:border-zinc-750 shadow-2xs"><a href="${url}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-semibold text-sm no-underline hover:underline">${linkIconSvg}<span>${displayText || url}</span></a><span class="text-[10px] text-zinc-400 block truncate mt-1">${url}</span></div><p></p>`;
     const newText: TextNode = {
       id: uuidv4(),
       x: Math.round(center.x - 140),
@@ -1935,7 +1949,8 @@ export function CustomCanvas({
   }, [activeEditor, getCanvasCenter, setTexts, setSelectedIds]);
 
   const handleInsertPageLink = useCallback((targetPageId: string, targetTitle: string) => {
-    const pageLinkHtml = `<a href="#" data-page-id="${targetPageId}" class="motif-internal-link inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold text-xs border border-zinc-200 dark:border-zinc-700 hover:border-primary-400 no-underline transition-colors">📄 ${targetTitle}</a> `;
+    const pageIconSvg = `<svg class="w-3.5 h-3.5 inline-block text-zinc-500 dark:text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+    const pageLinkHtml = `<a href="#" data-page-id="${targetPageId}" class="motif-internal-link inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold text-xs border border-zinc-200 dark:border-zinc-700 hover:border-primary-400 no-underline transition-colors">${pageIconSvg}<span>${targetTitle}</span></a> `;
     if (activeEditor) {
       activeEditor.chain().focus().insertContent(pageLinkHtml).run();
       toast.success(`Linked to "${targetTitle}"`);

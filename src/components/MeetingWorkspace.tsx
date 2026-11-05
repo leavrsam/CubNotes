@@ -440,7 +440,7 @@ export function MeetingWorkspace({
             className="text-xs font-medium bg-white dark:bg-[#191f3a] text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700/80 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-primary-500 min-w-0 flex-1 truncate cursor-pointer shadow-xs"
             title="Select meeting to display in workspace"
           >
-            <option value="__new__">✨ + New Meeting (Ready to start)</option>
+            <option value="__new__">+ New Meeting (Ready to start)</option>
             {audios && audios.length > 0 && (
               <optgroup label="Canvas Recordings">
                 {audios.map((a, idx) => (

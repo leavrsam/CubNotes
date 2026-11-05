@@ -76,6 +76,10 @@ export function formatGeminiErrorMessage(error: any, fallback = "AI request fail
     return "Gemini API key is invalid or unauthorized. Please verify your API key in Settings.";
   }
 
+  if (lower.includes('prepayment') || lower.includes('credits are depleted')) {
+    return "Google Gemini prepayment credits are depleted. Please top up your project billing at https://aistudio.google.com or check your API key in Motif Settings.";
+  }
+
   // Clean out any lingering raw JSON wrappers if present
   return extractedMsg
     .replace(/^{"error":\{.*?"message":"(.*?)"(?:,.*?)?\}\}$/, '$1')

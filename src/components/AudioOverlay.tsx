@@ -625,8 +625,8 @@ function AudioNodeCard({
                   <span className="text-xs font-bold text-red-600 dark:text-red-400">
                     {isActiveRecordingPaused ? 'Recording Paused' : 'Recording live meeting...'}
                   </span>
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300">
-                    {(node as any).captureMode === 'system' ? '💻 Zoom + Mic' : '🎙️ Mic Only'}
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 tracking-wide">
+                    {(node as any).captureMode === 'system' ? 'System + Mic' : 'Mic Only'}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
