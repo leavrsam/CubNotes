@@ -25,7 +25,11 @@ export async function OPTIONS() {
  */
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SECRET_KEY;
+  const key = serviceKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
     throw new Error("Supabase is not configured on server (missing URL or API key)");
@@ -43,6 +47,12 @@ function getSupabaseClient() {
  * Formats database errors with actionable guidance
  */
 function formatErrorMessage(error: any): string {
+  if (
+    error?.code === "42501" ||
+    (typeof error?.message === "string" && error.message.includes("row-level security policy"))
+  ) {
+    return "Database error: row-level security policy violation. To resolve this, run the updated 'supabase/user_api_keys.sql' script in your Supabase SQL Editor (which provides SECURITY DEFINER bypass functions), or add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables.";
+  }
   if (
     error?.code === "PGRST205" ||
     (typeof error?.message === "string" && (error.message.includes("motif_notes") || error.message.includes("user_api_keys")))
@@ -126,7 +136,6 @@ async function authenticateRequest(
   // 2. Check global master key
   const masterKey = process.env.JARVIS_API_KEY?.trim();
   if (masterKey && token === masterKey) {
-    // If master key is used, check if there's a primary user in user_api_keys
     try {
       const { data: primaryKey } = await supabase
         .from("user_api_keys")
@@ -153,7 +162,20 @@ async function getOrCreateTargetSection(
   supabase: ReturnType<typeof getSupabaseClient>,
   userId: string
 ): Promise<string> {
-  // 1. Look for existing notebooks
+  // 1. Try calling the SECURITY DEFINER RPC function first (bypasses RLS)
+  try {
+    const { data: rpcSectionId, error: rpcErr } = await supabase.rpc(
+      "jarvis_get_or_create_section",
+      { p_user_id: userId }
+    );
+    if (!rpcErr && rpcSectionId) {
+      return rpcSectionId as string;
+    }
+  } catch (err) {
+    console.warn("[Jarvis API] jarvis_get_or_create_section RPC fallback:", err);
+  }
+
+  // 2. Fallback to direct table queries
   let { data: notebooks } = await supabase
     .from("notebooks")
     .select("id, title")
@@ -162,7 +184,6 @@ async function getOrCreateTargetSection(
 
   let notebookId = notebooks && notebooks.length > 0 ? notebooks[0].id : null;
 
-  // If no notebook exists, create one
   if (!notebookId) {
     const { data: newNotebook, error: nbError } = await supabase
       .from("notebooks")
@@ -178,7 +199,6 @@ async function getOrCreateTargetSection(
     notebookId = newNotebook.id;
   }
 
-  // 2. Look for existing sections in this notebook
   let { data: sections } = await supabase
     .from("sections")
     .select("id, title")
@@ -187,7 +207,6 @@ async function getOrCreateTargetSection(
 
   let sectionId = sections && sections.length > 0 ? sections[0].id : null;
 
-  // If no section exists, create one
   if (!sectionId) {
     const { data: newSection, error: secError } = await supabase
       .from("sections")
@@ -234,7 +253,7 @@ export async function GET(req: NextRequest) {
 
     // If request is authenticated for a specific user, prioritize their real Motif Canvas Pages
     if (auth.userId) {
-      // Try calling RPC function first
+      // Try calling RPC function first (bypasses RLS)
       const { data: rpcPages, error: rpcError } = await supabase.rpc("jarvis_get_user_pages", {
         p_user_id: auth.userId,
         p_search: query,
@@ -387,7 +406,7 @@ export async function POST(req: NextRequest) {
 
       // Step A: Search user's real Motif Canvas Pages
       if (auth.userId) {
-        // Try RPC first
+        // Try RPC first (bypasses RLS)
         const { data: rawRpcPage } = await supabase
           .rpc("jarvis_read_user_page", {
             p_user_id: auth.userId,
@@ -536,8 +555,43 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // A. If user is authenticated, check real Canvas Pages
+      // A. If user is authenticated, prioritize real Canvas Pages
       if (auth.userId) {
+        // 1. Try atomic SECURITY DEFINER RPC first (bypasses RLS safely even without service role key)
+        try {
+          const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+            "jarvis_append_or_create_page",
+            {
+              p_user_id: auth.userId,
+              p_title: cleanTitle,
+              p_text: textContent,
+              p_is_list: isList,
+            }
+          );
+
+          if (!rpcErr && rpcResult && (rpcResult as any).success) {
+            const res = rpcResult as any;
+            const isCreated = res.action === "created";
+            const payload = {
+              id: res.page_id,
+              title: cleanTitle,
+              content: textContent,
+              source: "motif_canvas_page",
+            };
+
+            return NextResponse.json(
+              {
+                success: true,
+                [isCreated ? "createdNote" : "updatedNote"]: payload,
+              },
+              { status: isCreated ? 201 : 200, headers: corsHeaders }
+            );
+          }
+        } catch (rpcErr) {
+          console.warn("[Jarvis API] jarvis_append_or_create_page RPC fallback:", rpcErr);
+        }
+
+        // 2. Direct table queries fallback (when service role key is configured)
         const { data: notebooks } = await supabase
           .from("notebooks")
           .select("id")
@@ -742,8 +796,39 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // If user is authenticated, create as real Canvas Page
+      // If user is authenticated, prioritize real Canvas Pages
       if (auth.userId) {
+        // 1. Try atomic SECURITY DEFINER RPC first (bypasses RLS)
+        try {
+          const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+            "jarvis_create_page",
+            {
+              p_user_id: auth.userId,
+              p_title: cleanTitle,
+              p_text: textContent,
+            }
+          );
+
+          if (!rpcErr && rpcResult && (rpcResult as any).success) {
+            const res = rpcResult as any;
+            return NextResponse.json(
+              {
+                success: true,
+                note: {
+                  id: res.page_id,
+                  title: cleanTitle,
+                  content: textContent,
+                  source: "motif_canvas_page",
+                },
+              },
+              { status: 201, headers: corsHeaders }
+            );
+          }
+        } catch (rpcErr) {
+          console.warn("[Jarvis API] jarvis_create_page RPC fallback:", rpcErr);
+        }
+
+        // 2. Direct table queries fallback (when service role key is configured)
         const targetSectionId = await getOrCreateTargetSection(supabase, auth.userId);
         const newPageId = uuidv4();
         const initialHtml = `<p>${escapeHtml(textContent)}</p>`;
@@ -803,7 +888,6 @@ export async function POST(req: NextRequest) {
     // ACTION: "list"
     // --------------------------------------------------------------------------
     if (normalizedAction === "list") {
-      // Reuse GET handler logic for consistency
       return GET(req);
     }
 
