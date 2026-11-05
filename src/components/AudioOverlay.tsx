@@ -67,7 +67,7 @@ interface AudioOverlayProps {
   isActiveRecordingPaused?: boolean;
   onPauseRecording?: () => void;
   onResumeRecording?: () => void;
-  onStopRecording?: () => void;
+  onStopRecording?: (nodeId?: string) => void;
   onDeleteAudioNode?: (id: string) => void;
   onOpenMeetingWorkspace?: (id: string) => void;
   onToggleCollapseAll?: (collapsed?: boolean) => void;
@@ -114,7 +114,7 @@ function AudioNodeCard({
   isActiveRecordingPaused?: boolean;
   onPauseRecording?: () => void;
   onResumeRecording?: () => void;
-  onStopRecording?: () => void;
+  onStopRecording?: (nodeId?: string) => void;
   onOpenMeetingWorkspace?: (id: string) => void;
   onToggleCollapseAll?: (collapsed?: boolean) => void;
   canvasNotesText?: string;
@@ -271,8 +271,33 @@ function AudioNodeCard({
     toast.success("Meeting notes exported as Markdown!");
   };
 
-  // Sync with global timer for active recording
-  const elapsedSeconds = node.isLiveRecording ? activeRecordingDuration : 0;
+  // Sync with global timer for active recording or calculate accurately from node.recordingStartedAt
+  const [localElapsed, setLocalElapsed] = useState<number>(() => {
+    if (activeRecordingDuration > 0) return activeRecordingDuration;
+    if (node.recordingStartedAt) return Math.max(0, Math.floor((Date.now() - node.recordingStartedAt) / 1000));
+    return 0;
+  });
+
+  React.useEffect(() => {
+    if (!node.isLiveRecording) return;
+    if (isActiveRecordingPaused) return;
+
+    const update = () => {
+      if (activeRecordingDuration > 0) {
+        setLocalElapsed(activeRecordingDuration);
+      } else if (node.recordingStartedAt) {
+        setLocalElapsed(Math.max(0, Math.floor((Date.now() - node.recordingStartedAt) / 1000)));
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [node.isLiveRecording, isActiveRecordingPaused, node.recordingStartedAt, activeRecordingDuration]);
+
+  const elapsedSeconds = node.isLiveRecording
+    ? (localElapsed || activeRecordingDuration || (node.recordingStartedAt ? Math.max(0, Math.floor((Date.now() - node.recordingStartedAt) / 1000)) : 0))
+    : (node.durationMs ? Math.floor(node.durationMs / 1000) : 0);
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
@@ -600,6 +625,9 @@ function AudioNodeCard({
                   <span className="text-xs font-bold text-red-600 dark:text-red-400">
                     {isActiveRecordingPaused ? 'Recording Paused' : 'Recording live meeting...'}
                   </span>
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300">
+                    {(node as any).captureMode === 'system' ? '💻 Zoom + Mic' : '🎙️ Mic Only'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-mono font-bold text-red-600 dark:text-red-400">
@@ -616,7 +644,7 @@ function AudioNodeCard({
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                         </button>
                       )}
-                      <button onClick={onStopRecording} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Stop">
+                      <button onClick={() => onStopRecording(node.id)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded transition-colors" title="Stop & Finalize Note">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
                       </button>
                     </div>

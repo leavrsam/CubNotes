@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import debounce from "lodash/debounce";
 import { format } from "date-fns";
 import { getStroke } from "perfect-freehand";
-import { Pen, PenTool, Pencil, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers, PanelRight, PanelRightClose } from "lucide-react";
+import { Pen, PenTool, Pencil, Type, Hand, MousePointer2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Subscript as SubscriptIcon, Superscript as SuperscriptIcon, Highlighter, AlignLeft, AlignCenter, AlignRight, AlignJustify, Indent as IndentIcon, Outdent as OutdentIcon, Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Image as ImageIcon, File as FileIcon, Video, Table as TableIcon, ChevronDown, Mic, Square, BookOpen, Flame, Trash2, Sparkles, GripVertical, X, Upload, Minimize2, Maximize2, Workflow, Circle as CircleIcon, Diamond, MoveRight, CornerDownRight, Database, StickyNote, Spline, RemoveFormatting, Quote, Code, Minus, Plus, Link2, PaintRoller, ListTodo, GitBranch, MapPin, Hash, Share2, Layers, PanelRight, PanelRightClose, Laptop } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
 import { Editor } from "@tiptap/react";
@@ -109,6 +109,7 @@ export type AudioNode = {
   enhancedNotes?: string;
   chatHistory?: { role: 'user' | 'assistant', text: string }[];
   isLiveRecording?: boolean;
+  captureMode?: 'mic' | 'system';
   isTranscribing?: boolean;
   recordingStartedAt?: number;
   durationMs?: number;
@@ -1226,10 +1227,33 @@ export function CustomCanvas({
   const [isPaused, setIsPaused] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [audioSourceMode, setAudioSourceMode] = useState<'mic' | 'system'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('motif_audio_source_mode') as 'mic' | 'system') || 'mic';
+    }
+    return 'mic';
+  });
+  const [isAudioSourceDropdownOpen, setIsAudioSourceDropdownOpen] = useState(false);
+
   const recorderRef = useRef<WebAudioRecorder | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingStartTimeRef = useRef<number | null>(null);
+  const pausedTimeAccumulatedRef = useRef<number>(0);
+  const pauseStartRef = useRef<number | null>(null);
   const activeRecordingNodeIdRef = useRef<string | null>(null);
   const isStoppingRecordingRef = useRef(false);
+
+  // Sync recording duration on visibility change (recovering from background tabs)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && recordingStartTimeRef.current && !isPaused) {
+        const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current - pausedTimeAccumulatedRef.current) / 1000);
+        setRecordingDuration(Math.max(0, elapsed));
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isPaused]);
 
   const discardRecording = useCallback(() => {
     try {
@@ -1245,6 +1269,9 @@ export function CustomCanvas({
       setIsRecording(false);
       setIsPaused(false);
       setRecordingDuration(0);
+      recordingStartTimeRef.current = null;
+      pausedTimeAccumulatedRef.current = 0;
+      pauseStartRef.current = null;
       activeRecordingNodeIdRef.current = null;
       isStoppingRecordingRef.current = false;
       toast("Recording discarded.");
@@ -1445,13 +1472,15 @@ export function CustomCanvas({
 
 
   // Recording Logic
-  const startRecording = async (customTitle?: string | React.MouseEvent) => {
+  const startRecording = async (customTitle?: string | React.MouseEvent, forceSystemAudio?: boolean) => {
     try {
+      const useSystemAudio = forceSystemAudio ?? (audioSourceMode === 'system');
+
       if (isNativeAndroid()) {
         await startNativeRecording();
       } else {
         const recorder = new WebAudioRecorder();
-        await recorder.start();
+        await recorder.start(undefined, useSystemAudio);
         recorderRef.current = recorder;
       }
 
@@ -1471,6 +1500,11 @@ export function CustomCanvas({
       const defaultTitle = isJournal ? `Journal Entry - ${format(new Date(), 'MMM d, yyyy')}` : `Meeting Note - ${format(new Date(), 'MMM d, yyyy')}`;
       const finalTitle = titleString || defaultTitle;
 
+      const recordingStartedAt = Date.now();
+      recordingStartTimeRef.current = recordingStartedAt;
+      pausedTimeAccumulatedRef.current = 0;
+      pauseStartRef.current = null;
+
       // Spawn Audio Card immediately centered in visible canvas
       setAudios(prev => [...(prev || []), {
         id: nodeId,
@@ -1483,9 +1517,10 @@ export function CustomCanvas({
         transcript: "",
         notes: "",
         isLiveRecording: true,
-        recordingStartedAt: Date.now(),
-        audioCreatedAt: Date.now(),
-        audioExpiresAt: isJournal ? undefined : Date.now() + 7 * 24 * 60 * 60 * 1000,
+        captureMode: useSystemAudio ? 'system' : 'mic',
+        recordingStartedAt,
+        audioCreatedAt: recordingStartedAt,
+        audioExpiresAt: isJournal ? undefined : recordingStartedAt + 7 * 24 * 60 * 60 * 1000,
         isAudioSavedPermanently: isJournal ? true : false,
       }]);
 
@@ -1493,19 +1528,24 @@ export function CustomCanvas({
       setIsPaused(false);
       setRecordingDuration(0);
 
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
+        if (recordingStartTimeRef.current) {
+          const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current - pausedTimeAccumulatedRef.current) / 1000);
+          setRecordingDuration(Math.max(0, elapsed));
+        }
+      }, 500);
 
     } catch (err: any) {
-      console.error("Error accessing microphone:", err);
-      toast.error(err?.message || "Could not access microphone.");
+      console.error("Error accessing audio source:", err);
+      toast.error(err?.message || "Could not access audio source.");
       setIsRecording(false);
       setIsPaused(false);
     }
   };
 
   const pauseRecording = async () => {
+    pauseStartRef.current = Date.now();
     if (isNativeAndroid()) {
       try {
         await pauseNativeRecording();
@@ -1516,6 +1556,7 @@ export function CustomCanvas({
       setIsPaused(true);
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
       }
       return;
     }
@@ -1525,11 +1566,17 @@ export function CustomCanvas({
       setIsPaused(true);
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
       }
     }
   };
 
   const resumeRecording = async () => {
+    if (pauseStartRef.current) {
+      pausedTimeAccumulatedRef.current += (Date.now() - pauseStartRef.current);
+      pauseStartRef.current = null;
+    }
+
     if (isNativeAndroid()) {
       try {
         await resumeNativeRecording();
@@ -1538,18 +1585,26 @@ export function CustomCanvas({
       }
       liveSpeechRecognizer.resume();
       setIsPaused(false);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
+        if (recordingStartTimeRef.current) {
+          const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current - pausedTimeAccumulatedRef.current) / 1000);
+          setRecordingDuration(Math.max(0, elapsed));
+        }
+      }, 500);
       return;
     }
     if (recorderRef.current && recorderRef.current.isPaused()) {
       recorderRef.current.resume();
       liveSpeechRecognizer.resume();
       setIsPaused(false);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
+        if (recordingStartTimeRef.current) {
+          const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current - pausedTimeAccumulatedRef.current) / 1000);
+          setRecordingDuration(Math.max(0, elapsed));
+        }
+      }, 500);
     }
   };
 
@@ -1638,8 +1693,8 @@ export function CustomCanvas({
     }
   };
 
-  const stopRecording = async () => {
-    if ((!isNativeAndroid() && !recorderRef.current) || isStoppingRecordingRef.current) return;
+  const stopRecording = async (targetNodeId?: string | React.MouseEvent) => {
+    if (isStoppingRecordingRef.current) return;
     isStoppingRecordingRef.current = true;
     
     setIsRecording(false);
@@ -1650,34 +1705,98 @@ export function CustomCanvas({
     }
 
     const liveTranscript = liveSpeechRecognizer.stop();
-    const nodeId = activeRecordingNodeIdRef.current || uuidv4();
+    const explicitNodeId = typeof targetNodeId === 'string' ? targetNodeId : undefined;
+    const nodeId = explicitNodeId 
+      || activeRecordingNodeIdRef.current 
+      || (audios || []).find(a => a.isLiveRecording)?.id 
+      || uuidv4();
     activeRecordingNodeIdRef.current = null;
+    recordingStartTimeRef.current = null;
+    pausedTimeAccumulatedRef.current = 0;
+    pauseStartRef.current = null;
 
-    try {
-      let result: RecordingResult;
-      if (isNativeAndroid()) {
-        result = await stopNativeRecording();
-      } else if (recorderRef.current) {
-        result = await recorderRef.current.stop();
-      } else {
-        throw new Error("No active recording found");
+    const hasActiveRecorder = isNativeAndroid() || (recorderRef.current && recorderRef.current.isRecording());
+
+    // SCENARIO 1: Hardware recording session is active
+    if (hasActiveRecorder) {
+      try {
+        let result: RecordingResult;
+        if (isNativeAndroid()) {
+          result = await stopNativeRecording();
+        } else if (recorderRef.current) {
+          result = await recorderRef.current.stop();
+        } else {
+          throw new Error("No active recording found");
+        }
+        await uploadAndTranscribeRecording(result, nodeId, liveTranscript);
+      } catch (err: any) {
+        console.error("Error stopping recording:", err);
+        toast.error(err?.message || "Recording stopped unexpectedly.");
+        setAudios(prev => (prev || []).map(a => a.id === nodeId ? { 
+          ...a, 
+          isLiveRecording: false, 
+          isTranscribing: false, 
+          summary: `### Recording Error\n\n${err?.message || 'Recording stopped unexpectedly.'}`
+        } : a));
+      } finally {
+        if (recorderRef.current) {
+          recorderRef.current.discard();
+          recorderRef.current = null;
+        }
+        isStoppingRecordingRef.current = false;
       }
-      await uploadAndTranscribeRecording(result, nodeId, liveTranscript);
-    } catch (err: any) {
-      console.error("Error stopping recording:", err);
-      toast.error(err?.message || "Recording stopped unexpectedly.");
-      setAudios(prev => (prev || []).map(a => a.id === nodeId ? { 
-        ...a, 
-        isLiveRecording: false, 
+      return;
+    }
+
+    // SCENARIO 2: Orphaned or Disconnected live card (e.g. from page reload, background throttle, or tab restore)
+    const targetNode = (audios || []).find(a => a.id === nodeId);
+    const transcriptToSave = (targetNode?.transcript || liveTranscript || '').trim();
+
+    if (transcriptToSave) {
+      const toastId = toast.loading("Finalizing meeting note with Gemini AI...");
+      setIsTranscribing(true);
+      setAudios(prev => (prev || []).map(a => a.id === nodeId ? { ...a, isLiveRecording: false, isTranscribing: true } : a));
+
+      try {
+        const transcriptionResult = await processAudioTranscription({
+          liveTranscript: transcriptToSave,
+          isJournal: Boolean(isJournal),
+        });
+
+        const finalTranscript = transcriptionResult.transcript || transcriptToSave;
+        const finalSummary = transcriptionResult.summary || "Summary completed.";
+
+        setAudios(prev => (prev || []).map(a => a.id === nodeId ? {
+          ...a,
+          transcript: finalTranscript,
+          summary: finalSummary,
+          isLiveRecording: false,
+          isTranscribing: false,
+        } : a));
+
+        toast.success("Meeting note finalized and summarized with Gemini 3.8 Flash!", { id: toastId });
+      } catch (e: any) {
+        console.error("Error finalizing orphaned meeting note:", e);
+        setAudios(prev => (prev || []).map(a => a.id === nodeId ? {
+          ...a,
+          transcript: transcriptToSave,
+          summary: `### Meeting Note\n\n${transcriptToSave}`,
+          isLiveRecording: false,
+          isTranscribing: false,
+        } : a));
+        toast.success("Meeting transcript saved to note.", { id: toastId });
+      } finally {
+        setIsTranscribing(false);
+        isStoppingRecordingRef.current = false;
+      }
+    } else {
+      setAudios(prev => (prev || []).map(a => a.id === nodeId ? {
+        ...a,
+        isLiveRecording: false,
         isTranscribing: false,
-        summary: `### Recording Error\n\n${err?.message || 'Recording stopped unexpectedly.'}`
       } : a));
-    } finally {
-      if (recorderRef.current) {
-        recorderRef.current.discard();
-        recorderRef.current = null;
-      }
       isStoppingRecordingRef.current = false;
+      toast("Recording ended.");
     }
   };
 
@@ -3685,15 +3804,73 @@ export function CustomCanvas({
                 
                 <div className="flex items-center h-full gap-2">
                   {!isRecording ? (
-                    <button
-                      onClick={startRecording}
-                      className="flex flex-col items-center justify-center h-full px-4 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-primary-600 dark:text-primary-400 font-semibold"
-                    >
-                      <Mic size={18} strokeWidth={2} />
-                      <span className="text-[11px] font-bold mt-1 flex items-center gap-1">
-                        Start Meeting
-                      </span>
-                    </button>
+                    <div className="relative flex items-center h-full">
+                      <button
+                        onClick={() => startRecording(undefined, audioSourceMode === 'system')}
+                        className="flex flex-col items-center justify-center h-full px-3 py-1 rounded-l hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-primary-600 dark:text-primary-400 font-semibold"
+                        title={audioSourceMode === 'system' ? "Start Zoom / System Meeting (Mic + Zoom Audio)" : "Start Meeting (Microphone Only)"}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {audioSourceMode === 'system' ? <Laptop size={17} strokeWidth={2} /> : <Mic size={17} strokeWidth={2} />}
+                          <span className="text-[11px] font-bold">
+                            {audioSourceMode === 'system' ? 'Start Zoom Meeting' : 'Start Meeting'}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-zinc-400 font-normal">
+                          {audioSourceMode === 'system' ? 'System Audio + Mic' : 'Microphone Only'}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => setIsAudioSourceDropdownOpen(prev => !prev)}
+                        className="h-full px-1.5 border-l border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-r text-zinc-500"
+                        title="Choose audio source: Microphone or Zoom/System"
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+
+                      {isAudioSourceDropdownOpen && (
+                        <div 
+                          className="absolute top-full left-0 mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 p-1.5 min-w-[240px] flex flex-col gap-1"
+                          onMouseLeave={() => setIsAudioSourceDropdownOpen(false)}
+                        >
+                          <div className="px-2 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Audio Input Source
+                          </div>
+                          <button
+                            onClick={() => {
+                              setAudioSourceMode('mic');
+                              if (typeof window !== 'undefined') localStorage.setItem('motif_audio_source_mode', 'mic');
+                              setIsAudioSourceDropdownOpen(false);
+                            }}
+                            className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                              audioSourceMode === 'mic' ? 'bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 font-medium' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200'
+                            }`}
+                          >
+                            <Mic size={16} className="shrink-0 mt-0.5" />
+                            <div>
+                              <div className="text-xs font-semibold">Microphone Only</div>
+                              <div className="text-[10px] text-zinc-400">In-person meetings, lectures, personal voice memos</div>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setAudioSourceMode('system');
+                              if (typeof window !== 'undefined') localStorage.setItem('motif_audio_source_mode', 'system');
+                              setIsAudioSourceDropdownOpen(false);
+                            }}
+                            className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                              audioSourceMode === 'system' ? 'bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 font-medium' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200'
+                            }`}
+                          >
+                            <Laptop size={16} className="shrink-0 mt-0.5" />
+                            <div>
+                              <div className="text-xs font-semibold">Zoom / System Audio + Mic</div>
+                              <div className="text-[10px] text-zinc-400">Captures remote participants in Zoom, Meet, Teams + your mic</div>
+                            </div>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
                       <button

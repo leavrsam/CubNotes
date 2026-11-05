@@ -43,12 +43,16 @@ export function getPreferredMimeType(): { mimeType: string; fileExt: string } {
 export class WebAudioRecorder {
   private mediaRecorder: MediaRecorder | null = null;
   private stream: MediaStream | null = null;
+  private micStream: MediaStream | null = null;
+  private systemStream: MediaStream | null = null;
+  private audioContext: AudioContext | null = null;
+  private keepAliveOsc: OscillatorNode | null = null;
   private chunks: Blob[] = [];
   private startTime = 0;
   private chosenMimeType = '';
   private chosenExt = 'webm';
-
   private isStopping = false;
+  private isSystemAudioActive = false;
 
   public isRecording(): boolean {
     return !!this.mediaRecorder && (this.mediaRecorder.state === 'recording' || this.mediaRecorder.state === 'paused');
@@ -58,8 +62,13 @@ export class WebAudioRecorder {
     return !!this.mediaRecorder && this.mediaRecorder.state === 'paused';
   }
 
-  public async start(specificDeviceId?: string): Promise<void> {
+  public isCapturingSystemAudio(): boolean {
+    return this.isSystemAudioActive;
+  }
+
+  public async start(specificDeviceId?: string, captureSystemAudio: boolean = false): Promise<void> {
     this.isStopping = false;
+    this.isSystemAudioActive = false;
 
     // 1. Get user media with robust cross-browser fallback (ideal constraints instead of exact)
     let preferredDeviceId = specificDeviceId;
@@ -80,18 +89,105 @@ export class WebAudioRecorder {
       audioConstraints.deviceId = { ideal: preferredDeviceId };
     }
 
-    let stream: MediaStream;
+    let micStream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      micStream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
       });
     } catch (constraintErr) {
       console.warn('Microphone ideal constraints failed, falling back to basic audio:', constraintErr);
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     }
-    this.stream = stream;
+    this.micStream = micStream;
 
-    // 2. Select compatible MIME type
+    // 2. If system audio requested (e.g. Zoom, Google Meet, Teams, tab/screen audio), capture via getDisplayMedia
+    let activeStream: MediaStream = micStream;
+
+    if (captureSystemAudio && typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+      try {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true, // Required by browser specification to prompt user
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+        this.systemStream = displayStream;
+
+        // Immediately terminate video tracks so no video buffers consume memory or battery
+        displayStream.getVideoTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {}
+        });
+
+        const sysAudioTracks = displayStream.getAudioTracks();
+        if (sysAudioTracks.length > 0) {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            this.audioContext = ctx;
+
+            const micSource = ctx.createMediaStreamSource(micStream);
+            const sysSource = ctx.createMediaStreamSource(displayStream);
+            const destination = ctx.createMediaStreamDestination();
+
+            micSource.connect(destination);
+            sysSource.connect(destination);
+
+            activeStream = destination.stream;
+            this.isSystemAudioActive = true;
+          }
+        } else {
+          console.warn('[WebAudioRecorder] User shared screen/tab without checking "Share audio". Continuing with microphone only.');
+        }
+      } catch (sysErr: any) {
+        console.warn('[WebAudioRecorder] System audio selection cancelled or unsupported, continuing with mic only:', sysErr);
+      }
+    }
+
+    // 3. Keep-alive audio processing node: prevents Chrome from throttling/suspending audio in background tabs
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContextClass && !this.audioContext) {
+      try {
+        const ctx = new AudioContextClass();
+        this.audioContext = ctx;
+        const micSource = ctx.createMediaStreamSource(micStream);
+        const destination = ctx.createMediaStreamDestination();
+        micSource.connect(destination);
+
+        // Microscopic inaudible oscillator to keep browser audio pipeline hot in background tabs
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0.00001;
+        osc.connect(gain);
+        gain.connect(destination);
+        osc.start();
+        this.keepAliveOsc = osc;
+
+        activeStream = destination.stream;
+      } catch (ctxErr) {
+        console.warn('[WebAudioRecorder] AudioContext keep-alive setup warning:', ctxErr);
+      }
+    } else if (this.audioContext) {
+      try {
+        const osc = this.audioContext.createOscillator();
+        const gain = this.audioContext.createGain();
+        gain.gain.value = 0.00001;
+        osc.connect(gain);
+        const dest = (activeStream as any);
+        if (dest && typeof dest.connect === 'function') {
+          gain.connect(dest);
+        }
+        osc.start();
+        this.keepAliveOsc = osc;
+      } catch {}
+    }
+
+    this.stream = activeStream;
+
+    // 4. Select compatible MIME type
     const { mimeType, fileExt } = getPreferredMimeType();
     this.chosenMimeType = mimeType;
     this.chosenExt = fileExt;
@@ -109,13 +205,13 @@ export class WebAudioRecorder {
       if (!isFirefox) {
         recorderOptions.audioBitsPerSecond = mimeType.includes('webm') ? 32000 : 48000;
       }
-      recorder = new MediaRecorder(stream, recorderOptions);
+      recorder = new MediaRecorder(activeStream, recorderOptions);
     } catch (recErr) {
       console.warn('MediaRecorder constructor with options failed, falling back to basic mimeType:', recErr);
       try {
-        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        recorder = new MediaRecorder(activeStream, mimeType ? { mimeType } : undefined);
       } catch {
-        recorder = new MediaRecorder(stream);
+        recorder = new MediaRecorder(activeStream);
       }
     }
 
@@ -168,6 +264,36 @@ export class WebAudioRecorder {
    */
   public discard(): void {
     this.isStopping = true;
+    if (this.keepAliveOsc) {
+      try {
+        this.keepAliveOsc.stop();
+      } catch {}
+      this.keepAliveOsc = null;
+    }
+    if (this.audioContext) {
+      try {
+        this.audioContext.close();
+      } catch {}
+      this.audioContext = null;
+    }
+    if (this.micStream) {
+      this.micStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch {}
+      });
+      this.micStream = null;
+    }
+    if (this.systemStream) {
+      this.systemStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch {}
+      });
+      this.systemStream = null;
+    }
     if (this.stream) {
       this.stream.getTracks().forEach((track) => {
         try {
@@ -191,6 +317,7 @@ export class WebAudioRecorder {
     }
 
     this.chunks = [];
+    this.isSystemAudioActive = false;
   }
 
   public stop(): Promise<RecordingResult> {
@@ -220,7 +347,38 @@ export class WebAudioRecorder {
         clearTimeout(safetyTimeout);
 
         try {
-          // 1. Immediately turn off mic stream tracks
+          if (this.keepAliveOsc) {
+            try {
+              this.keepAliveOsc.stop();
+            } catch {}
+            this.keepAliveOsc = null;
+          }
+          if (this.audioContext) {
+            try {
+              this.audioContext.close();
+            } catch {}
+            this.audioContext = null;
+          }
+          if (this.micStream) {
+            this.micStream.getTracks().forEach((track) => {
+              try {
+                track.stop();
+                track.enabled = false;
+              } catch {}
+            });
+            this.micStream = null;
+          }
+          if (this.systemStream) {
+            this.systemStream.getTracks().forEach((track) => {
+              try {
+                track.stop();
+                track.enabled = false;
+              } catch {}
+            });
+            this.systemStream = null;
+          }
+
+          // 1. Immediately turn off stream tracks
           if (this.stream) {
             this.stream.getTracks().forEach((track) => {
               try {
@@ -233,6 +391,7 @@ export class WebAudioRecorder {
 
           this.mediaRecorder = null;
           this.isStopping = false;
+          this.isSystemAudioActive = false;
 
           this.processChunksAndResolve(resolve, reject, durationMs, recorder.mimeType);
         } catch (err: any) {

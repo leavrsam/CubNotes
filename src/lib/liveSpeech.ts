@@ -33,6 +33,24 @@ export class LiveSpeechRecognizer {
   public status: LiveSpeechStatus = 'idle';
   public statusMessage: string = '';
 
+  constructor() {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.isListening && !this.isPaused && this.status !== 'permission_denied') {
+          console.log('[LiveSpeech] Document visible again, restarting speech recognizer...');
+          this.status = 'listening';
+          this.statusMessage = 'Listening live...';
+          clearTimeout(this.restartTimeout);
+          this.restartTimeout = setTimeout(() => {
+            if (this.isListening && !this.isPaused) {
+              this.initRecognition();
+            }
+          }, 250);
+        }
+      });
+    }
+  }
+
   public static isSupported(): boolean {
     if (typeof window === 'undefined') return false;
     return Boolean(
@@ -150,6 +168,15 @@ export class LiveSpeechRecognizer {
       recognition.onerror = (event: any) => {
         const err = event.error;
         if (err === 'not-allowed') {
+          // Chrome background tab throttle emits 'not-allowed' or 'aborted'.
+          // If document is hidden, do NOT mark permission as permanently denied.
+          if (typeof document !== 'undefined' && document.hidden) {
+            console.log('[LiveSpeech] Speech recognition paused by Chrome while tab is backgrounded.');
+            this.status = 'idle';
+            this.statusMessage = 'Live transcription paused in background tab (audio continues recording)';
+            this.broadcastUpdate(this.getFullTranscript(), this.interimTranscript, false);
+            return;
+          }
           this.status = 'permission_denied';
           this.statusMessage = 'Microphone permission needed for speech recognition';
           this.isListening = false;
@@ -173,6 +200,11 @@ export class LiveSpeechRecognizer {
           this.baseTranscript = (this.baseTranscript ? `${this.baseTranscript} ` : '') + this.currentSessionFinal;
           this.currentSessionFinal = '';
           this.interimTranscript = '';
+        }
+
+        // If tab is currently backgrounded, don't spam restarts; the visibilitychange listener will cleanly restart it
+        if (typeof document !== 'undefined' && document.hidden) {
+          return;
         }
 
         // Chrome & Android automatically end recognition sessions on brief silence.
