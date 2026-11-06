@@ -15,9 +15,11 @@ CREATE TABLE IF NOT EXISTS public.user_api_keys (
 CREATE INDEX IF NOT EXISTS idx_user_api_keys_key ON public.user_api_keys (api_key);
 CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_id ON public.user_api_keys (user_id);
 
--- 2. Add user_id column to motif_notes table if not already present
+-- 2. Add user_id and notebook columns to motif_notes table if not already present
 ALTER TABLE public.motif_notes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.motif_notes ADD COLUMN IF NOT EXISTS notebook TEXT DEFAULT 'Household';
 CREATE INDEX IF NOT EXISTS idx_motif_notes_user_id ON public.motif_notes (user_id);
+CREATE INDEX IF NOT EXISTS idx_motif_notes_notebook ON public.motif_notes (notebook);
 
 -- 3. Row Level Security for user_api_keys
 ALTER TABLE public.user_api_keys ENABLE ROW LEVEL SECURITY;
@@ -55,12 +57,25 @@ TO anon, authenticated, service_role
 USING (true)
 WITH CHECK (true);
 
+-- Drop previous overloaded signatures to ensure clean upgrades
+DROP FUNCTION IF EXISTS public.jarvis_get_user_pages(UUID, TEXT, INT);
+DROP FUNCTION IF EXISTS public.jarvis_get_user_pages(UUID, TEXT, INT, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_read_user_page(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_read_user_page(UUID, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_get_or_create_section(UUID);
+DROP FUNCTION IF EXISTS public.jarvis_get_or_create_section(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN);
+DROP FUNCTION IF EXISTS public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_create_page(UUID, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_create_page(UUID, TEXT, TEXT, TEXT);
+
 -- 4. Secure RPC function: jarvis_get_user_pages
--- Returns the latest pages belonging to the user for Jarvis listing
+-- Returns the latest pages belonging to the user, optionally scoped to a specific notebook (e.g. 'Household')
 CREATE OR REPLACE FUNCTION public.jarvis_get_user_pages(
     p_user_id UUID,
     p_search TEXT DEFAULT '',
-    p_limit INT DEFAULT 15
+    p_limit INT DEFAULT 15,
+    p_notebook_name TEXT DEFAULT NULL
 )
 RETURNS TABLE (
     page_id UUID,
@@ -98,6 +113,7 @@ BEGIN
     JOIN public.notebooks n ON n.id = s.notebook_id
     WHERE n.user_id = p_user_id
       AND (p.deleted_at IS NULL)
+      AND (p_notebook_name IS NULL OR n.title ILIKE p_notebook_name)
       AND (p_search = '' OR p.title ILIKE '%' || p_search || '%')
     ORDER BY p.created_at DESC
     LIMIT p_limit;
@@ -105,16 +121,18 @@ END;
 $$;
 
 -- 5. Secure RPC function: jarvis_read_user_page
--- Reads a specific page's text content by title (bypasses RLS safely via SECURITY DEFINER)
+-- Reads a specific page's text content by title, optionally scoped to a notebook
 CREATE OR REPLACE FUNCTION public.jarvis_read_user_page(
     p_user_id UUID,
-    p_title TEXT
+    p_title TEXT,
+    p_notebook_name TEXT DEFAULT NULL
 )
 RETURNS TABLE (
     page_id UUID,
     title TEXT,
     date DATE,
     created_at TIMESTAMP WITH TIME ZONE,
+    notebook_title TEXT,
     content TEXT,
     raw_document_state JSONB
 )
@@ -128,6 +146,7 @@ BEGIN
         p.title,
         p.date,
         p.created_at,
+        n.title AS notebook_title,
         COALESCE(
             (
                 SELECT string_agg(
@@ -144,6 +163,7 @@ BEGIN
     JOIN public.notebooks n ON n.id = s.notebook_id
     WHERE n.user_id = p_user_id
       AND (p.deleted_at IS NULL)
+      AND (p_notebook_name IS NULL OR n.title ILIKE p_notebook_name)
       AND (p.title ILIKE p_title OR p.title ILIKE '%' || p_title || '%')
     ORDER BY (p.title ILIKE p_title) DESC, p.created_at DESC
     LIMIT 1;
@@ -151,8 +171,11 @@ END;
 $$;
 
 -- 6. Secure RPC function: jarvis_get_or_create_section
--- Atomically retrieves or initializes a notebook and section for voice notes
-CREATE OR REPLACE FUNCTION public.jarvis_get_or_create_section(p_user_id UUID)
+-- Atomically retrieves or initializes a notebook (matching p_notebook_name) and section for voice notes
+CREATE OR REPLACE FUNCTION public.jarvis_get_or_create_section(
+    p_user_id UUID,
+    p_notebook_name TEXT DEFAULT 'Voice Notes'
+)
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -161,17 +184,18 @@ DECLARE
     v_notebook_id UUID;
     v_section_id UUID;
 BEGIN
-    -- 1. Find existing notebook for user
+    -- 1. Find existing notebook for user matching p_notebook_name
     SELECT id INTO v_notebook_id
     FROM public.notebooks
     WHERE user_id = p_user_id
+      AND title ILIKE p_notebook_name
     ORDER BY created_at ASC
     LIMIT 1;
 
     -- If no notebook exists, create one
     IF v_notebook_id IS NULL THEN
         INSERT INTO public.notebooks (user_id, title, is_journal)
-        VALUES (p_user_id, 'Voice Notes', false)
+        VALUES (p_user_id, p_notebook_name, false)
         RETURNING id INTO v_notebook_id;
     END IF;
 
@@ -194,12 +218,13 @@ END;
 $$;
 
 -- 7. Secure RPC function: jarvis_append_or_create_page
--- Atomically finds or creates a page and appends content, bypassing RLS
+-- Atomically finds or creates a page and appends content, optionally scoped to a notebook
 CREATE OR REPLACE FUNCTION public.jarvis_append_or_create_page(
     p_user_id UUID,
     p_title TEXT,
     p_text TEXT,
-    p_is_list BOOLEAN DEFAULT false
+    p_is_list BOOLEAN DEFAULT false,
+    p_notebook_name TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -212,7 +237,10 @@ DECLARE
     v_texts JSONB;
     v_item_html TEXT;
     v_current_content TEXT;
+    v_target_notebook TEXT;
 BEGIN
+    v_target_notebook := COALESCE(p_notebook_name, 'Voice Notes');
+
     -- Format HTML markup
     IF p_is_list THEN
         IF p_text LIKE '- %' THEN
@@ -232,6 +260,7 @@ BEGIN
     JOIN public.notebooks n ON n.id = s.notebook_id
     WHERE n.user_id = p_user_id
       AND (p.deleted_at IS NULL)
+      AND (p_notebook_name IS NULL OR n.title ILIKE p_notebook_name)
       AND (p.title ILIKE p_title OR p.title ILIKE '%' || p_title || '%')
     ORDER BY (p.title ILIKE p_title) DESC, p.created_at DESC
     LIMIT 1;
@@ -278,11 +307,12 @@ BEGIN
             'success', true,
             'action', 'updated',
             'page_id', v_page_id,
-            'title', p_title
+            'title', p_title,
+            'notebook', v_target_notebook
         );
     ELSE
-        -- Page not found -> create new page in user's notebook section
-        v_section_id := public.jarvis_get_or_create_section(p_user_id);
+        -- Page not found -> create new page in user's target notebook section
+        v_section_id := public.jarvis_get_or_create_section(p_user_id, v_target_notebook);
         v_page_id := gen_random_uuid();
         v_doc_state := jsonb_build_object(
             'texts', jsonb_build_array(
@@ -303,18 +333,20 @@ BEGIN
             'success', true,
             'action', 'created',
             'page_id', v_page_id,
-            'title', p_title
+            'title', p_title,
+            'notebook', v_target_notebook
         );
     END IF;
 END;
 $$;
 
 -- 8. Secure RPC function: jarvis_create_page
--- Explicitly creates a new note page in the user's notebook, bypassing RLS
+-- Explicitly creates a new note page in user's notebook, bypassing RLS
 CREATE OR REPLACE FUNCTION public.jarvis_create_page(
     p_user_id UUID,
     p_title TEXT,
-    p_text TEXT
+    p_text TEXT,
+    p_notebook_name TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -325,8 +357,10 @@ DECLARE
     v_page_id UUID;
     v_doc_state JSONB;
     v_html TEXT;
+    v_target_notebook TEXT;
 BEGIN
-    v_section_id := public.jarvis_get_or_create_section(p_user_id);
+    v_target_notebook := COALESCE(p_notebook_name, 'Voice Notes');
+    v_section_id := public.jarvis_get_or_create_section(p_user_id, v_target_notebook);
     v_page_id := gen_random_uuid();
     v_html := '<p>' || p_text || '</p>';
     v_doc_state := jsonb_build_object(
@@ -348,7 +382,8 @@ BEGIN
         'success', true,
         'action', 'created',
         'page_id', v_page_id,
-        'title', p_title
+        'title', p_title,
+        'notebook', v_target_notebook
     );
 END;
 $$;
