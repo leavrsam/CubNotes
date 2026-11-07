@@ -113,7 +113,7 @@ BEGIN
     JOIN public.notebooks n ON n.id = s.notebook_id
     WHERE n.user_id = p_user_id
       AND (p.deleted_at IS NULL)
-      AND (p_notebook_name IS NULL OR n.title ILIKE p_notebook_name)
+      AND (p_notebook_name IS NULL OR btrim(p_notebook_name) = '' OR n.title ILIKE btrim(p_notebook_name))
       AND (p_search = '' OR p.title ILIKE '%' || p_search || '%')
     ORDER BY p.created_at DESC
     LIMIT p_limit;
@@ -163,7 +163,7 @@ BEGIN
     JOIN public.notebooks n ON n.id = s.notebook_id
     WHERE n.user_id = p_user_id
       AND (p.deleted_at IS NULL)
-      AND (p_notebook_name IS NULL OR n.title ILIKE p_notebook_name)
+      AND (p_notebook_name IS NULL OR btrim(p_notebook_name) = '' OR n.title ILIKE btrim(p_notebook_name))
       AND (p.title ILIKE p_title OR p.title ILIKE '%' || p_title || '%')
     ORDER BY (p.title ILIKE p_title) DESC, p.created_at DESC
     LIMIT 1;
@@ -171,10 +171,10 @@ END;
 $$;
 
 -- 6. Secure RPC function: jarvis_get_or_create_section
--- Atomically retrieves or initializes a notebook (matching p_notebook_name) and section for voice notes
+-- Atomically retrieves or initializes a notebook (matching p_notebook_name, or owner's default notebook if null/empty) and section
 CREATE OR REPLACE FUNCTION public.jarvis_get_or_create_section(
     p_user_id UUID,
-    p_notebook_name TEXT DEFAULT 'Voice Notes'
+    p_notebook_name TEXT DEFAULT NULL
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -183,23 +183,42 @@ AS $$
 DECLARE
     v_notebook_id UUID;
     v_section_id UUID;
+    v_clean_notebook TEXT;
 BEGIN
-    -- 1. Find existing notebook for user matching p_notebook_name
-    SELECT id INTO v_notebook_id
-    FROM public.notebooks
-    WHERE user_id = p_user_id
-      AND title ILIKE p_notebook_name
-    ORDER BY created_at ASC
-    LIMIT 1;
+    v_clean_notebook := NULLIF(btrim(COALESCE(p_notebook_name, '')), '');
 
-    -- If no notebook exists, create one
-    IF v_notebook_id IS NULL THEN
-        INSERT INTO public.notebooks (user_id, title, is_journal)
-        VALUES (p_user_id, p_notebook_name, false)
-        RETURNING id INTO v_notebook_id;
+    IF v_clean_notebook IS NOT NULL THEN
+        -- Find existing notebook for user matching v_clean_notebook
+        SELECT id INTO v_notebook_id
+        FROM public.notebooks
+        WHERE user_id = p_user_id
+          AND title ILIKE v_clean_notebook
+        ORDER BY created_at ASC
+        LIMIT 1;
+
+        -- If matching notebook does not exist, create it
+        IF v_notebook_id IS NULL THEN
+            INSERT INTO public.notebooks (user_id, title, is_journal)
+            VALUES (p_user_id, v_clean_notebook, false)
+            RETURNING id INTO v_notebook_id;
+        END IF;
+    ELSE
+        -- Default to owner's primary/oldest notebook when no notebook is specified
+        SELECT id INTO v_notebook_id
+        FROM public.notebooks
+        WHERE user_id = p_user_id
+        ORDER BY created_at ASC
+        LIMIT 1;
+
+        -- If user has no notebooks at all, create a default one
+        IF v_notebook_id IS NULL THEN
+            INSERT INTO public.notebooks (user_id, title, is_journal)
+            VALUES (p_user_id, 'Voice Notes', false)
+            RETURNING id INTO v_notebook_id;
+        END IF;
     END IF;
 
-    -- 2. Find existing section in this notebook
+    -- Find existing section in this notebook
     SELECT id INTO v_section_id
     FROM public.sections
     WHERE notebook_id = v_notebook_id
@@ -237,10 +256,8 @@ DECLARE
     v_texts JSONB;
     v_item_html TEXT;
     v_current_content TEXT;
-    v_target_notebook TEXT;
+    v_notebook_title TEXT;
 BEGIN
-    v_target_notebook := COALESCE(p_notebook_name, 'Voice Notes');
-
     -- Format HTML markup
     IF p_is_list THEN
         IF p_text LIKE '- %' THEN
@@ -253,14 +270,14 @@ BEGIN
     END IF;
 
     -- Look for existing page for this user
-    SELECT p.id, p.document_state
-    INTO v_page_id, v_doc_state
+    SELECT p.id, p.document_state, n.title
+    INTO v_page_id, v_doc_state, v_notebook_title
     FROM public.pages p
     JOIN public.sections s ON s.id = p.section_id
     JOIN public.notebooks n ON n.id = s.notebook_id
     WHERE n.user_id = p_user_id
       AND (p.deleted_at IS NULL)
-      AND (p_notebook_name IS NULL OR n.title ILIKE p_notebook_name)
+      AND (p_notebook_name IS NULL OR btrim(p_notebook_name) = '' OR n.title ILIKE btrim(p_notebook_name))
       AND (p.title ILIKE p_title OR p.title ILIKE '%' || p_title || '%')
     ORDER BY (p.title ILIKE p_title) DESC, p.created_at DESC
     LIMIT 1;
@@ -308,11 +325,17 @@ BEGIN
             'action', 'updated',
             'page_id', v_page_id,
             'title', p_title,
-            'notebook', v_target_notebook
+            'notebook', v_notebook_title
         );
     ELSE
         -- Page not found -> create new page in user's target notebook section
-        v_section_id := public.jarvis_get_or_create_section(p_user_id, v_target_notebook);
+        v_section_id := public.jarvis_get_or_create_section(p_user_id, p_notebook_name);
+
+        SELECT n.title INTO v_notebook_title
+        FROM public.sections s
+        JOIN public.notebooks n ON n.id = s.notebook_id
+        WHERE s.id = v_section_id;
+
         v_page_id := gen_random_uuid();
         v_doc_state := jsonb_build_object(
             'texts', jsonb_build_array(
@@ -334,7 +357,7 @@ BEGIN
             'action', 'created',
             'page_id', v_page_id,
             'title', p_title,
-            'notebook', v_target_notebook
+            'notebook', COALESCE(v_notebook_title, p_notebook_name, 'Notebook')
         );
     END IF;
 END;
@@ -357,10 +380,15 @@ DECLARE
     v_page_id UUID;
     v_doc_state JSONB;
     v_html TEXT;
-    v_target_notebook TEXT;
+    v_notebook_title TEXT;
 BEGIN
-    v_target_notebook := COALESCE(p_notebook_name, 'Voice Notes');
-    v_section_id := public.jarvis_get_or_create_section(p_user_id, v_target_notebook);
+    v_section_id := public.jarvis_get_or_create_section(p_user_id, p_notebook_name);
+
+    SELECT n.title INTO v_notebook_title
+    FROM public.sections s
+    JOIN public.notebooks n ON n.id = s.notebook_id
+    WHERE s.id = v_section_id;
+
     v_page_id := gen_random_uuid();
     v_html := '<p>' || p_text || '</p>';
     v_doc_state := jsonb_build_object(
@@ -383,17 +411,17 @@ BEGIN
         'action', 'created',
         'page_id', v_page_id,
         'title', p_title,
-        'notebook', v_target_notebook
+        'notebook', COALESCE(v_notebook_title, p_notebook_name, 'Notebook')
     );
 END;
 $$;
 
 -- 9. Explicitly grant execute on all RPC helper functions to all API roles
-GRANT EXECUTE ON FUNCTION public.jarvis_get_user_pages TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.jarvis_read_user_page TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.jarvis_get_or_create_section TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.jarvis_append_or_create_page TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.jarvis_create_page TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_get_user_pages(UUID, TEXT, INT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_read_user_page(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_get_or_create_section(UUID, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_create_page(UUID, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 
 -- 10. Auto-fix existing pages: move any note cards positioned under the title header down to y=280
 UPDATE public.pages
@@ -405,3 +433,6 @@ SET document_state = jsonb_set(
 WHERE document_state->'texts' IS NOT NULL
   AND jsonb_array_length(document_state->'texts') > 0
   AND COALESCE((document_state->'texts'->0->>'y')::numeric, 0) < 250;
+
+-- 11. Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
