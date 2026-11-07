@@ -95,6 +95,28 @@ function escapeHtml(str: string): string {
 }
 
 /**
+ * Helper to call Supabase RPC with automatic graceful fallback if new overloaded signature is not found
+ */
+async function callRpcWithFallback(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  fnName: string,
+  preferredArgs: Record<string, any>,
+  fallbackArgs?: Record<string, any>
+) {
+  const res = await supabase.rpc(fnName, preferredArgs);
+  if (
+    res.error &&
+    fallbackArgs &&
+    (res.error.code === "PGRST202" ||
+      res.error.message?.includes("schema cache") ||
+      res.error.message?.includes("Could not find the function"))
+  ) {
+    return await supabase.rpc(fnName, fallbackArgs);
+  }
+  return res;
+}
+
+/**
  * Validates request authentication:
  * 1. Checks user-scoped API key in `user_api_keys` table.
  * 2. Fallback: Checks global `process.env.JARVIS_API_KEY`.
@@ -126,7 +148,10 @@ async function authenticateRequest(
         .from("user_api_keys")
         .update({ last_used_at: new Date().toISOString() })
         .eq("id", keyRow.id)
-        .then(() => {}, () => {});
+        .then(
+          () => {},
+          () => {}
+        );
 
       return { authorized: true, userId: keyRow.user_id };
     }
@@ -157,81 +182,6 @@ async function authenticateRequest(
 }
 
 /**
- * Ensures user has at least one Notebook and Section matching targetNotebookName to place new Canvas notes
- */
-async function getOrCreateTargetSection(
-  supabase: ReturnType<typeof getSupabaseClient>,
-  userId: string,
-  targetNotebookName: string = "Voice Notes"
-): Promise<string> {
-  // 1. Try calling the SECURITY DEFINER RPC function first (bypasses RLS)
-  try {
-    const { data: rpcSectionId, error: rpcErr } = await supabase.rpc(
-      "jarvis_get_or_create_section",
-      {
-        p_user_id: userId,
-        p_notebook_name: targetNotebookName,
-      }
-    );
-    if (!rpcErr && rpcSectionId) {
-      return rpcSectionId as string;
-    }
-  } catch (err) {
-    console.warn("[Jarvis API] jarvis_get_or_create_section RPC fallback:", err);
-  }
-
-  // 2. Fallback to direct table queries
-  let { data: notebooks } = await supabase
-    .from("notebooks")
-    .select("id, title")
-    .eq("user_id", userId)
-    .ilike("title", targetNotebookName)
-    .order("created_at", { ascending: true });
-
-  let notebookId = notebooks && notebooks.length > 0 ? notebooks[0].id : null;
-
-  if (!notebookId) {
-    const { data: newNotebook, error: nbError } = await supabase
-      .from("notebooks")
-      .insert({
-        user_id: userId,
-        title: targetNotebookName,
-        is_journal: false,
-      })
-      .select("id")
-      .single();
-
-    if (nbError) throw nbError;
-    notebookId = newNotebook.id;
-  }
-
-  let { data: sections } = await supabase
-    .from("sections")
-    .select("id, title")
-    .eq("notebook_id", notebookId)
-    .order("sort_order", { ascending: true });
-
-  let sectionId = sections && sections.length > 0 ? sections[0].id : null;
-
-  if (!sectionId) {
-    const { data: newSection, error: secError } = await supabase
-      .from("sections")
-      .insert({
-        notebook_id: notebookId,
-        title: "Inbox",
-        sort_order: 0,
-      })
-      .select("id")
-      .single();
-
-    if (secError) throw secError;
-    sectionId = newSection.id;
-  }
-
-  return sectionId;
-}
-
-/**
  * Shared helper to list notes with strict privacy enforcement
  */
 async function listNotesInternal(
@@ -248,26 +198,47 @@ async function listNotesInternal(
 
   // If request is authenticated for a specific user, prioritize their real Motif Canvas Pages
   if (auth.userId) {
-    // Try calling RPC function first (bypasses RLS)
     try {
-      const { data: rpcPages, error: rpcError } = await supabase.rpc("jarvis_get_user_pages", {
-        p_user_id: auth.userId,
-        p_search: query,
-        p_limit: limit,
-        p_notebook_name: targetNotebook,
-      });
+      const rpcRes = await callRpcWithFallback(
+        supabase,
+        "jarvis_get_user_pages",
+        {
+          p_user_id: auth.userId,
+          p_search: query,
+          p_limit: limit,
+          p_notebook_name: targetNotebook,
+        },
+        {
+          p_user_id: auth.userId,
+          p_search: query,
+          p_limit: targetNotebook ? 50 : limit,
+        }
+      );
 
-      if (!rpcError && Array.isArray(rpcPages)) {
+      if (!rpcRes.error && Array.isArray(rpcRes.data)) {
+        let pages = rpcRes.data as any[];
+
+        // If targetNotebook is requested and fallback 3-arg RPC was used, filter in memory
+        if (targetNotebook) {
+          pages = pages.filter(
+            (p) =>
+              p.notebook_title &&
+              p.notebook_title.toLowerCase() === targetNotebook.toLowerCase()
+          );
+        }
+
+        pages = pages.slice(0, limit);
+
         return NextResponse.json(
           {
             success: true,
-            count: rpcPages.length,
-            notes: (rpcPages as any[]).map((p: any) => ({
+            count: pages.length,
+            notes: pages.map((p: any) => ({
               id: p.page_id,
               title: p.title,
               content_preview: p.content_preview?.slice(0, 150) || "",
-              notebook: p.notebook_title,
-              section: p.section_title,
+              notebook: p.notebook_title || targetNotebook || "Notebook",
+              section: p.section_title || "Inbox",
               updated_at: p.created_at,
             })),
           },
@@ -275,277 +246,12 @@ async function listNotesInternal(
         );
       }
     } catch (err) {
-      console.warn("[Jarvis API] jarvis_get_user_pages RPC fallback:", err);
+      console.warn("[Jarvis API] jarvis_get_user_pages error:", err);
     }
 
-    // Direct query fallback for user pages
-    let nbQuery = supabase
-      .from("notebooks")
-      .select("id, title")
-      .eq("user_id", auth.userId);
-
-    if (targetNotebook) {
-      nbQuery = nbQuery.ilike("title", targetNotebook);
-    }
-
-    const { data: notebooks } = await nbQuery;
-
-    if (notebooks && notebooks.length > 0) {
-      const nbIds = notebooks.map((n) => n.id);
-      const nbTitleMap = new Map(notebooks.map((n) => [n.id, n.title]));
-
-      const { data: sections } = await supabase
-        .from("sections")
-        .select("id, notebook_id, title")
-        .in("notebook_id", nbIds);
-
-      if (sections && sections.length > 0) {
-        const secIds = sections.map((s) => s.id);
-        const secMap = new Map(sections.map((s) => [s.id, s]));
-
-        let pageQuery = supabase
-          .from("pages")
-          .select("id, section_id, title, document_state, created_at")
-          .in("section_id", secIds)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (query) {
-          pageQuery = pageQuery.ilike("title", `%${query}%`);
-        }
-
-        const { data: pages } = await pageQuery;
-        if (pages && pages.length > 0) {
-          return NextResponse.json(
-            {
-              success: true,
-              count: pages.length,
-              notes: pages.map((p) => {
-                const texts = p.document_state?.texts || [];
-                const rawPreview = texts.map((t: any) => cleanHtmlToPlainText(t.content || "")).join(" ");
-                const sec = secMap.get(p.section_id);
-                return {
-                  id: p.id,
-                  title: p.title,
-                  content_preview: rawPreview.slice(0, 150),
-                  notebook: sec ? nbTitleMap.get(sec.notebook_id) || "Notebook" : "Notebook",
-                  section: sec?.title || "Inbox",
-                  updated_at: p.created_at,
-                };
-              }),
-            },
-            { status: 200, headers: corsHeaders }
-          );
-        }
-      }
-    }
-
-    // If guest was restricted to Household and no Household notebook exists yet, return empty list
-    if (!isAuthorizedOwner) {
-      return NextResponse.json(
-        {
-          success: true,
-          count: 0,
-          notes: [],
-        },
-        { status: 200, headers: corsHeaders }
-      );
-    }
-  }
-
-  // Fallback: Query motif_notes table
-  let queryBuilder = supabase
-    .from("motif_notes")
-    .select("id, title, content, note_type, created_at, updated_at")
-    .order("updated_at", { ascending: false })
-    .limit(limit);
-
-  if (auth.userId) {
-    queryBuilder = queryBuilder.or(`user_id.eq.${auth.userId},user_id.is.null`);
-  }
-
-  if (targetNotebook) {
-    queryBuilder = queryBuilder.ilike("notebook", targetNotebook);
-  }
-
-  if (query) {
-    queryBuilder = queryBuilder.or(`title.ilike.%${query}%,content.ilike.%${query}%`);
-  }
-
-  const { data: notes, error } = await queryBuilder;
-  if (error && error.code !== "42703") throw error; // Ignore column missing if notebook column not on motif_notes yet
-
-  return NextResponse.json(
-    {
-      success: true,
-      count: notes?.length || 0,
-      notes: notes || [],
-    },
-    { status: 200, headers: corsHeaders }
-  );
-}
-
-/**
- * GET /api/jarvis - List or search notes with privacy enforcement
- */
-export async function GET(req: NextRequest) {
-  const supabase = getSupabaseClient();
-  const auth = await authenticateRequest(req, supabase);
-
-  if (!auth.authorized) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized: Missing or invalid API key" },
-      { status: 401, headers: corsHeaders }
-    );
-  }
-
-  try {
-    const { searchParams } = new URL(req.url);
-    const query = (
-      searchParams.get("search") ||
-      searchParams.get("query") ||
-      searchParams.get("title") ||
-      ""
-    ).trim();
-
-    const limitParam = parseInt(searchParams.get("limit") || "15", 10);
-    const limit = isNaN(limitParam) ? 15 : Math.min(Math.max(limitParam, 1), 50);
-
-    const isAuthorizedOwner = searchParams.get("isAuthorizedOwner") === "true";
-    const requestedNotebook = searchParams.get("notebook")?.trim() || "";
-
-    // Access & Privacy Enforcement:
-    // If isAuthorizedOwner is false (or not explicitly true), force notebook to "Household"
-    let targetNotebook: string | null = null;
-    if (!isAuthorizedOwner) {
-      targetNotebook = "Household";
-    } else if (requestedNotebook) {
-      targetNotebook = requestedNotebook;
-    }
-
-    return await listNotesInternal(supabase, auth, {
-      query,
-      limit,
-      targetNotebook,
-      isAuthorizedOwner,
-    });
-  } catch (error: any) {
-    console.error("[Jarvis API] GET error:", error);
-    return NextResponse.json(
-      { success: false, error: formatErrorMessage(error) },
-      { status: 500, headers: corsHeaders }
-    );
-  }
-}
-
-/**
- * POST /api/jarvis - Create, append, read, or list notes with Guest Privacy & Tagging
- */
-export async function POST(req: NextRequest) {
-  const supabase = getSupabaseClient();
-  const auth = await authenticateRequest(req, supabase);
-
-  if (!auth.authorized) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized: Missing or invalid API key" },
-      { status: 401, headers: corsHeaders }
-    );
-  }
-
-  try {
-    const body = await req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json(
-        { success: false, error: "Invalid JSON request body" },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-
-    // 1. Request Payload Extraction
-    const {
-      speaker,
-      isAuthorizedOwner: rawIsAuthorizedOwner,
-      notebook: rawNotebook,
-      action,
-      title,
-      text,
-      content,
-      note_type,
-    } = body;
-
-    const isAuthorizedOwner = rawIsAuthorizedOwner === true;
-    const speakerName = typeof speaker === "string" ? speaker.trim() : "";
-    const normalizedAction = String(action || "").toLowerCase().trim();
-    let textContent = (text !== undefined ? text : content ?? "").toString().trim();
-    const cleanTitle = typeof title === "string" ? title.trim() : "";
-    const isList =
-      (note_type || "").toString().toLowerCase().trim() === "list" ||
-      cleanTitle.toLowerCase().includes("list");
-
-    // 2. Access & Privacy Enforcement
-    // If isAuthorizedOwner is false (or not explicitly true): Force notebook to "Household"
-    let targetNotebook: string | null = null;
-    if (!isAuthorizedOwner) {
-      targetNotebook = "Household";
-    } else if (typeof rawNotebook === "string" && rawNotebook.trim()) {
-      targetNotebook = rawNotebook.trim();
-    }
-
-    // 3. Guest Tagging
-    // When a note or list item is created or appended with isAuthorizedOwner !== true, prepend "[Added by " + (speaker || "Guest") + "] "
-    if (!isAuthorizedOwner && textContent) {
-      const guestTag = `[Added by ${speakerName || "Guest"}] `;
-      if (!textContent.startsWith("[Added by ")) {
-        textContent = `${guestTag}${textContent}`;
-      }
-    }
-
-    // --------------------------------------------------------------------------
-    // ACTION: "read"
-    // --------------------------------------------------------------------------
-    if (normalizedAction === "read") {
-      if (!cleanTitle) {
-        return NextResponse.json(
-          { success: false, error: "Missing required 'title' field for reading note" },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-
-      // Step A: Search user's real Motif Canvas Pages
-      if (auth.userId) {
-        // Try RPC first (bypasses RLS)
-        try {
-          const { data: rawRpcPage } = await supabase
-            .rpc("jarvis_read_user_page", {
-              p_user_id: auth.userId,
-              p_title: cleanTitle,
-              p_notebook_name: targetNotebook,
-            })
-            .maybeSingle();
-
-          const rpcPage = rawRpcPage as any;
-          if (rpcPage && rpcPage.title) {
-            return NextResponse.json(
-              {
-                success: true,
-                note: {
-                  id: rpcPage.page_id,
-                  title: rpcPage.title,
-                  content: rpcPage.content,
-                  notebook: rpcPage.notebook_title || targetNotebook || "Notebook",
-                  source: "motif_canvas_page",
-                  updated_at: rpcPage.created_at,
-                },
-              },
-              { status: 200, headers: corsHeaders }
-            );
-          }
-        } catch (rpcErr) {
-          console.warn("[Jarvis API] jarvis_read_user_page RPC fallback:", rpcErr);
-        }
-
-        // Direct query for Canvas Page
+    // Direct table query fallback (only if service role key is configured)
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
         let nbQuery = supabase
           .from("notebooks")
           .select("id, title")
@@ -563,66 +269,346 @@ export async function POST(req: NextRequest) {
 
           const { data: sections } = await supabase
             .from("sections")
-            .select("id, notebook_id")
+            .select("id, notebook_id, title")
             .in("notebook_id", nbIds);
 
           if (sections && sections.length > 0) {
             const secIds = sections.map((s) => s.id);
-            const secMap = new Map(sections.map((s) => [s.id, s.notebook_id]));
+            const secMap = new Map(sections.map((s) => [s.id, s]));
 
-            let { data: pages } = await supabase
+            let pageQuery = supabase
               .from("pages")
               .select("id, section_id, title, document_state, created_at")
               .in("section_id", secIds)
               .is("deleted_at", null)
-              .ilike("title", cleanTitle)
               .order("created_at", { ascending: false })
-              .limit(1);
+              .limit(limit);
 
-            if (!pages || pages.length === 0) {
-              const { data: fuzzyPages } = await supabase
-                .from("pages")
-                .select("id, section_id, title, document_state, created_at")
-                .in("section_id", secIds)
-                .is("deleted_at", null)
-                .ilike("title", `%${cleanTitle}%`)
-                .order("created_at", { ascending: false })
-                .limit(1);
-              pages = fuzzyPages;
+            if (query) {
+              pageQuery = pageQuery.ilike("title", `%${query}%`);
             }
 
+            const { data: pages } = await pageQuery;
             if (pages && pages.length > 0) {
-              const page = pages[0];
-              const texts = page.document_state?.texts || [];
-              const plainContent = texts
-                .map((t: any) => cleanHtmlToPlainText(t.content || ""))
-                .filter(Boolean)
-                .join("\n\n");
-
-              const nbId = secMap.get(page.section_id);
-              const notebookTitle = nbId ? nbTitleMap.get(nbId) : targetNotebook || "Notebook";
-
               return NextResponse.json(
                 {
                   success: true,
-                  note: {
-                    id: page.id,
-                    title: page.title,
-                    content: plainContent,
-                    notebook: notebookTitle,
-                    source: "motif_canvas_page",
-                    updated_at: page.created_at,
-                  },
+                  count: pages.length,
+                  notes: pages.map((p) => {
+                    const texts = p.document_state?.texts || [];
+                    const rawPreview = texts
+                      .map((t: any) => cleanHtmlToPlainText(t.content || ""))
+                      .join(" ");
+                    const sec = secMap.get(p.section_id);
+                    return {
+                      id: p.id,
+                      title: p.title,
+                      content_preview: rawPreview.slice(0, 150),
+                      notebook: sec
+                        ? nbTitleMap.get(sec.notebook_id) || "Notebook"
+                        : "Notebook",
+                      section: sec?.title || "Inbox",
+                      updated_at: p.created_at,
+                    };
+                  }),
                 },
                 { status: 200, headers: corsHeaders }
               );
             }
           }
         }
+      } catch (directErr) {
+        console.warn("[Jarvis API] Direct query fallback error:", directErr);
+      }
+    }
+
+    // If guest was restricted to Household and no Household notes exist
+    if (!isAuthorizedOwner) {
+      return NextResponse.json(
+        {
+          success: true,
+          count: 0,
+          notes: [],
+        },
+        { status: 200, headers: corsHeaders }
+      );
+    }
+  }
+
+  // Fallback: Query motif_notes table
+  try {
+    let queryBuilder = supabase
+      .from("motif_notes")
+      .select("id, title, content, note_type, created_at, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+
+    if (auth.userId) {
+      queryBuilder = queryBuilder.or(`user_id.eq.${auth.userId},user_id.is.null`);
+    }
+
+    if (targetNotebook) {
+      queryBuilder = queryBuilder.ilike("notebook", targetNotebook);
+    }
+
+    if (query) {
+      queryBuilder = queryBuilder.or(`title.ilike.%${query}%,content.ilike.%${query}%`);
+    }
+
+    const { data: notes, error } = await queryBuilder;
+    if (!error && notes) {
+      return NextResponse.json(
+        {
+          success: true,
+          count: notes.length,
+          notes,
+        },
+        { status: 200, headers: corsHeaders }
+      );
+    }
+  } catch {}
+
+  return NextResponse.json(
+    {
+      success: true,
+      count: 0,
+      notes: [],
+    },
+    { status: 200, headers: corsHeaders }
+  );
+}
+
+/**
+ * GET /api/jarvis - List or search notes with privacy enforcement
+ */
+export async function GET(req: NextRequest) {
+  const supabase = getSupabaseClient();
+  const auth = await authenticateRequest(req, supabase);
+
+  if (!auth.authorized) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Unauthorized: Missing or invalid API key",
+        message: "Unauthorized: Missing or invalid API key",
+      },
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const query = (
+      searchParams.get("search") ||
+      searchParams.get("query") ||
+      searchParams.get("title") ||
+      ""
+    ).trim();
+
+    const limitParam = parseInt(searchParams.get("limit") || "15", 10);
+    const limit = isNaN(limitParam) ? 15 : Math.min(Math.max(limitParam, 1), 50);
+
+    const isAuthorizedOwnerParam = searchParams.get("isAuthorizedOwner");
+    const isAuthorizedOwner = isAuthorizedOwnerParam !== "false";
+    const requestedNotebook = searchParams.get("notebook")?.trim() || "";
+
+    // Access & Privacy Enforcement:
+    // Only if isAuthorizedOwner is explicitly false, force notebook to "Household"
+    let targetNotebook: string | null = null;
+    if (!isAuthorizedOwner) {
+      targetNotebook = "Household";
+    } else if (requestedNotebook) {
+      targetNotebook = requestedNotebook;
+    }
+
+    return await listNotesInternal(supabase, auth, {
+      query,
+      limit,
+      targetNotebook,
+      isAuthorizedOwner,
+    });
+  } catch (error: any) {
+    console.error("[Jarvis API] GET error:", error);
+    const msg = formatErrorMessage(error);
+    return NextResponse.json(
+      { success: false, error: msg, message: msg },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
+/**
+ * POST /api/jarvis - Create, append, read, or list notes with Guest Privacy & Tagging
+ */
+export async function POST(req: NextRequest) {
+  const supabase = getSupabaseClient();
+  const auth = await authenticateRequest(req, supabase);
+
+  if (!auth.authorized) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Unauthorized: Missing or invalid API key",
+        message: "Unauthorized: Missing or invalid API key",
+      },
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
+  try {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid JSON request body",
+          message: "Invalid JSON request body",
+        },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // 1. Request Payload Extraction
+    const {
+      speaker,
+      isAuthorizedOwner: rawIsAuthorizedOwner,
+      notebook: rawNotebook,
+      action,
+      title,
+      text,
+      content,
+      note_type,
+    } = body;
+
+    // Only treat as guest if isAuthorizedOwner is explicitly false.
+    // If undefined or true, treat as authorized key owner.
+    const isAuthorizedOwner = rawIsAuthorizedOwner !== false;
+    const speakerName = typeof speaker === "string" ? speaker.trim() : "";
+    const normalizedAction = String(action || "").toLowerCase().trim();
+    let textContent = (text !== undefined ? text : content ?? "").toString().trim();
+    const cleanTitle = typeof title === "string" ? title.trim() : "";
+    const isList =
+      (note_type || "").toString().toLowerCase().trim() === "list" ||
+      cleanTitle.toLowerCase().includes("list");
+
+    // 2. Access & Privacy Enforcement:
+    // If isAuthorizedOwner is explicitly false: Force notebook to "Household"
+    let targetNotebook: string | null = null;
+    if (!isAuthorizedOwner) {
+      targetNotebook = "Household";
+    } else if (typeof rawNotebook === "string" && rawNotebook.trim()) {
+      targetNotebook = rawNotebook.trim();
+    }
+
+    // 3. Guest Tagging:
+    // When a note or list item is created or appended with isAuthorizedOwner === false,
+    // prepend "[Added by " + (speaker || "Guest") + "] "
+    if (!isAuthorizedOwner && textContent) {
+      const guestTag = `[Added by ${speakerName || "Guest"}] `;
+      if (!textContent.startsWith("[Added by ")) {
+        textContent = `${guestTag}${textContent}`;
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // ACTION: "read"
+    // --------------------------------------------------------------------------
+    if (normalizedAction === "read") {
+      if (!cleanTitle) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Missing required 'title' field for reading note",
+            message: "Missing required 'title' field for reading note",
+          },
+          { status: 400, headers: corsHeaders }
+        );
       }
 
-      // Step B: Search motif_notes table (strictly enforced by targetNotebook)
-      if (isAuthorizedOwner) {
+      // Step A: Search user's real Motif Canvas Pages
+      if (auth.userId) {
+        try {
+          const rpcRes = await callRpcWithFallback(
+            supabase,
+            "jarvis_read_user_page",
+            {
+              p_user_id: auth.userId,
+              p_title: cleanTitle,
+              p_notebook_name: targetNotebook,
+            },
+            {
+              p_user_id: auth.userId,
+              p_title: cleanTitle,
+            }
+          );
+
+          const pages = Array.isArray(rpcRes.data)
+            ? rpcRes.data
+            : rpcRes.data
+            ? [rpcRes.data]
+            : [];
+
+          if (pages.length > 0 && pages[0]?.title) {
+            const page = pages[0];
+            let notebookTitle = page.notebook_title;
+
+            // If 2-arg RPC was used, notebook_title might not be in the row
+            if (!notebookTitle && targetNotebook) {
+              const listRes = await supabase.rpc("jarvis_get_user_pages", {
+                p_user_id: auth.userId,
+                p_search: cleanTitle,
+                p_limit: 5,
+              });
+              const match = (listRes.data || []).find(
+                (p: any) => p.page_id === page.page_id
+              );
+              if (match) {
+                notebookTitle = match.notebook_title;
+              }
+            }
+
+            // Verify notebook matching if targetNotebook is enforced
+            if (
+              targetNotebook &&
+              notebookTitle &&
+              notebookTitle.toLowerCase() !== targetNotebook.toLowerCase()
+            ) {
+              const notFoundMsg = `Note not found in ${targetNotebook} notebook`;
+              return NextResponse.json(
+                { success: false, error: notFoundMsg, message: notFoundMsg },
+                { status: 404, headers: corsHeaders }
+              );
+            }
+
+            let plainContent = cleanHtmlToPlainText(page.content || "");
+            if (!plainContent && page.raw_document_state?.texts) {
+              plainContent = page.raw_document_state.texts
+                .map((t: any) => cleanHtmlToPlainText(t.content || ""))
+                .join("\n\n");
+            }
+
+            return NextResponse.json(
+              {
+                success: true,
+                note: {
+                  id: page.page_id,
+                  title: page.title,
+                  content: plainContent,
+                  notebook: notebookTitle || targetNotebook || "Notebook",
+                  source: "motif_canvas_page",
+                  updated_at: page.created_at,
+                },
+              },
+              { status: 200, headers: corsHeaders }
+            );
+          }
+        } catch (rpcErr) {
+          console.warn("[Jarvis API] jarvis_read_user_page error:", rpcErr);
+        }
+      }
+
+      // Step B: Search motif_notes table (if authorized owner or household)
+      try {
         let noteQuery = supabase
           .from("motif_notes")
           .select("id, title, content, note_type, created_at, updated_at")
@@ -632,6 +618,9 @@ export async function POST(req: NextRequest) {
 
         if (auth.userId) {
           noteQuery = noteQuery.or(`user_id.eq.${auth.userId},user_id.is.null`);
+        }
+        if (targetNotebook) {
+          noteQuery = noteQuery.ilike("notebook", targetNotebook);
         }
 
         let { data: notes } = await noteQuery;
@@ -645,6 +634,9 @@ export async function POST(req: NextRequest) {
 
           if (auth.userId) {
             fuzzyQuery = fuzzyQuery.or(`user_id.eq.${auth.userId},user_id.is.null`);
+          }
+          if (targetNotebook) {
+            fuzzyQuery = fuzzyQuery.ilike("notebook", targetNotebook);
           }
           const { data: fuzzyNotes } = await fuzzyQuery;
           notes = fuzzyNotes;
@@ -660,21 +652,21 @@ export async function POST(req: NextRequest) {
                 title: note.title,
                 content: note.content,
                 note_type: note.note_type,
+                notebook: targetNotebook || "Notebook",
                 updated_at: note.updated_at,
               },
             },
             { status: 200, headers: corsHeaders }
           );
         }
-      }
+      } catch {}
+
+      const notFoundMsg = targetNotebook
+        ? `Note not found in ${targetNotebook} notebook`
+        : "Note not found";
 
       return NextResponse.json(
-        {
-          success: false,
-          message: !isAuthorizedOwner
-            ? "Note not found in Household notebook"
-            : "Note not found",
-        },
+        { success: false, error: notFoundMsg, message: notFoundMsg },
         { status: 404, headers: corsHeaders }
       );
     }
@@ -685,18 +677,22 @@ export async function POST(req: NextRequest) {
     if (normalizedAction === "append") {
       if (!cleanTitle) {
         return NextResponse.json(
-          { success: false, error: "Missing required 'title' field for appending to note" },
+          {
+            success: false,
+            error: "Missing required 'title' field for appending to note",
+            message: "Missing required 'title' field for appending to note",
+          },
           { status: 400, headers: corsHeaders }
         );
       }
 
       const activeNotebookName = targetNotebook || "Voice Notes";
 
-      // A. If user is authenticated, prioritize real Canvas Pages
+      // A. If user is authenticated, prioritize real Canvas Pages via SECURITY DEFINER RPC
       if (auth.userId) {
-        // 1. Try atomic SECURITY DEFINER RPC first (bypasses RLS safely even without service role key)
         try {
-          const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+          const rpcRes = await callRpcWithFallback(
+            supabase,
             "jarvis_append_or_create_page",
             {
               p_user_id: auth.userId,
@@ -704,17 +700,23 @@ export async function POST(req: NextRequest) {
               p_text: textContent,
               p_is_list: isList,
               p_notebook_name: activeNotebookName,
+            },
+            {
+              p_user_id: auth.userId,
+              p_title: cleanTitle,
+              p_text: textContent,
+              p_is_list: isList,
             }
           );
 
-          if (!rpcErr && rpcResult && (rpcResult as any).success) {
-            const res = rpcResult as any;
+          if (!rpcRes.error && rpcRes.data && (rpcRes.data as any).success) {
+            const res = rpcRes.data as any;
             const isCreated = res.action === "created";
             const payload = {
               id: res.page_id,
               title: cleanTitle,
               content: textContent,
-              notebook: activeNotebookName,
+              notebook: res.notebook || activeNotebookName,
               source: "motif_canvas_page",
             };
 
@@ -726,160 +728,23 @@ export async function POST(req: NextRequest) {
               { status: isCreated ? 201 : 200, headers: corsHeaders }
             );
           }
-        } catch (rpcErr) {
-          console.warn("[Jarvis API] jarvis_append_or_create_page RPC fallback:", rpcErr);
-        }
 
-        // 2. Direct table queries fallback (when service role key is configured)
-        let nbQuery = supabase
-          .from("notebooks")
-          .select("id, title")
-          .eq("user_id", auth.userId);
-
-        if (targetNotebook) {
-          nbQuery = nbQuery.ilike("title", targetNotebook);
-        }
-
-        const { data: notebooks } = await nbQuery;
-
-        if (notebooks && notebooks.length > 0) {
-          const nbIds = notebooks.map((n) => n.id);
-          const { data: sections } = await supabase
-            .from("sections")
-            .select("id")
-            .in("notebook_id", nbIds);
-
-          if (sections && sections.length > 0) {
-            const secIds = sections.map((s) => s.id);
-            let { data: pages } = await supabase
-              .from("pages")
-              .select("id, title, document_state, created_at")
-              .in("section_id", secIds)
-              .is("deleted_at", null)
-              .ilike("title", cleanTitle)
-              .order("created_at", { ascending: false })
-              .limit(1);
-
-            if (!pages || pages.length === 0) {
-              const { data: fuzzyPages } = await supabase
-                .from("pages")
-                .select("id, title, document_state, created_at")
-                .in("section_id", secIds)
-                .is("deleted_at", null)
-                .ilike("title", `%${cleanTitle}%`)
-                .order("created_at", { ascending: false })
-                .limit(1);
-              pages = fuzzyPages;
-            }
-
-            // Existing page found -> append directly to canvas note card
-            if (pages && pages.length > 0) {
-              const page = pages[0];
-              const docState = page.document_state || {};
-              const texts = Array.isArray(docState.texts) ? [...docState.texts] : [];
-
-              const formattedItem = isList
-                ? textContent.startsWith("- ")
-                  ? textContent
-                  : `- ${textContent}`
-                : textContent;
-
-              if (texts.length > 0) {
-                // If existing note card is positioned behind/under the page title header, adjust it down cleanly
-                if (typeof texts[0].y === "number" && texts[0].y < 250) {
-                  texts[0].y = 280;
-                  texts[0].x = 64;
-                }
-                const currentContent = texts[0].content || "";
-                if (currentContent.includes("<p>") || currentContent.includes("<li>")) {
-                  const htmlItem = `<p>${escapeHtml(formattedItem)}</p>`;
-                  texts[0].content = `${currentContent}${htmlItem}`;
-                } else {
-                  texts[0].content = `${currentContent.trimEnd()}\n${formattedItem}`;
-                }
-              } else {
-                texts.push({
-                  id: uuidv4(),
-                  x: 64,
-                  y: 280,
-                  width: 480,
-                  content: isList
-                    ? `<p>${escapeHtml(formattedItem)}</p>`
-                    : `<p>${escapeHtml(textContent)}</p>`,
-                });
-              }
-
-              const { error: pageUpdateError } = await supabase
-                .from("pages")
-                .update({ document_state: { ...docState, texts } })
-                .eq("id", page.id);
-
-              if (pageUpdateError) throw pageUpdateError;
-
-              return NextResponse.json(
-                {
-                  success: true,
-                  updatedNote: {
-                    id: page.id,
-                    title: page.title,
-                    appendedText: textContent,
-                    notebook: activeNotebookName,
-                    source: "motif_canvas_page",
-                  },
-                },
-                { status: 200, headers: corsHeaders }
-              );
-            }
+          if (rpcRes.error) {
+            console.error("[Jarvis API] jarvis_append_or_create_page RPC error:", rpcRes.error);
+            const msg = formatErrorMessage(rpcRes.error);
+            return NextResponse.json(
+              { success: false, error: msg, message: msg },
+              { status: 500, headers: corsHeaders }
+            );
           }
+        } catch (rpcErr) {
+          console.error("[Jarvis API] jarvis_append_or_create_page exception:", rpcErr);
+          const msg = formatErrorMessage(rpcErr);
+          return NextResponse.json(
+            { success: false, error: msg, message: msg },
+            { status: 500, headers: corsHeaders }
+          );
         }
-
-        // Page not found -> Automatically create new page in user's target notebook!
-        const targetSectionId = await getOrCreateTargetSection(
-          supabase,
-          auth.userId,
-          activeNotebookName
-        );
-        const newPageId = uuidv4();
-        const initialText = isList
-          ? textContent.startsWith("- ")
-            ? textContent
-            : `- ${textContent}`
-          : textContent;
-
-        const initialHtml = `<p>${escapeHtml(initialText)}</p>`;
-        const newPageRecord = {
-          id: newPageId,
-          section_id: targetSectionId,
-          title: cleanTitle,
-          document_state: {
-            texts: [
-              {
-                id: uuidv4(),
-                x: 64,
-                y: 280,
-                width: 480,
-                content: initialHtml,
-              },
-            ],
-          },
-        };
-
-        const { error: insertPageError } = await supabase.from("pages").insert(newPageRecord);
-        if (insertPageError) throw insertPageError;
-
-        return NextResponse.json(
-          {
-            success: true,
-            createdNote: {
-              id: newPageId,
-              title: cleanTitle,
-              content: textContent,
-              notebook: activeNotebookName,
-              source: "motif_canvas_page",
-            },
-          },
-          { status: 201, headers: corsHeaders }
-        );
       }
 
       // B. Fallback to motif_notes table if no user_id resolved
@@ -909,7 +774,11 @@ export async function POST(req: NextRequest) {
 
         let updatedContent = existingContent;
         if (!existingContent.trim()) {
-          updatedContent = isNoteList ? (item.startsWith("- ") ? item : `- ${item}`) : item;
+          updatedContent = isNoteList
+            ? item.startsWith("- ")
+              ? item
+              : `- ${item}`
+            : item;
         } else if (isNoteList) {
           const formattedItem = item.startsWith("- ") ? item : `- ${item}`;
           updatedContent = `${existingContent.trimEnd()}\n${formattedItem}`;
@@ -943,6 +812,7 @@ export async function POST(req: NextRequest) {
             title: cleanTitle,
             content: formattedItem,
             note_type: isList ? "list" : "note",
+            notebook: activeNotebookName,
             created_at: now,
             updated_at: now,
           })
@@ -963,29 +833,38 @@ export async function POST(req: NextRequest) {
     if (normalizedAction === "create") {
       if (!cleanTitle) {
         return NextResponse.json(
-          { success: false, error: "Missing required 'title' field for creating note" },
+          {
+            success: false,
+            error: "Missing required 'title' field for creating note",
+            message: "Missing required 'title' field for creating note",
+          },
           { status: 400, headers: corsHeaders }
         );
       }
 
       const activeNotebookName = targetNotebook || "Voice Notes";
 
-      // If user is authenticated, prioritize real Canvas Pages
+      // If user is authenticated, prioritize real Canvas Pages via SECURITY DEFINER RPC
       if (auth.userId) {
-        // 1. Try atomic SECURITY DEFINER RPC first (bypasses RLS)
         try {
-          const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+          const rpcRes = await callRpcWithFallback(
+            supabase,
             "jarvis_create_page",
             {
               p_user_id: auth.userId,
               p_title: cleanTitle,
               p_text: textContent,
               p_notebook_name: activeNotebookName,
+            },
+            {
+              p_user_id: auth.userId,
+              p_title: cleanTitle,
+              p_text: textContent,
             }
           );
 
-          if (!rpcErr && rpcResult && (rpcResult as any).success) {
-            const res = rpcResult as any;
+          if (!rpcRes.error && rpcRes.data && (rpcRes.data as any).success) {
+            const res = rpcRes.data as any;
             return NextResponse.json(
               {
                 success: true,
@@ -993,58 +872,30 @@ export async function POST(req: NextRequest) {
                   id: res.page_id,
                   title: cleanTitle,
                   content: textContent,
-                  notebook: activeNotebookName,
+                  notebook: res.notebook || activeNotebookName,
                   source: "motif_canvas_page",
                 },
               },
               { status: 201, headers: corsHeaders }
             );
           }
+
+          if (rpcRes.error) {
+            console.error("[Jarvis API] jarvis_create_page RPC error:", rpcRes.error);
+            const msg = formatErrorMessage(rpcRes.error);
+            return NextResponse.json(
+              { success: false, error: msg, message: msg },
+              { status: 500, headers: corsHeaders }
+            );
+          }
         } catch (rpcErr) {
-          console.warn("[Jarvis API] jarvis_create_page RPC fallback:", rpcErr);
+          console.error("[Jarvis API] jarvis_create_page exception:", rpcErr);
+          const msg = formatErrorMessage(rpcErr);
+          return NextResponse.json(
+            { success: false, error: msg, message: msg },
+            { status: 500, headers: corsHeaders }
+          );
         }
-
-        // 2. Direct table queries fallback (when service role key is configured)
-        const targetSectionId = await getOrCreateTargetSection(
-          supabase,
-          auth.userId,
-          activeNotebookName
-        );
-        const newPageId = uuidv4();
-        const initialHtml = `<p>${escapeHtml(textContent)}</p>`;
-
-        const { error: insertPageError } = await supabase.from("pages").insert({
-          id: newPageId,
-          section_id: targetSectionId,
-          title: cleanTitle,
-          document_state: {
-            texts: [
-              {
-                id: uuidv4(),
-                x: 64,
-                y: 280,
-                width: 480,
-                content: initialHtml,
-              },
-            ],
-          },
-        });
-
-        if (insertPageError) throw insertPageError;
-
-        return NextResponse.json(
-          {
-            success: true,
-            note: {
-              id: newPageId,
-              title: cleanTitle,
-              content: textContent,
-              notebook: activeNotebookName,
-              source: "motif_canvas_page",
-            },
-          },
-          { status: 201, headers: corsHeaders }
-        );
       }
 
       // Fallback: create in motif_notes table
@@ -1055,6 +906,7 @@ export async function POST(req: NextRequest) {
           title: cleanTitle,
           content: textContent,
           note_type: isList ? "list" : "note",
+          notebook: activeNotebookName,
           created_at: now,
           updated_at: now,
         })
@@ -1062,7 +914,10 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (insertError) throw insertError;
-      return NextResponse.json({ success: true, note }, { status: 201, headers: corsHeaders });
+      return NextResponse.json(
+        { success: true, note },
+        { status: 201, headers: corsHeaders }
+      );
     }
 
     // --------------------------------------------------------------------------
@@ -1081,17 +936,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const invalidActionMsg = `Invalid action '${action || ""}'. Supported actions: 'create', 'append', 'read', 'list'`;
     return NextResponse.json(
       {
         success: false,
-        error: `Invalid action '${action || ""}'. Supported actions: 'create', 'append', 'read', 'list'`,
+        error: invalidActionMsg,
+        message: invalidActionMsg,
       },
       { status: 400, headers: corsHeaders }
     );
   } catch (error: any) {
     console.error("[Jarvis API] POST error:", error);
+    const msg = formatErrorMessage(error);
     return NextResponse.json(
-      { success: false, error: formatErrorMessage(error) },
+      { success: false, error: msg, message: msg },
       { status: 500, headers: corsHeaders }
     );
   }
