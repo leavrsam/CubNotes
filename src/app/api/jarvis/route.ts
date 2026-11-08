@@ -77,8 +77,82 @@ function cleanHtmlToPlainText(html: string): string {
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * Helper to escape HTML characters when writing into Canvas text cards
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Splits a Canvas text card's HTML content into trimmed non-empty lines
+ */
+function htmlToLines(html: string): string[] {
+  if (!html) return [];
+  const plain = html
+    .replace(/<\/(p|li|h[1-6]|div)>|<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
+  return plain
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/**
+ * Serializes plain text lines back into Canvas paragraph HTML
+ */
+function linesToHtml(lines: string[]): string {
+  return lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+}
+
+/**
+ * Parses a list line to extract its core item text (ignoring leading bullets,
+ * checkboxes like [x]/[ ], and any "[Added by ...]" prefix) as well as any guest prefix.
+ */
+function parseListLine(line: string): {
+  coreText: string;
+  guestTag: string | null;
+} {
+  let rest = line.trim();
+  let guestTag: string | null = null;
+
+  const extractGuest = (s: string) => {
+    const m = s.match(/^(\[Added by [^\]]+\])\s*(.*)$/i);
+    if (m) {
+      guestTag = m[1];
+      return m[2].trim();
+    }
+    return s;
+  };
+
+  for (let i = 0; i < 3; i++) {
+    rest = extractGuest(rest);
+    rest = rest.replace(/^[-*•]\s+/, "").trim();
+    rest = extractGuest(rest);
+    rest = rest.replace(/^\[[ xX]?\]\s*/, "").trim();
+  }
+
+  return {
+    coreText: rest.trim(),
+    guestTag,
+  };
 }
 
 /**
@@ -291,7 +365,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/jarvis - Create, append, read, or list notes with Guest Privacy & Tagging
+ * POST /api/jarvis - Create, append, read, list, check, or remove notes/items with Guest Privacy & Tagging
  */
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseClient();
@@ -330,6 +404,8 @@ export async function POST(req: NextRequest) {
       title,
       text,
       content,
+      item: rawItem,
+      checked: rawChecked,
       note_type,
     } = body;
 
@@ -353,10 +429,14 @@ export async function POST(req: NextRequest) {
       targetNotebook = rawNotebook.trim();
     }
 
-    // 3. Guest Tagging:
+    // 3. Guest Tagging (only for create/append):
     // When a note or list item is created or appended with isAuthorizedOwner === false,
     // prepend "[Added by " + (speaker || "Guest") + "] "
-    if (!isAuthorizedOwner && textContent) {
+    if (
+      !isAuthorizedOwner &&
+      textContent &&
+      (normalizedAction === "create" || normalizedAction === "append")
+    ) {
       const guestTag = `[Added by ${speakerName || "Guest"}] `;
       if (!textContent.startsWith("[Added by ")) {
         textContent = `${guestTag}${textContent}`;
@@ -402,12 +482,14 @@ export async function POST(req: NextRequest) {
 
         if (pages.length > 0 && pages[0]?.title) {
           const page = pages[0];
-          let plainContent = cleanHtmlToPlainText(page.content || "");
-          if (!plainContent && page.raw_document_state?.texts) {
-            plainContent = page.raw_document_state.texts
-              .map((t: any) => cleanHtmlToPlainText(t.content || ""))
-              .join("\n\n");
-          }
+          const rawTexts = page.raw_document_state?.texts;
+          const lines = Array.isArray(rawTexts)
+            ? rawTexts.flatMap((t: any) => htmlToLines(t.content || ""))
+            : [];
+          const plainContent =
+            lines.length > 0
+              ? lines.join("\n")
+              : cleanHtmlToPlainText(page.content || "");
 
           return NextResponse.json(
             {
@@ -416,6 +498,7 @@ export async function POST(req: NextRequest) {
                 id: page.page_id,
                 title: page.title,
                 content: plainContent,
+                items: lines,
                 notebook: page.notebook_title || targetNotebook || "Notebook",
                 source: "motif_canvas_page",
                 updated_at: page.created_at,
@@ -433,6 +516,189 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: notFoundMsg, message: notFoundMsg },
         { status: 404, headers: corsHeaders }
+      );
+    }
+
+    // --------------------------------------------------------------------------
+    // ACTION: "check" | "uncheck" | "remove"
+    // --------------------------------------------------------------------------
+    if (
+      normalizedAction === "check" ||
+      normalizedAction === "uncheck" ||
+      normalizedAction === "remove"
+    ) {
+      if (!cleanTitle) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Missing required 'title' field for '${normalizedAction}' action`,
+            message: `Missing required 'title' field for '${normalizedAction}' action`,
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const itemInput =
+        rawItem !== undefined
+          ? String(rawItem).trim()
+          : text !== undefined
+          ? String(text).trim()
+          : "";
+
+      const targetCore = parseListLine(itemInput).coreText.toLowerCase();
+      if (!itemInput || !targetCore) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Missing required 'item' field for '${normalizedAction}' action`,
+            message: `Missing required 'item' field for '${normalizedAction}' action`,
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const checked =
+        normalizedAction === "uncheck"
+          ? false
+          : typeof rawChecked === "boolean"
+          ? rawChecked
+          : typeof rawChecked === "string"
+          ? rawChecked.toLowerCase().trim() !== "false"
+          : true;
+
+      if (!auth.userId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Unable to resolve user account for '${normalizedAction}' operation`,
+            message: `Unable to resolve user account for '${normalizedAction}' operation`,
+          },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const rpcRes = await supabase.rpc("jarvis_read_user_page", {
+        p_user_id: auth.userId,
+        p_title: cleanTitle,
+        p_notebook_name: targetNotebook,
+      });
+
+      if (rpcRes.error) {
+        console.error("[Jarvis API] jarvis_read_user_page RPC error:", rpcRes.error);
+        const msg = formatErrorMessage(rpcRes.error);
+        return NextResponse.json(
+          { success: false, error: msg, message: msg },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const pages = Array.isArray(rpcRes.data)
+        ? rpcRes.data
+        : rpcRes.data
+        ? [rpcRes.data]
+        : [];
+
+      if (pages.length === 0 || !pages[0]?.title) {
+        const notFoundMsg = targetNotebook
+          ? `Note not found in ${targetNotebook} notebook`
+          : "Note not found";
+        return NextResponse.json(
+          { success: false, error: notFoundMsg, message: notFoundMsg },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+
+      const page = pages[0];
+      const docState = page.raw_document_state || {};
+      const texts = Array.isArray(docState.texts) ? [...docState.texts] : [];
+
+      let matched = false;
+      const updatedTexts = texts.map((t: any) => {
+        const lines = htmlToLines(t.content || "");
+        if (matched) return t;
+
+        const newLines: string[] = [];
+        for (const line of lines) {
+          if (!matched) {
+            const parsed = parseListLine(line);
+            if (parsed.coreText.toLowerCase() === targetCore) {
+              matched = true;
+              if (normalizedAction === "remove") {
+                // Delete the first matching line
+                continue;
+              } else {
+                // Store item as "- [x] item" / "- [ ] item"
+                const displayItem = parsed.guestTag
+                  ? `${parsed.guestTag} ${parsed.coreText}`
+                  : parsed.coreText;
+                newLines.push(`${checked ? "- [x]" : "- [ ]"} ${displayItem}`);
+                continue;
+              }
+            }
+          }
+          newLines.push(line);
+        }
+
+        return {
+          ...t,
+          content: linesToHtml(newLines),
+        };
+      });
+
+      if (!matched) {
+        const itemNotFoundMsg = `Item '${itemInput}' not found in ${page.title}`;
+        return NextResponse.json(
+          { success: false, error: itemNotFoundMsg, message: itemNotFoundMsg },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+
+      const updatedDocState = {
+        ...docState,
+        texts: updatedTexts,
+      };
+
+      const updateRes = await supabase.rpc("jarvis_update_page_document_state", {
+        p_user_id: auth.userId,
+        p_page_id: page.page_id,
+        p_document_state: updatedDocState,
+      });
+
+      if (updateRes.error || !updateRes.data) {
+        console.error("[Jarvis API] jarvis_update_page_document_state error:", updateRes.error);
+        const msg = updateRes.error
+          ? formatErrorMessage(updateRes.error)
+          : "Failed to update list item";
+        return NextResponse.json(
+          { success: false, error: msg, message: msg },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const allUpdatedLines = updatedTexts.flatMap((t: any) =>
+        htmlToLines(t.content || "")
+      );
+      const updatedPlainContent = allUpdatedLines.join("\n");
+      const resolvedNotebook = page.notebook_title || targetNotebook || "Notebook";
+      const notePayload = {
+        id: page.page_id,
+        title: page.title,
+        content: updatedPlainContent,
+        items: allUpdatedLines,
+        notebook: resolvedNotebook,
+        source: "motif_canvas_page",
+        updated_at: page.created_at,
+      };
+
+      return NextResponse.json(
+        {
+          success: true,
+          note: notePayload,
+          updatedNote: notePayload,
+          content: updatedPlainContent,
+          items: allUpdatedLines,
+        },
+        { status: 200, headers: corsHeaders }
       );
     }
 
@@ -576,7 +842,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const invalidActionMsg = `Invalid action '${action || ""}'. Supported actions: 'create', 'append', 'read', 'list'`;
+    const invalidActionMsg = `Invalid action '${action || ""}'. Supported actions: 'create', 'append', 'read', 'list', 'check', 'remove'`;
     return NextResponse.json(
       {
         success: false,

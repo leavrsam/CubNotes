@@ -68,6 +68,7 @@ DROP FUNCTION IF EXISTS public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BO
 DROP FUNCTION IF EXISTS public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT);
 DROP FUNCTION IF EXISTS public.jarvis_create_page(UUID, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public.jarvis_create_page(UUID, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_update_page_document_state(UUID, UUID, JSONB);
 
 -- 4. Secure RPC function: jarvis_get_user_pages
 -- Returns the latest pages belonging to the user, optionally scoped to a specific notebook (e.g. 'Household')
@@ -150,7 +151,15 @@ BEGIN
         COALESCE(
             (
                 SELECT string_agg(
-                    regexp_replace(elem->>'content', '<[^>]+>', ' ', 'g'),
+                    btrim(
+                        regexp_replace(
+                            regexp_replace(elem->>'content', '</(p|li|h[1-6]|div)>|<br\s*/?>', E'\n', 'gi'),
+                            '<[^>]+>',
+                            '',
+                            'g'
+                        ),
+                        E' \t\n\r'
+                    ),
                     E'\n\n'
                 )
                 FROM jsonb_array_elements(p.document_state->'texts') AS elem
@@ -416,14 +425,43 @@ BEGIN
 END;
 $$;
 
--- 9. Explicitly grant execute on all RPC helper functions to all API roles
+-- 9. Secure RPC function: jarvis_update_page_document_state
+-- Updates document_state for a page owned by p_user_id (used by list-item check/remove actions)
+CREATE OR REPLACE FUNCTION public.jarvis_update_page_document_state(
+    p_user_id UUID,
+    p_page_id UUID,
+    p_document_state JSONB
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_updated INT;
+BEGIN
+    UPDATE public.pages p
+    SET document_state = p_document_state
+    FROM public.sections s
+    JOIN public.notebooks n ON n.id = s.notebook_id
+    WHERE p.id = p_page_id
+      AND p.section_id = s.id
+      AND n.user_id = p_user_id
+      AND p.deleted_at IS NULL;
+
+    GET DIAGNOSTICS v_updated = ROW_COUNT;
+    RETURN v_updated > 0;
+END;
+$$;
+
+-- 10. Explicitly grant execute on all RPC helper functions to all API roles
 GRANT EXECUTE ON FUNCTION public.jarvis_get_user_pages(UUID, TEXT, INT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_read_user_page(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_get_or_create_section(UUID, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_create_page(UUID, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_update_page_document_state(UUID, UUID, JSONB) TO anon, authenticated, service_role;
 
--- 10. Auto-fix existing pages: move any note cards positioned under the title header down to y=280
+-- 11. Auto-fix existing pages: move any note cards positioned under the title header down to y=280
 UPDATE public.pages
 SET document_state = jsonb_set(
     jsonb_set(document_state, '{texts,0,y}', '280'::jsonb),
@@ -434,5 +472,5 @@ WHERE document_state->'texts' IS NOT NULL
   AND jsonb_array_length(document_state->'texts') > 0
   AND COALESCE((document_state->'texts'->0->>'y')::numeric, 0) < 250;
 
--- 11. Reload PostgREST schema cache
+-- 12. Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
