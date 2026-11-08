@@ -9,6 +9,21 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
+export interface JarvisItemMeta {
+  text: string;
+  addedBy: string | null;
+  addedByOwner: boolean;
+}
+
+export interface JarvisStructuredItem {
+  text: string;
+  item: string;
+  line: string;
+  checked: boolean;
+  addedBy: string | null;
+  addedByOwner: boolean;
+}
+
 /**
  * Handle CORS preflight requests
  */
@@ -123,20 +138,26 @@ function linesToHtml(lines: string[]): string {
 }
 
 /**
- * Parses a list line to extract its core item text (ignoring leading bullets,
- * checkboxes like [x]/[ ], and any "[Added by ...]" prefix) as well as any guest prefix.
+ * Parses a list line to extract its core item text, bullet/checkbox status,
+ * and any legacy inline "[Added by <Speaker>]" prefix.
  */
 function parseListLine(line: string): {
   coreText: string;
-  guestTag: string | null;
+  hasBullet: boolean;
+  hasCheckbox: boolean;
+  checked: boolean;
+  inlineAddedBy: string | null;
 } {
   let rest = line.trim();
-  let guestTag: string | null = null;
+  let hasBullet = false;
+  let hasCheckbox = false;
+  let checked = false;
+  let inlineAddedBy: string | null = null;
 
   const extractGuest = (s: string) => {
-    const m = s.match(/^(\[Added by [^\]]+\])\s*(.*)$/i);
+    const m = s.match(/^\[Added by ([^\]]+)\]\s*(.*)$/i);
     if (m) {
-      guestTag = m[1];
+      inlineAddedBy = m[1].trim() || "Guest";
       return m[2].trim();
     }
     return s;
@@ -144,14 +165,157 @@ function parseListLine(line: string): {
 
   for (let i = 0; i < 3; i++) {
     rest = extractGuest(rest);
-    rest = rest.replace(/^[-*•]\s+/, "").trim();
+
+    const bulletMatch = rest.match(/^[-*•]\s+(.*)$/);
+    if (bulletMatch) {
+      hasBullet = true;
+      rest = bulletMatch[1].trim();
+    }
+
     rest = extractGuest(rest);
-    rest = rest.replace(/^\[[ xX]?\]\s*/, "").trim();
+
+    const checkMatch = rest.match(/^\[([ xX]?)\]\s*(.*)$/);
+    if (checkMatch) {
+      hasCheckbox = true;
+      checked = checkMatch[1].toLowerCase() === "x";
+      rest = checkMatch[2].trim();
+    }
+
+    rest = extractGuest(rest);
   }
 
   return {
     coreText: rest.trim(),
-    guestTag,
+    hasBullet,
+    hasCheckbox,
+    checked,
+    inlineAddedBy,
+  };
+}
+
+/**
+ * Extracts structured items (with addedBy and addedByOwner metadata) and clean markdown content
+ * from a text node's HTML content and itemsMeta array. Also supports legacy inline "[Added by ...]" prefixes.
+ */
+function parseTextNodeItems(textNode: any, docLevelMeta?: any[]): {
+  items: JarvisStructuredItem[];
+  cleanLines: string[];
+  normalizedMeta: JarvisItemMeta[];
+} {
+  const rawLines = htmlToLines(textNode?.content || "");
+  const rawMeta: any[] = Array.isArray(textNode?.itemsMeta)
+    ? textNode.itemsMeta
+    : Array.isArray(docLevelMeta)
+    ? docLevelMeta
+    : [];
+
+  const consumedMetaIndices = new Set<number>();
+  const items: JarvisStructuredItem[] = [];
+  const cleanLines: string[] = [];
+  const normalizedMeta: JarvisItemMeta[] = [];
+
+  for (let idx = 0; idx < rawLines.length; idx++) {
+    const parsed = parseListLine(rawLines[idx]);
+    const coreLower = parsed.coreText.toLowerCase();
+
+    // 1. Try aligned index match in itemsMeta if lengths match and coreText matches
+    let matchedMeta: any = null;
+    if (
+      rawMeta.length === rawLines.length &&
+      !consumedMetaIndices.has(idx) &&
+      rawMeta[idx] &&
+      typeof rawMeta[idx].text === "string" &&
+      parseListLine(rawMeta[idx].text).coreText.toLowerCase() === coreLower
+    ) {
+      matchedMeta = rawMeta[idx];
+      consumedMetaIndices.add(idx);
+    } else {
+      // 2. Fallback: find first unconsumed meta entry with matching coreText
+      for (let mIdx = 0; mIdx < rawMeta.length; mIdx++) {
+        if (consumedMetaIndices.has(mIdx)) continue;
+        const candidate = rawMeta[mIdx];
+        if (
+          candidate &&
+          typeof candidate.text === "string" &&
+          parseListLine(candidate.text).coreText.toLowerCase() === coreLower
+        ) {
+          matchedMeta = candidate;
+          consumedMetaIndices.add(mIdx);
+          break;
+        }
+      }
+    }
+
+    let addedByOwner = true;
+    let addedBy: string | null = null;
+
+    if (matchedMeta) {
+      addedByOwner =
+        typeof matchedMeta.addedByOwner === "boolean"
+          ? matchedMeta.addedByOwner
+          : parsed.inlineAddedBy
+          ? false
+          : true;
+      addedBy =
+        matchedMeta.addedBy !== undefined && matchedMeta.addedBy !== null
+          ? String(matchedMeta.addedBy)
+          : parsed.inlineAddedBy
+          ? parsed.inlineAddedBy
+          : addedByOwner
+          ? null
+          : "Guest";
+    } else if (parsed.inlineAddedBy) {
+      addedByOwner = false;
+      addedBy = parsed.inlineAddedBy;
+    }
+
+    const cleanLine = parsed.hasCheckbox
+      ? `${parsed.checked ? "- [x]" : "- [ ]"} ${parsed.coreText}`
+      : parsed.hasBullet
+      ? `- ${parsed.coreText}`
+      : parsed.coreText;
+
+    cleanLines.push(cleanLine);
+    normalizedMeta.push({
+      text: parsed.coreText,
+      addedBy,
+      addedByOwner,
+    });
+    items.push({
+      text: parsed.coreText,
+      item: parsed.coreText,
+      line: cleanLine,
+      checked: parsed.checked,
+      addedBy,
+      addedByOwner,
+    });
+  }
+
+  return { items, cleanLines, normalizedMeta };
+}
+
+/**
+ * Extracts all structured items and clean plain-text content across a page's document_state
+ */
+function extractStructuredItemsFromDocState(docState: any): {
+  items: JarvisStructuredItem[];
+  plainContent: string;
+} {
+  const texts = Array.isArray(docState?.texts) ? docState.texts : [];
+  const docLevelMeta = Array.isArray(docState?.itemsMeta) ? docState.itemsMeta : undefined;
+
+  const allItems: JarvisStructuredItem[] = [];
+  const allCleanLines: string[] = [];
+
+  for (const t of texts) {
+    const { items, cleanLines } = parseTextNodeItems(t, docLevelMeta);
+    allItems.push(...items);
+    allCleanLines.push(...cleanLines);
+  }
+
+  return {
+    items: allItems,
+    plainContent: allCleanLines.join("\n"),
   };
 }
 
@@ -258,14 +422,22 @@ async function listNotesInternal(
       {
         success: true,
         count: pages.length,
-        notes: pages.map((p: any) => ({
-          id: p.page_id,
-          title: p.title,
-          content_preview: p.content_preview?.slice(0, 150) || "",
-          notebook: p.notebook_title || targetNotebook || "Notebook",
-          section: p.section_title || "Inbox",
-          updated_at: p.created_at,
-        })),
+        notes: pages.map((p: any) => {
+          const structured = extractStructuredItemsFromDocState(p.raw_document_state);
+          const rawPreview = structured.plainContent
+            ? structured.plainContent.replace(/\n+/g, " ")
+            : (p.content_preview || "").replace(/\[Added by [^\]]+\]\s*/gi, "");
+
+          return {
+            id: p.page_id,
+            title: p.title,
+            content_preview: rawPreview.slice(0, 150),
+            items: structured.items,
+            notebook: p.notebook_title || targetNotebook || "Notebook",
+            section: p.section_title || "Inbox",
+            updated_at: p.created_at,
+          };
+        }),
       },
       { status: 200, headers: corsHeaders }
     );
@@ -365,7 +537,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/jarvis - Create, append, read, list, check, or remove notes/items with Guest Privacy & Tagging
+ * POST /api/jarvis - Create, append, read, list, check, or remove notes/items with Guest Privacy & Metadata
  */
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseClient();
@@ -412,9 +584,20 @@ export async function POST(req: NextRequest) {
     // Only treat as guest if isAuthorizedOwner is explicitly false.
     // If undefined or true, treat as authorized key owner.
     const isAuthorizedOwner = rawIsAuthorizedOwner !== false;
-    const speakerName = typeof speaker === "string" ? speaker.trim() : "";
+    const speakerName = typeof speaker === "string" && speaker.trim() ? speaker.trim() : null;
+    const addedBy = isAuthorizedOwner ? speakerName : speakerName || "Guest";
+    const addedByOwner = isAuthorizedOwner;
+
     const normalizedAction = String(action || "").toLowerCase().trim();
-    let textContent = (text !== undefined ? text : content ?? "").toString().trim();
+    const rawTextContent = (text !== undefined ? text : content ?? "").toString().trim();
+    // Strip any accidental inline "[Added by ...]" prefix from incoming text so item text is stored clean
+    const parsedIncoming = parseListLine(rawTextContent);
+    const textContent = parsedIncoming.inlineAddedBy
+      ? parsedIncoming.hasBullet
+        ? `- ${parsedIncoming.coreText}`
+        : parsedIncoming.coreText
+      : rawTextContent;
+
     const cleanTitle = typeof title === "string" ? title.trim() : "";
     const isList =
       (note_type || "").toString().toLowerCase().trim() === "list" ||
@@ -427,20 +610,6 @@ export async function POST(req: NextRequest) {
       targetNotebook = "Household";
     } else if (typeof rawNotebook === "string" && rawNotebook.trim()) {
       targetNotebook = rawNotebook.trim();
-    }
-
-    // 3. Guest Tagging (only for create/append):
-    // When a note or list item is created or appended with isAuthorizedOwner === false,
-    // prepend "[Added by " + (speaker || "Guest") + "] "
-    if (
-      !isAuthorizedOwner &&
-      textContent &&
-      (normalizedAction === "create" || normalizedAction === "append")
-    ) {
-      const guestTag = `[Added by ${speakerName || "Guest"}] `;
-      if (!textContent.startsWith("[Added by ")) {
-        textContent = `${guestTag}${textContent}`;
-      }
     }
 
     // --------------------------------------------------------------------------
@@ -482,14 +651,9 @@ export async function POST(req: NextRequest) {
 
         if (pages.length > 0 && pages[0]?.title) {
           const page = pages[0];
-          const rawTexts = page.raw_document_state?.texts;
-          const lines = Array.isArray(rawTexts)
-            ? rawTexts.flatMap((t: any) => htmlToLines(t.content || ""))
-            : [];
+          const structured = extractStructuredItemsFromDocState(page.raw_document_state);
           const plainContent =
-            lines.length > 0
-              ? lines.join("\n")
-              : cleanHtmlToPlainText(page.content || "");
+            structured.plainContent || cleanHtmlToPlainText(page.content || "");
 
           return NextResponse.json(
             {
@@ -498,11 +662,12 @@ export async function POST(req: NextRequest) {
                 id: page.page_id,
                 title: page.title,
                 content: plainContent,
-                items: lines,
+                items: structured.items,
                 notebook: page.notebook_title || targetNotebook || "Notebook",
                 source: "motif_canvas_page",
                 updated_at: page.created_at,
               },
+              items: structured.items,
             },
             { status: 200, headers: corsHeaders }
           );
@@ -611,37 +776,45 @@ export async function POST(req: NextRequest) {
       const page = pages[0];
       const docState = page.raw_document_state || {};
       const texts = Array.isArray(docState.texts) ? [...docState.texts] : [];
+      const docLevelMeta = Array.isArray(docState.itemsMeta) ? docState.itemsMeta : undefined;
 
       let matched = false;
       const updatedTexts = texts.map((t: any) => {
-        const lines = htmlToLines(t.content || "");
-        if (matched) return t;
+        const { items, cleanLines, normalizedMeta } = parseTextNodeItems(t, docLevelMeta);
+        if (matched) {
+          return {
+            ...t,
+            content: linesToHtml(cleanLines),
+            itemsMeta: normalizedMeta,
+          };
+        }
 
         const newLines: string[] = [];
-        for (const line of lines) {
-          if (!matched) {
-            const parsed = parseListLine(line);
-            if (parsed.coreText.toLowerCase() === targetCore) {
-              matched = true;
-              if (normalizedAction === "remove") {
-                // Delete the first matching line
-                continue;
-              } else {
-                // Store item as "- [x] item" / "- [ ] item"
-                const displayItem = parsed.guestTag
-                  ? `${parsed.guestTag} ${parsed.coreText}`
-                  : parsed.coreText;
-                newLines.push(`${checked ? "- [x]" : "- [ ]"} ${displayItem}`);
-                continue;
-              }
+        const newMeta: JarvisItemMeta[] = [];
+
+        for (let i = 0; i < items.length; i++) {
+          const entry = items[i];
+          const meta = normalizedMeta[i];
+          if (!matched && entry.text.toLowerCase() === targetCore) {
+            matched = true;
+            if (normalizedAction === "remove") {
+              // Delete the first matching line and its metadata
+              continue;
+            } else {
+              // Store item as "- [x] item" / "- [ ] item" with metadata preserved in itemsMeta
+              newLines.push(`${checked ? "- [x]" : "- [ ]"} ${entry.text}`);
+              newMeta.push(meta);
+              continue;
             }
           }
-          newLines.push(line);
+          newLines.push(cleanLines[i]);
+          newMeta.push(meta);
         }
 
         return {
           ...t,
           content: linesToHtml(newLines),
+          itemsMeta: newMeta,
         };
       });
 
@@ -675,16 +848,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const allUpdatedLines = updatedTexts.flatMap((t: any) =>
-        htmlToLines(t.content || "")
-      );
-      const updatedPlainContent = allUpdatedLines.join("\n");
+      const structured = extractStructuredItemsFromDocState(updatedDocState);
       const resolvedNotebook = page.notebook_title || targetNotebook || "Notebook";
       const notePayload = {
         id: page.page_id,
         title: page.title,
-        content: updatedPlainContent,
-        items: allUpdatedLines,
+        content: structured.plainContent,
+        items: structured.items,
         notebook: resolvedNotebook,
         source: "motif_canvas_page",
         updated_at: page.created_at,
@@ -695,8 +865,8 @@ export async function POST(req: NextRequest) {
           success: true,
           note: notePayload,
           updatedNote: notePayload,
-          content: updatedPlainContent,
-          items: allUpdatedLines,
+          content: structured.plainContent,
+          items: structured.items,
         },
         { status: 200, headers: corsHeaders }
       );
@@ -724,6 +894,8 @@ export async function POST(req: NextRequest) {
           p_text: textContent,
           p_is_list: isList,
           p_notebook_name: targetNotebook,
+          p_added_by: addedBy,
+          p_added_by_owner: addedByOwner,
         });
 
         if (rpcRes.error) {
@@ -738,10 +910,14 @@ export async function POST(req: NextRequest) {
         if (rpcRes.data && (rpcRes.data as any).success) {
           const res = rpcRes.data as any;
           const isCreated = res.action === "created";
+          const structured = extractStructuredItemsFromDocState(res.document_state);
           const payload = {
             id: res.page_id,
             title: cleanTitle,
             content: textContent,
+            addedBy,
+            addedByOwner,
+            items: structured.items,
             notebook: res.notebook || targetNotebook || "Notebook",
             source: "motif_canvas_page",
           };
@@ -750,6 +926,7 @@ export async function POST(req: NextRequest) {
             {
               success: true,
               [isCreated ? "createdNote" : "updatedNote"]: payload,
+              items: structured.items,
             },
             { status: isCreated ? 201 : 200, headers: corsHeaders }
           );
@@ -787,6 +964,8 @@ export async function POST(req: NextRequest) {
           p_title: cleanTitle,
           p_text: textContent,
           p_notebook_name: targetNotebook,
+          p_added_by: addedBy,
+          p_added_by_owner: addedByOwner,
         });
 
         if (rpcRes.error) {
@@ -800,6 +979,7 @@ export async function POST(req: NextRequest) {
 
         if (rpcRes.data && (rpcRes.data as any).success) {
           const res = rpcRes.data as any;
+          const structured = extractStructuredItemsFromDocState(res.document_state);
           return NextResponse.json(
             {
               success: true,
@@ -807,9 +987,13 @@ export async function POST(req: NextRequest) {
                 id: res.page_id,
                 title: cleanTitle,
                 content: textContent,
+                addedBy,
+                addedByOwner,
+                items: structured.items,
                 notebook: res.notebook || targetNotebook || "Notebook",
                 source: "motif_canvas_page",
               },
+              items: structured.items,
             },
             { status: 201, headers: corsHeaders }
           );

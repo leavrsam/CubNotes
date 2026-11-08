@@ -66,8 +66,10 @@ DROP FUNCTION IF EXISTS public.jarvis_get_or_create_section(UUID);
 DROP FUNCTION IF EXISTS public.jarvis_get_or_create_section(UUID, TEXT);
 DROP FUNCTION IF EXISTS public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN);
 DROP FUNCTION IF EXISTS public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT, TEXT, BOOLEAN);
 DROP FUNCTION IF EXISTS public.jarvis_create_page(UUID, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public.jarvis_create_page(UUID, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.jarvis_create_page(UUID, TEXT, TEXT, TEXT, TEXT, BOOLEAN);
 DROP FUNCTION IF EXISTS public.jarvis_update_page_document_state(UUID, UUID, JSONB);
 
 -- 4. Secure RPC function: jarvis_get_user_pages
@@ -85,7 +87,8 @@ RETURNS TABLE (
     created_at TIMESTAMP WITH TIME ZONE,
     notebook_title TEXT,
     section_title TEXT,
-    content_preview TEXT
+    content_preview TEXT,
+    raw_document_state JSONB
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -108,7 +111,8 @@ BEGIN
                 FROM jsonb_array_elements(p.document_state->'texts') AS elem
             ),
             ''
-        ) AS content_preview
+        ) AS content_preview,
+        p.document_state AS raw_document_state
     FROM public.pages p
     JOIN public.sections s ON s.id = p.section_id
     JOIN public.notebooks n ON n.id = s.notebook_id
@@ -246,13 +250,15 @@ END;
 $$;
 
 -- 7. Secure RPC function: jarvis_append_or_create_page
--- Atomically finds or creates a page and appends content, optionally scoped to a notebook
+-- Atomically finds or creates a page and appends content + item metadata, optionally scoped to a notebook
 CREATE OR REPLACE FUNCTION public.jarvis_append_or_create_page(
     p_user_id UUID,
     p_title TEXT,
     p_text TEXT,
     p_is_list BOOLEAN DEFAULT false,
-    p_notebook_name TEXT DEFAULT NULL
+    p_notebook_name TEXT DEFAULT NULL,
+    p_added_by TEXT DEFAULT NULL,
+    p_added_by_owner BOOLEAN DEFAULT true
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -266,7 +272,17 @@ DECLARE
     v_item_html TEXT;
     v_current_content TEXT;
     v_notebook_title TEXT;
+    v_clean_item TEXT;
+    v_meta_entry JSONB;
+    v_items_meta JSONB;
 BEGIN
+    v_clean_item := regexp_replace(btrim(COALESCE(p_text, '')), '^[-*•]\s*(\[[ xX]?\]\s*)?', '');
+    v_meta_entry := jsonb_build_object(
+        'text', v_clean_item,
+        'addedBy', p_added_by,
+        'addedByOwner', COALESCE(p_added_by_owner, true)
+    );
+
     -- Format HTML markup
     IF p_is_list THEN
         IF p_text LIKE '- %' THEN
@@ -306,10 +322,16 @@ BEGIN
             END IF;
 
             v_current_content := COALESCE(v_texts->0->>'content', '');
+            v_items_meta := COALESCE(v_texts->0->'itemsMeta', '[]'::jsonb) || jsonb_build_array(v_meta_entry);
             v_texts := jsonb_set(
                 v_texts,
                 '{0,content}',
                 to_jsonb(v_current_content || v_item_html)
+            );
+            v_texts := jsonb_set(
+                v_texts,
+                '{0,itemsMeta}',
+                v_items_meta
             );
         ELSE
             v_texts := jsonb_build_array(
@@ -318,7 +340,8 @@ BEGIN
                     'x', 64,
                     'y', 280,
                     'width', 480,
-                    'content', v_item_html
+                    'content', v_item_html,
+                    'itemsMeta', jsonb_build_array(v_meta_entry)
                 )
             );
         END IF;
@@ -334,7 +357,8 @@ BEGIN
             'action', 'updated',
             'page_id', v_page_id,
             'title', p_title,
-            'notebook', v_notebook_title
+            'notebook', v_notebook_title,
+            'document_state', v_doc_state
         );
     ELSE
         -- Page not found -> create new page in user's target notebook section
@@ -353,7 +377,8 @@ BEGIN
                     'x', 64,
                     'y', 280,
                     'width', 480,
-                    'content', v_item_html
+                    'content', v_item_html,
+                    'itemsMeta', jsonb_build_array(v_meta_entry)
                 )
             )
         );
@@ -366,7 +391,8 @@ BEGIN
             'action', 'created',
             'page_id', v_page_id,
             'title', p_title,
-            'notebook', COALESCE(v_notebook_title, p_notebook_name, 'Notebook')
+            'notebook', COALESCE(v_notebook_title, p_notebook_name, 'Notebook'),
+            'document_state', v_doc_state
         );
     END IF;
 END;
@@ -378,7 +404,9 @@ CREATE OR REPLACE FUNCTION public.jarvis_create_page(
     p_user_id UUID,
     p_title TEXT,
     p_text TEXT,
-    p_notebook_name TEXT DEFAULT NULL
+    p_notebook_name TEXT DEFAULT NULL,
+    p_added_by TEXT DEFAULT NULL,
+    p_added_by_owner BOOLEAN DEFAULT true
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -390,6 +418,8 @@ DECLARE
     v_doc_state JSONB;
     v_html TEXT;
     v_notebook_title TEXT;
+    v_clean_item TEXT;
+    v_meta_entry JSONB;
 BEGIN
     v_section_id := public.jarvis_get_or_create_section(p_user_id, p_notebook_name);
 
@@ -397,6 +427,13 @@ BEGIN
     FROM public.sections s
     JOIN public.notebooks n ON n.id = s.notebook_id
     WHERE s.id = v_section_id;
+
+    v_clean_item := regexp_replace(btrim(COALESCE(p_text, '')), '^[-*•]\s*(\[[ xX]?\]\s*)?', '');
+    v_meta_entry := jsonb_build_object(
+        'text', v_clean_item,
+        'addedBy', p_added_by,
+        'addedByOwner', COALESCE(p_added_by_owner, true)
+    );
 
     v_page_id := gen_random_uuid();
     v_html := '<p>' || p_text || '</p>';
@@ -407,7 +444,8 @@ BEGIN
                 'x', 64,
                 'y', 280,
                 'width', 480,
-                'content', v_html
+                'content', v_html,
+                'itemsMeta', jsonb_build_array(v_meta_entry)
             )
         )
     );
@@ -420,7 +458,8 @@ BEGIN
         'action', 'created',
         'page_id', v_page_id,
         'title', p_title,
-        'notebook', COALESCE(v_notebook_title, p_notebook_name, 'Notebook')
+        'notebook', COALESCE(v_notebook_title, p_notebook_name, 'Notebook'),
+        'document_state', v_doc_state
     );
 END;
 $$;
@@ -457,8 +496,8 @@ $$;
 GRANT EXECUTE ON FUNCTION public.jarvis_get_user_pages(UUID, TEXT, INT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_read_user_page(UUID, TEXT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_get_or_create_section(UUID, TEXT) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.jarvis_create_page(UUID, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_append_or_create_page(UUID, TEXT, TEXT, BOOLEAN, TEXT, TEXT, BOOLEAN) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.jarvis_create_page(UUID, TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.jarvis_update_page_document_state(UUID, UUID, JSONB) TO anon, authenticated, service_role;
 
 -- 11. Auto-fix existing pages: move any note cards positioned under the title header down to y=280
