@@ -21,7 +21,12 @@ export function createFakeDb(pages: FakePage[]) {
         (!notebook || p.notebook.toLowerCase() === notebook.toLowerCase()) &&
         (p.title.toLowerCase() === t || p.title.toLowerCase().includes(t))
     );
-    candidates.sort((a, b) => Number(b.title.toLowerCase() === t) - Number(a.title.toLowerCase() === t));
+    // Same order as the SQL: exact title first, then newest first
+    candidates.sort(
+      (a, b) =>
+        Number(b.title.toLowerCase() === t) - Number(a.title.toLowerCase() === t) ||
+        b.created_at.localeCompare(a.created_at)
+    );
     return candidates[0] || null;
   };
 
@@ -35,6 +40,16 @@ export function createFakeDb(pages: FakePage[]) {
             : [],
           error: null,
         };
+      }
+      case "jarvis_get_user_pages": {
+        const q = String(args.p_search || "").toLowerCase();
+        const nb = args.p_notebook_name as string | null;
+        const rows = db.pages
+          .filter((p) => (!nb || p.notebook.toLowerCase() === nb.toLowerCase()) && (!q || p.title.toLowerCase().includes(q)))
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .slice(0, args.p_limit || 15)
+          .map((p) => ({ page_id: p.id, title: p.title, date: null, created_at: p.created_at, notebook_title: p.notebook, section_title: "Inbox", content_preview: "", raw_document_state: structuredClone(p.document_state) }));
+        return { data: rows, error: null };
       }
       case "jarvis_update_page_document_state": {
         if (db.failNextUpdate) {

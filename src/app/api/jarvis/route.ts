@@ -120,7 +120,12 @@ function extractStructuredItemsFromDocState(docState: any): {
 }
 
 /**
- * Loads the page that a Jarvis request refers to (same matching as before).
+ * Loads the page that a Jarvis request refers to.
+ *
+ * If several pages in the notebook have exactly this title (duplicates), the
+ * OLDEST one is used every time — that is the note the user created and sees
+ * in the editor — so read/append/check never drift to a newer copy. Otherwise
+ * the previous matching applies (exact title first, then partial match).
  */
 async function loadJarvisPage(
   supabase: ReturnType<typeof getSupabaseClient>,
@@ -128,6 +133,28 @@ async function loadJarvisPage(
   title: string,
   notebook: string | null
 ): Promise<{ page: any | null; error: any | null }> {
+  const wanted = title.trim().toLowerCase();
+  const listRes = await supabase.rpc("jarvis_get_user_pages", {
+    p_user_id: userId,
+    p_search: title.trim(),
+    p_limit: 50,
+    p_notebook_name: notebook,
+  });
+  if (!listRes.error && Array.isArray(listRes.data)) {
+    const exact = (listRes.data as any[])
+      .filter((p) => typeof p?.title === "string" && p.title.trim().toLowerCase() === wanted)
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    if (exact.length > 0) {
+      if (exact.length > 1) {
+        console.warn(
+          `[Jarvis API] ${exact.length} pages titled "${title}" found; using the oldest (${exact[0].page_id}). ` +
+            "Run supabase/repairs/2026-11-10_merge_duplicate_shopping_lists.sql (or the generic merge) to combine them."
+        );
+      }
+      return { page: { content: "", ...exact[0] }, error: null };
+    }
+  }
+
   const rpcRes = await supabase.rpc("jarvis_read_user_page", {
     p_user_id: userId,
     p_title: title,

@@ -234,3 +234,59 @@ describe("editor loading never hides or overwrites server changes", () => {
     ]);
   });
 });
+
+describe("duplicate Shopping List notes", () => {
+  it("read/append always use the note the editor shows (the oldest), not a newer duplicate", async () => {
+    fake = createFakeDb([
+      shoppingListPage({}), // the Nov 6, 12:15 PM note the user has open
+      {
+        id: "dup-newer",
+        title: "Shopping List",
+        notebook: "Household",
+        created_at: "2026-11-09T22:00:00Z",
+        document_state: { texts: [{ id: "x", x: 64, y: 280, width: 480, content: "<p>- [ ] bread</p>", itemsMeta: [{ text: "bread", addedBy: null, addedByOwner: true }] }] },
+      },
+    ]);
+
+    await jarvis({ ...base, action: "append", text: "milk" });
+    const a2 = await jarvis({ ...base, action: "append", text: "sour cream" });
+    expect(a2.body.updatedNote.id).toBe(PAGE_ID);
+
+    const r = await jarvis({ ...base, action: "read" });
+    expect(r.body.note.id).toBe(PAGE_ID);
+    expect(simplify(r.body.items)).toEqual([
+      { text: "milk", checked: false },
+      { text: "sour cream", checked: false },
+    ]);
+    // the duplicate was not touched
+    expect(fake.db.pages[1].document_state.texts[0].content).toBe("<p>- [ ] bread</p>");
+  });
+});
+
+describe("reported scenario: append milk then sour cream", () => {
+  beforeEach(() => {
+    fake = createFakeDb([shoppingListPage({})]);
+  });
+
+  it("content keeps both lines and the page shows both checklist items", async () => {
+    await jarvis({ ...base, action: "append", text: "milk" });
+    const a2 = await jarvis({ ...base, action: "append", text: "sour cream" });
+    expect(a2.body.updatedNote.content).toBe("- [ ] milk\n- [ ] sour cream");
+
+    const doc = fake.db.pages[0].document_state;
+    expect(doc.texts).toHaveLength(1);
+    expect(doc.texts[0].content).toBe("<p>- [ ] milk</p><p>- [ ] sour cream</p>");
+    // visible lines and metadata stay aligned 1:1
+    expect(doc.texts[0].itemsMeta).toEqual([
+      { text: "milk", addedBy: "Samuel", addedByOwner: true },
+      { text: "sour cream", addedBy: "Samuel", addedByOwner: true },
+    ]);
+    expect(isChecklistCard(doc.texts[0], "Shopping List")).toBe(true);
+
+    const r = await jarvis({ ...base, action: "read" });
+    expect(r.body.items.map((i: any) => [i.text, i.checked, i.addedBy, i.addedByOwner])).toEqual([
+      ["milk", false, "Samuel", true],
+      ["sour cream", false, "Samuel", true],
+    ]);
+  });
+});
