@@ -93,6 +93,10 @@ export type TextNode = {
   width: number;
   tags?: string[];
   meta?: ShapeMeta;
+  /** Per-line list metadata (who added each item), written by Jarvis and the checklist UI. */
+  itemsMeta?: import("@/lib/listItems").JarvisItemMeta[];
+  /** Explicitly show (true) or never show (false) this card as a Keep-style checklist. */
+  checklist?: boolean;
 };
 
 export type AudioNode = {
@@ -4807,6 +4811,7 @@ export function CustomCanvas({
 
       <div className="absolute inset-0 z-20 pointer-events-none">
         <RichTextOverlay 
+          pageTitle={pageTitle}
           texts={texts}
           setTexts={setTexts}
           pan={pan}

@@ -4,6 +4,8 @@ import React, { useCallback, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import type { TextNode, ToolType } from "./CustomCanvas";
 import { TipTapEditor } from "./TipTapEditor";
+import { ChecklistCard } from "./ChecklistCard";
+import { isChecklistCard } from "@/lib/listItems";
 import { GripVertical, Trash2 } from "lucide-react";
 import { Editor } from '@tiptap/react';
 import { useFormatPainter, formatPainterStore } from "@/lib/formatPainter";
@@ -29,6 +31,8 @@ interface RichTextOverlayProps {
   ydoc?: any;
   provider?: any;
   user?: { name: string; color: string };
+  /** Used to detect list notes, whose cards render as Keep-style checklists. */
+  pageTitle?: string;
 }
 
 export function RichTextOverlay({ 
@@ -51,7 +55,8 @@ export function RichTextOverlay({
   onSelectTextNode,
   ydoc,
   provider,
-  user
+  user,
+  pageTitle,
 }: RichTextOverlayProps) {
   // Dragging state
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -314,6 +319,14 @@ export function RichTextOverlay({
                 </>
               )}
               
+              {isChecklistCard(node, pageTitle) ? (
+                <ChecklistCard
+                  node={node}
+                  onChange={(patch) => {
+                    setTexts(prev => prev.map(t => t.id === node.id ? { ...t, ...patch } : t));
+                  }}
+                />
+              ) : (
               <TipTapEditor
                 id={node.id}
                 content={node.content}
@@ -336,6 +349,7 @@ export function RichTextOverlay({
                   else mountedEditorsRef.current.delete(nodeId);
                 }}
               />
+              )}
             </div>
           );
         })}

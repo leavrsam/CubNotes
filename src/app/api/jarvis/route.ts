@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  linesToHtml,
+  parseListLine,
+  parseTextNodeItems,
+  parseChecklist,
+  serializeChecklist,
+  itemsMatch,
+  type JarvisItemMeta,
+  type JarvisStructuredItem,
+} from "@/lib/listItems";
+
+export type { JarvisItemMeta, JarvisStructuredItem };
 
 // CORS headers to enable seamless invocations from external services (n8n, voice assistants, webhooks)
 const corsHeaders = {
@@ -9,20 +21,6 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-export interface JarvisItemMeta {
-  text: string;
-  addedBy: string | null;
-  addedByOwner: boolean;
-}
-
-export interface JarvisStructuredItem {
-  text: string;
-  item: string;
-  line: string;
-  checked: boolean;
-  addedBy: string | null;
-  addedByOwner: boolean;
-}
 
 /**
  * Handle CORS preflight requests
@@ -98,201 +96,6 @@ function cleanHtmlToPlainText(html: string): string {
     .trim();
 }
 
-/**
- * Helper to escape HTML characters when writing into Canvas text cards
- */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-/**
- * Splits a Canvas text card's HTML content into trimmed non-empty lines
- */
-function htmlToLines(html: string): string[] {
-  if (!html) return [];
-  const plain = html
-    .replace(/<\/(p|li|h[1-6]|div)>|<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'");
-  return plain
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
-/**
- * Serializes plain text lines back into Canvas paragraph HTML
- */
-function linesToHtml(lines: string[]): string {
-  return lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
-}
-
-/**
- * Parses a list line to extract its core item text, bullet/checkbox status,
- * and any legacy inline "[Added by <Speaker>]" prefix.
- */
-function parseListLine(line: string): {
-  coreText: string;
-  hasBullet: boolean;
-  hasCheckbox: boolean;
-  checked: boolean;
-  inlineAddedBy: string | null;
-} {
-  let rest = line.trim();
-  let hasBullet = false;
-  let hasCheckbox = false;
-  let checked = false;
-  let inlineAddedBy: string | null = null;
-
-  const extractGuest = (s: string) => {
-    const m = s.match(/^\[Added by ([^\]]+)\]\s*(.*)$/i);
-    if (m) {
-      inlineAddedBy = m[1].trim() || "Guest";
-      return m[2].trim();
-    }
-    return s;
-  };
-
-  for (let i = 0; i < 3; i++) {
-    rest = extractGuest(rest);
-
-    const bulletMatch = rest.match(/^[-*•]\s+(.*)$/);
-    if (bulletMatch) {
-      hasBullet = true;
-      rest = bulletMatch[1].trim();
-    }
-
-    rest = extractGuest(rest);
-
-    const checkMatch = rest.match(/^\[([ xX]?)\]\s*(.*)$/);
-    if (checkMatch) {
-      hasCheckbox = true;
-      checked = checkMatch[1].toLowerCase() === "x";
-      rest = checkMatch[2].trim();
-    }
-
-    rest = extractGuest(rest);
-  }
-
-  return {
-    coreText: rest.trim(),
-    hasBullet,
-    hasCheckbox,
-    checked,
-    inlineAddedBy,
-  };
-}
-
-/**
- * Extracts structured items (with addedBy and addedByOwner metadata) and clean markdown content
- * from a text node's HTML content and itemsMeta array. Also supports legacy inline "[Added by ...]" prefixes.
- */
-function parseTextNodeItems(textNode: any, docLevelMeta?: any[]): {
-  items: JarvisStructuredItem[];
-  cleanLines: string[];
-  normalizedMeta: JarvisItemMeta[];
-} {
-  const rawLines = htmlToLines(textNode?.content || "");
-  const rawMeta: any[] = Array.isArray(textNode?.itemsMeta)
-    ? textNode.itemsMeta
-    : Array.isArray(docLevelMeta)
-    ? docLevelMeta
-    : [];
-
-  const consumedMetaIndices = new Set<number>();
-  const items: JarvisStructuredItem[] = [];
-  const cleanLines: string[] = [];
-  const normalizedMeta: JarvisItemMeta[] = [];
-
-  for (let idx = 0; idx < rawLines.length; idx++) {
-    const parsed = parseListLine(rawLines[idx]);
-    const coreLower = parsed.coreText.toLowerCase();
-
-    // 1. Try aligned index match in itemsMeta if lengths match and coreText matches
-    let matchedMeta: any = null;
-    if (
-      rawMeta.length === rawLines.length &&
-      !consumedMetaIndices.has(idx) &&
-      rawMeta[idx] &&
-      typeof rawMeta[idx].text === "string" &&
-      parseListLine(rawMeta[idx].text).coreText.toLowerCase() === coreLower
-    ) {
-      matchedMeta = rawMeta[idx];
-      consumedMetaIndices.add(idx);
-    } else {
-      // 2. Fallback: find first unconsumed meta entry with matching coreText
-      for (let mIdx = 0; mIdx < rawMeta.length; mIdx++) {
-        if (consumedMetaIndices.has(mIdx)) continue;
-        const candidate = rawMeta[mIdx];
-        if (
-          candidate &&
-          typeof candidate.text === "string" &&
-          parseListLine(candidate.text).coreText.toLowerCase() === coreLower
-        ) {
-          matchedMeta = candidate;
-          consumedMetaIndices.add(mIdx);
-          break;
-        }
-      }
-    }
-
-    let addedByOwner = true;
-    let addedBy: string | null = null;
-
-    if (matchedMeta) {
-      addedByOwner =
-        typeof matchedMeta.addedByOwner === "boolean"
-          ? matchedMeta.addedByOwner
-          : parsed.inlineAddedBy
-          ? false
-          : true;
-      addedBy =
-        matchedMeta.addedBy !== undefined && matchedMeta.addedBy !== null
-          ? String(matchedMeta.addedBy)
-          : parsed.inlineAddedBy
-          ? parsed.inlineAddedBy
-          : addedByOwner
-          ? null
-          : "Guest";
-    } else if (parsed.inlineAddedBy) {
-      addedByOwner = false;
-      addedBy = parsed.inlineAddedBy;
-    }
-
-    const cleanLine = parsed.hasCheckbox
-      ? `${parsed.checked ? "- [x]" : "- [ ]"} ${parsed.coreText}`
-      : parsed.hasBullet
-      ? `- ${parsed.coreText}`
-      : parsed.coreText;
-
-    cleanLines.push(cleanLine);
-    normalizedMeta.push({
-      text: parsed.coreText,
-      addedBy,
-      addedByOwner,
-    });
-    items.push({
-      text: parsed.coreText,
-      item: parsed.coreText,
-      line: cleanLine,
-      checked: parsed.checked,
-      addedBy,
-      addedByOwner,
-    });
-  }
-
-  return { items, cleanLines, normalizedMeta };
-}
 
 /**
  * Extracts all structured items and clean plain-text content across a page's document_state
@@ -316,6 +119,85 @@ function extractStructuredItemsFromDocState(docState: any): {
   return {
     items: allItems,
     plainContent: allCleanLines.join("\n"),
+  };
+}
+
+/**
+ * Before appending an item: if the note already has a CHECKED copy of it
+ * (matched ignoring case, plurals, leading quantities and parentheses), uncheck
+ * that copy instead of adding a duplicate. If an unchecked copy also exists,
+ * the checked copies are removed instead. Item metadata is kept.
+ * Returns null when nothing was changed (caller appends as usual).
+ */
+async function moveBackFromCheckedIfPresent(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  userId: string,
+  opts: { title: string; notebook: string | null; itemText: string }
+): Promise<{
+  page: any;
+  items: JarvisStructuredItem[];
+  outcome: "movedFromChecked" | "alreadyOnList";
+} | null> {
+  const coreText = parseListLine(opts.itemText).coreText.trim();
+  if (!coreText || /\n/.test(opts.itemText)) return null;
+
+  const rpcRes = await supabase.rpc("jarvis_read_user_page", {
+    p_user_id: userId,
+    p_title: opts.title,
+    p_notebook_name: opts.notebook,
+  });
+  if (rpcRes.error) return null; // fall back to the normal append path
+  const pages = Array.isArray(rpcRes.data) ? rpcRes.data : rpcRes.data ? [rpcRes.data] : [];
+  const page = pages[0];
+  if (!page?.title) return null;
+
+  const docState = page.raw_document_state || {};
+  const texts: any[] = Array.isArray(docState.texts) ? docState.texts : [];
+  const docLevelMeta = Array.isArray(docState.itemsMeta) ? docState.itemsMeta : undefined;
+  const parsed = texts.map((t) =>
+    parseChecklist({ content: t?.content, itemsMeta: Array.isArray(t?.itemsMeta) ? t.itemsMeta : docLevelMeta })
+  );
+
+  const hasUncheckedMatch = parsed.some((items) => items.some((it) => !it.checked && itemsMatch(it.text, coreText)));
+  const checkedMatches: { node: number; item: number }[] = [];
+  parsed.forEach((items, node) =>
+    items.forEach((it, item) => {
+      if (it.checked && itemsMatch(it.text, coreText)) checkedMatches.push({ node, item });
+    })
+  );
+  if (checkedMatches.length === 0) return null;
+
+  const keep = hasUncheckedMatch ? null : checkedMatches[0];
+  const touchedNodes = new Set(checkedMatches.map((m) => m.node));
+  const updatedTexts = texts.map((t, nodeIdx) => {
+    if (!touchedNodes.has(nodeIdx)) return t;
+    const next = parsed[nodeIdx]
+      .map((it, itemIdx) =>
+        keep && keep.node === nodeIdx && keep.item === itemIdx ? { ...it, checked: false } : it
+      )
+      .filter(
+        (it, itemIdx) =>
+          (keep && keep.node === nodeIdx && keep.item === itemIdx) ||
+          !(it.checked && itemsMatch(it.text, coreText))
+      );
+    return { ...t, ...serializeChecklist(next) };
+  });
+
+  const updatedDocState = { ...docState, texts: updatedTexts };
+  const updateRes = await supabase.rpc("jarvis_update_page_document_state", {
+    p_user_id: userId,
+    p_page_id: page.page_id,
+    p_document_state: updatedDocState,
+  });
+  if (updateRes.error || !updateRes.data) {
+    console.error("[Jarvis API] move-back-from-checked update failed:", updateRes.error);
+    return null;
+  }
+
+  return {
+    page,
+    items: extractStructuredItemsFromDocState(updatedDocState).items,
+    outcome: keep ? "movedFromChecked" : "alreadyOnList",
   };
 }
 
@@ -888,6 +770,39 @@ export async function POST(req: NextRequest) {
       }
 
       if (auth.userId) {
+        // Keep-style dedupe: if this item is already on the note but checked,
+        // move it back (uncheck) instead of adding a duplicate.
+        const dedupe = await moveBackFromCheckedIfPresent(supabase, auth.userId, {
+          title: cleanTitle,
+          notebook: targetNotebook,
+          itemText: textContent,
+        });
+        if (dedupe) {
+          const payload = {
+            id: dedupe.page.page_id,
+            title: cleanTitle,
+            content: textContent,
+            addedBy,
+            addedByOwner,
+            items: dedupe.items,
+            notebook: dedupe.page.notebook_title || targetNotebook || "Notebook",
+            source: "motif_canvas_page",
+          };
+          const message =
+            dedupe.outcome === "movedFromChecked" ? "Moved back from Checked" : "Already on the list";
+          return NextResponse.json(
+            {
+              success: true,
+              updatedNote: payload,
+              items: dedupe.items,
+              outcome: dedupe.outcome,
+              movedFromChecked: dedupe.outcome === "movedFromChecked",
+              message,
+            },
+            { status: 200, headers: corsHeaders }
+          );
+        }
+
         const rpcRes = await supabase.rpc("jarvis_append_or_create_page", {
           p_user_id: auth.userId,
           p_title: cleanTitle,

@@ -4,6 +4,8 @@ import React, { useMemo, useEffect, useState, useRef, useCallback } from "react"
 import { useCanvasData } from "@/hooks/useCanvasData";
 import { v4 as uuidv4 } from "uuid";
 import { TipTapEditor, LineSpacingDropdown, executeIndent, executeOutdent } from "./TipTapEditor";
+import { ChecklistCard } from "./ChecklistCard";
+import { isChecklistCard } from "@/lib/listItems";
 import type { Editor } from "@tiptap/react";
 import { Trash2, Plus, File, Download, ChevronLeft, Image as ImageIcon, Mic, PenTool, MoreHorizontal, ChevronUp, ChevronDown, GripVertical, Check, BookOpen, Calendar, Clock, Flame, MessageCircle, Minimize2, Maximize2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Highlighter, List, ListOrdered, CheckSquare, Indent as IndentIcon, Outdent as OutdentIcon, Type, Share2, Settings, RefreshCw, Volume2, History, RotateCcw, X, PaintRoller, Bot, Play, Pause } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -1602,6 +1604,15 @@ export function MobilePage({
                         <span>{format(getBlockDate(block), "h:mm a")}</span>
                       </div>
                     )}
+                    {isChecklistCard(block, pageTitle) ? (
+                      <ChecklistCard
+                        node={block}
+                        touch
+                        onChange={(patch) => {
+                          setTexts(prev => prev.map(t => t.id === block.id ? { ...t, ...patch } : t));
+                        }}
+                      />
+                    ) : (
                     <TipTapEditor 
                       id={block.id}
                       content={block.content}
@@ -1659,6 +1670,7 @@ export function MobilePage({
                         }, 150);
                       }}
                     />
+                    )}
                     <AttachedStrokes strokes={block.attachedStrokes} blockBox={blockBox} />
                   </div>
                 )}
