@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
-  linesToHtml,
   parseListLine,
   parseTextNodeItems,
-  parseChecklist,
-  serializeChecklist,
-  itemsMatch,
   type JarvisItemMeta,
   type JarvisStructuredItem,
 } from "@/lib/listItems";
+import { appendToDoc, docUpdatedAt, readItems, stampDoc, updateItemInDoc } from "@/lib/jarvisDoc";
 
 export type { JarvisItemMeta, JarvisStructuredItem };
 
@@ -123,82 +120,56 @@ function extractStructuredItemsFromDocState(docState: any): {
 }
 
 /**
- * Before appending an item: if the note already has a CHECKED copy of it
- * (matched ignoring case, plurals, leading quantities and parentheses), uncheck
- * that copy instead of adding a duplicate. If an unchecked copy also exists,
- * the checked copies are removed instead. Item metadata is kept.
- * Returns null when nothing was changed (caller appends as usual).
+ * Loads the page that a Jarvis request refers to (same matching as before).
  */
-async function moveBackFromCheckedIfPresent(
+async function loadJarvisPage(
   supabase: ReturnType<typeof getSupabaseClient>,
   userId: string,
-  opts: { title: string; notebook: string | null; itemText: string }
-): Promise<{
-  page: any;
-  items: JarvisStructuredItem[];
-  outcome: "movedFromChecked" | "alreadyOnList";
-} | null> {
-  const coreText = parseListLine(opts.itemText).coreText.trim();
-  if (!coreText || /\n/.test(opts.itemText)) return null;
-
+  title: string,
+  notebook: string | null
+): Promise<{ page: any | null; error: any | null }> {
   const rpcRes = await supabase.rpc("jarvis_read_user_page", {
     p_user_id: userId,
-    p_title: opts.title,
-    p_notebook_name: opts.notebook,
+    p_title: title,
+    p_notebook_name: notebook,
   });
-  if (rpcRes.error) return null; // fall back to the normal append path
+  if (rpcRes.error) return { page: null, error: rpcRes.error };
   const pages = Array.isArray(rpcRes.data) ? rpcRes.data : rpcRes.data ? [rpcRes.data] : [];
-  const page = pages[0];
-  if (!page?.title) return null;
+  return { page: pages.length > 0 && pages[0]?.title ? pages[0] : null, error: null };
+}
 
-  const docState = page.raw_document_state || {};
-  const texts: any[] = Array.isArray(docState.texts) ? docState.texts : [];
-  const docLevelMeta = Array.isArray(docState.itemsMeta) ? docState.itemsMeta : undefined;
-  const parsed = texts.map((t) =>
-    parseChecklist({ content: t?.content, itemsMeta: Array.isArray(t?.itemsMeta) ? t.itemsMeta : docLevelMeta })
-  );
-
-  const hasUncheckedMatch = parsed.some((items) => items.some((it) => !it.checked && itemsMatch(it.text, coreText)));
-  const checkedMatches: { node: number; item: number }[] = [];
-  parsed.forEach((items, node) =>
-    items.forEach((it, item) => {
-      if (it.checked && itemsMatch(it.text, coreText)) checkedMatches.push({ node, item });
-    })
-  );
-  if (checkedMatches.length === 0) return null;
-
-  const keep = hasUncheckedMatch ? null : checkedMatches[0];
-  const touchedNodes = new Set(checkedMatches.map((m) => m.node));
-  const updatedTexts = texts.map((t, nodeIdx) => {
-    if (!touchedNodes.has(nodeIdx)) return t;
-    const next = parsed[nodeIdx]
-      .map((it, itemIdx) =>
-        keep && keep.node === nodeIdx && keep.item === itemIdx ? { ...it, checked: false } : it
-      )
-      .filter(
-        (it, itemIdx) =>
-          (keep && keep.node === nodeIdx && keep.item === itemIdx) ||
-          !(it.checked && itemsMatch(it.text, coreText))
-      );
-    return { ...t, ...serializeChecklist(next) };
-  });
-
-  const updatedDocState = { ...docState, texts: updatedTexts };
+/**
+ * Saves a changed document to the page (the document the editor renders),
+ * stamping its update time, then reads it back to confirm the write landed.
+ * Only reports ok when the saved page really contains the new document.
+ */
+async function saveJarvisPage(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  userId: string,
+  page: any,
+  doc: any,
+  lookup: { title: string; notebook: string | null }
+): Promise<{ ok: true; doc: any } | { ok: false; error: string }> {
+  const stamped = stampDoc(doc);
   const updateRes = await supabase.rpc("jarvis_update_page_document_state", {
     p_user_id: userId,
     p_page_id: page.page_id,
-    p_document_state: updatedDocState,
+    p_document_state: stamped,
   });
   if (updateRes.error || !updateRes.data) {
-    console.error("[Jarvis API] move-back-from-checked update failed:", updateRes.error);
-    return null;
+    console.error("[Jarvis API] jarvis_update_page_document_state error:", updateRes.error);
+    return {
+      ok: false,
+      error: updateRes.error ? formatErrorMessage(updateRes.error) : "The note could not be saved. Please try again.",
+    };
   }
-
-  return {
-    page,
-    items: extractStructuredItemsFromDocState(updatedDocState).items,
-    outcome: keep ? "movedFromChecked" : "alreadyOnList",
-  };
+  const check = await loadJarvisPage(supabase, userId, lookup.title, lookup.notebook);
+  const saved = check.page?.page_id === page.page_id ? check.page.raw_document_state : null;
+  if (!saved || JSON.stringify(saved.texts || []) !== JSON.stringify(stamped.texts || [])) {
+    console.error("[Jarvis API] write verification failed for page", page.page_id);
+    return { ok: false, error: "The note was changed but the change could not be confirmed. Please try again." };
+  }
+  return { ok: true, doc: saved };
 }
 
 /**
@@ -317,7 +288,7 @@ async function listNotesInternal(
             items: structured.items,
             notebook: p.notebook_title || targetNotebook || "Notebook",
             section: p.section_title || "Inbox",
-            updated_at: p.created_at,
+            updated_at: docUpdatedAt(p.raw_document_state, p.updated_at || p.created_at),
           };
         }),
       },
@@ -494,8 +465,28 @@ export async function POST(req: NextRequest) {
       targetNotebook = rawNotebook.trim();
     }
 
+    const isListNote = isList;
+    const notFoundMessage = () =>
+      targetNotebook ? `Note not found in ${targetNotebook} notebook` : "Note not found";
+    const notePayloadFor = (page: any, doc: any) => {
+      const { items, plainContent } = readItems(doc, page.title, isListNote);
+      return {
+        payload: {
+          id: page.page_id,
+          title: page.title,
+          content: plainContent,
+          items,
+          notebook: page.notebook_title || targetNotebook || "Notebook",
+          source: "motif_canvas_page",
+          updated_at: docUpdatedAt(doc, page.updated_at || page.created_at),
+        },
+        items,
+        plainContent,
+      };
+    };
+
     // --------------------------------------------------------------------------
-    // ACTION: "read"
+    // ACTION: "read" — returns exactly what the page shows
     // --------------------------------------------------------------------------
     if (normalizedAction === "read") {
       if (!cleanTitle) {
@@ -510,56 +501,23 @@ export async function POST(req: NextRequest) {
       }
 
       if (auth.userId) {
-        const rpcRes = await supabase.rpc("jarvis_read_user_page", {
-          p_user_id: auth.userId,
-          p_title: cleanTitle,
-          p_notebook_name: targetNotebook,
-        });
-
-        if (rpcRes.error) {
-          console.error("[Jarvis API] jarvis_read_user_page RPC error:", rpcRes.error);
-          const msg = formatErrorMessage(rpcRes.error);
-          return NextResponse.json(
-            { success: false, error: msg, message: msg },
-            { status: 500, headers: corsHeaders }
-          );
+        const { page, error } = await loadJarvisPage(supabase, auth.userId, cleanTitle, targetNotebook);
+        if (error) {
+          console.error("[Jarvis API] jarvis_read_user_page RPC error:", error);
+          const msg = formatErrorMessage(error);
+          return NextResponse.json({ success: false, error: msg, message: msg }, { status: 500, headers: corsHeaders });
         }
-
-        const pages = Array.isArray(rpcRes.data)
-          ? rpcRes.data
-          : rpcRes.data
-          ? [rpcRes.data]
-          : [];
-
-        if (pages.length > 0 && pages[0]?.title) {
-          const page = pages[0];
-          const structured = extractStructuredItemsFromDocState(page.raw_document_state);
-          const plainContent =
-            structured.plainContent || cleanHtmlToPlainText(page.content || "");
-
+        if (page) {
+          const { payload, items } = notePayloadFor(page, page.raw_document_state || {});
+          if (!payload.content) payload.content = cleanHtmlToPlainText(page.content || "");
           return NextResponse.json(
-            {
-              success: true,
-              note: {
-                id: page.page_id,
-                title: page.title,
-                content: plainContent,
-                items: structured.items,
-                notebook: page.notebook_title || targetNotebook || "Notebook",
-                source: "motif_canvas_page",
-                updated_at: page.created_at,
-              },
-              items: structured.items,
-            },
+            { success: true, note: payload, items },
             { status: 200, headers: corsHeaders }
           );
         }
       }
 
-      const notFoundMsg = targetNotebook
-        ? `Note not found in ${targetNotebook} notebook`
-        : "Note not found";
-
+      const notFoundMsg = notFoundMessage();
       return NextResponse.json(
         { success: false, error: notFoundMsg, message: notFoundMsg },
         { status: 404, headers: corsHeaders }
@@ -624,80 +582,26 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const rpcRes = await supabase.rpc("jarvis_read_user_page", {
-        p_user_id: auth.userId,
-        p_title: cleanTitle,
-        p_notebook_name: targetNotebook,
-      });
-
-      if (rpcRes.error) {
-        console.error("[Jarvis API] jarvis_read_user_page RPC error:", rpcRes.error);
-        const msg = formatErrorMessage(rpcRes.error);
-        return NextResponse.json(
-          { success: false, error: msg, message: msg },
-          { status: 500, headers: corsHeaders }
-        );
+      const { page, error } = await loadJarvisPage(supabase, auth.userId, cleanTitle, targetNotebook);
+      if (error) {
+        console.error("[Jarvis API] jarvis_read_user_page RPC error:", error);
+        const msg = formatErrorMessage(error);
+        return NextResponse.json({ success: false, error: msg, message: msg }, { status: 500, headers: corsHeaders });
       }
-
-      const pages = Array.isArray(rpcRes.data)
-        ? rpcRes.data
-        : rpcRes.data
-        ? [rpcRes.data]
-        : [];
-
-      if (pages.length === 0 || !pages[0]?.title) {
-        const notFoundMsg = targetNotebook
-          ? `Note not found in ${targetNotebook} notebook`
-          : "Note not found";
+      if (!page) {
+        const notFoundMsg = notFoundMessage();
         return NextResponse.json(
           { success: false, error: notFoundMsg, message: notFoundMsg },
           { status: 404, headers: corsHeaders }
         );
       }
 
-      const page = pages[0];
-      const docState = page.raw_document_state || {};
-      const texts = Array.isArray(docState.texts) ? [...docState.texts] : [];
-      const docLevelMeta = Array.isArray(docState.itemsMeta) ? docState.itemsMeta : undefined;
-
-      let matched = false;
-      const updatedTexts = texts.map((t: any) => {
-        const { items, cleanLines, normalizedMeta } = parseTextNodeItems(t, docLevelMeta);
-        if (matched) {
-          return {
-            ...t,
-            content: linesToHtml(cleanLines),
-            itemsMeta: normalizedMeta,
-          };
-        }
-
-        const newLines: string[] = [];
-        const newMeta: JarvisItemMeta[] = [];
-
-        for (let i = 0; i < items.length; i++) {
-          const entry = items[i];
-          const meta = normalizedMeta[i];
-          if (!matched && entry.text.toLowerCase() === targetCore) {
-            matched = true;
-            if (normalizedAction === "remove") {
-              // Delete the first matching line and its metadata
-              continue;
-            } else {
-              // Store item as "- [x] item" / "- [ ] item" with metadata preserved in itemsMeta
-              newLines.push(`${checked ? "- [x]" : "- [ ]"} ${entry.text}`);
-              newMeta.push(meta);
-              continue;
-            }
-          }
-          newLines.push(cleanLines[i]);
-          newMeta.push(meta);
-        }
-
-        return {
-          ...t,
-          content: linesToHtml(newLines),
-          itemsMeta: newMeta,
-        };
+      const { doc: updatedDoc, matched } = updateItemInDoc(page.raw_document_state || {}, {
+        pageTitle: page.title,
+        isListNote,
+        itemText: itemInput,
+        action: normalizedAction === "remove" ? "remove" : "check",
+        checked,
       });
 
       if (!matched) {
@@ -708,54 +612,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const updatedDocState = {
-        ...docState,
-        texts: updatedTexts,
-      };
-
-      const updateRes = await supabase.rpc("jarvis_update_page_document_state", {
-        p_user_id: auth.userId,
-        p_page_id: page.page_id,
-        p_document_state: updatedDocState,
+      const saved = await saveJarvisPage(supabase, auth.userId, page, updatedDoc, {
+        title: cleanTitle,
+        notebook: targetNotebook,
       });
-
-      if (updateRes.error || !updateRes.data) {
-        console.error("[Jarvis API] jarvis_update_page_document_state error:", updateRes.error);
-        const msg = updateRes.error
-          ? formatErrorMessage(updateRes.error)
-          : "Failed to update list item";
+      if (!saved.ok) {
         return NextResponse.json(
-          { success: false, error: msg, message: msg },
+          { success: false, error: saved.error, message: saved.error },
           { status: 500, headers: corsHeaders }
         );
       }
 
-      const structured = extractStructuredItemsFromDocState(updatedDocState);
-      const resolvedNotebook = page.notebook_title || targetNotebook || "Notebook";
-      const notePayload = {
-        id: page.page_id,
-        title: page.title,
-        content: structured.plainContent,
-        items: structured.items,
-        notebook: resolvedNotebook,
-        source: "motif_canvas_page",
-        updated_at: page.created_at,
-      };
-
+      const { payload, items, plainContent } = notePayloadFor(page, saved.doc);
       return NextResponse.json(
         {
           success: true,
-          note: notePayload,
-          updatedNote: notePayload,
-          content: structured.plainContent,
-          items: structured.items,
+          note: payload,
+          updatedNote: payload,
+          content: plainContent,
+          items,
         },
         { status: 200, headers: corsHeaders }
       );
     }
 
     // --------------------------------------------------------------------------
-    // ACTION: "append"
+    // ACTION: "append" — writes into the page the editor renders
     // --------------------------------------------------------------------------
     if (normalizedAction === "append") {
       if (!cleanTitle) {
@@ -768,46 +650,69 @@ export async function POST(req: NextRequest) {
           { status: 400, headers: corsHeaders }
         );
       }
+      if (!textContent) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Missing required 'text' field for appending to note",
+            message: "Missing required 'text' field for appending to note",
+          },
+          { status: 400, headers: corsHeaders }
+        );
+      }
 
       if (auth.userId) {
-        // Keep-style dedupe: if this item is already on the note but checked,
-        // move it back (uncheck) instead of adding a duplicate.
-        const dedupe = await moveBackFromCheckedIfPresent(supabase, auth.userId, {
-          title: cleanTitle,
-          notebook: targetNotebook,
-          itemText: textContent,
-        });
-        if (dedupe) {
-          const payload = {
-            id: dedupe.page.page_id,
-            title: cleanTitle,
-            content: textContent,
+        const { page, error } = await loadJarvisPage(supabase, auth.userId, cleanTitle, targetNotebook);
+        if (error) {
+          console.error("[Jarvis API] jarvis_read_user_page RPC error:", error);
+          const msg = formatErrorMessage(error);
+          return NextResponse.json({ success: false, error: msg, message: msg }, { status: 500, headers: corsHeaders });
+        }
+
+        if (page) {
+          const { doc: updatedDoc, outcome } = appendToDoc(page.raw_document_state || {}, {
+            pageTitle: page.title,
+            isListNote,
+            text: textContent,
             addedBy,
             addedByOwner,
-            items: dedupe.items,
-            notebook: dedupe.page.notebook_title || targetNotebook || "Notebook",
-            source: "motif_canvas_page",
-          };
+          });
+          const saved = await saveJarvisPage(supabase, auth.userId, page, updatedDoc, {
+            title: cleanTitle,
+            notebook: targetNotebook,
+          });
+          if (!saved.ok) {
+            return NextResponse.json(
+              { success: false, error: saved.error, message: saved.error },
+              { status: 500, headers: corsHeaders }
+            );
+          }
+          const { payload, items } = notePayloadFor(page, saved.doc);
           const message =
-            dedupe.outcome === "movedFromChecked" ? "Moved back from Checked" : "Already on the list";
+            outcome === "movedFromChecked"
+              ? "Moved back from Checked"
+              : outcome === "alreadyOnList"
+              ? "Already on the list"
+              : undefined;
           return NextResponse.json(
             {
               success: true,
-              updatedNote: payload,
-              items: dedupe.items,
-              outcome: dedupe.outcome,
-              movedFromChecked: dedupe.outcome === "movedFromChecked",
-              message,
+              updatedNote: { ...payload, addedBy, addedByOwner },
+              items,
+              ...(message
+                ? { outcome, movedFromChecked: outcome === "movedFromChecked", message }
+                : {}),
             },
             { status: 200, headers: corsHeaders }
           );
         }
 
+        // No such page yet: create it (in the requested notebook) with this first item
         const rpcRes = await supabase.rpc("jarvis_append_or_create_page", {
           p_user_id: auth.userId,
           p_title: cleanTitle,
-          p_text: textContent,
-          p_is_list: isList,
+          p_text: isListNote ? `- [ ] ${parseListLine(textContent).coreText}` : textContent,
+          p_is_list: isListNote,
           p_notebook_name: targetNotebook,
           p_added_by: addedBy,
           p_added_by_owner: addedByOwner,
@@ -816,34 +721,32 @@ export async function POST(req: NextRequest) {
         if (rpcRes.error) {
           console.error("[Jarvis API] jarvis_append_or_create_page RPC error:", rpcRes.error);
           const msg = formatErrorMessage(rpcRes.error);
-          return NextResponse.json(
-            { success: false, error: msg, message: msg },
-            { status: 500, headers: corsHeaders }
-          );
+          return NextResponse.json({ success: false, error: msg, message: msg }, { status: 500, headers: corsHeaders });
         }
 
-        if (rpcRes.data && (rpcRes.data as any).success) {
-          const res = rpcRes.data as any;
-          const isCreated = res.action === "created";
-          const structured = extractStructuredItemsFromDocState(res.document_state);
-          const payload = {
-            id: res.page_id,
-            title: cleanTitle,
-            content: textContent,
-            addedBy,
-            addedByOwner,
-            items: structured.items,
-            notebook: res.notebook || targetNotebook || "Notebook",
-            source: "motif_canvas_page",
-          };
-
+        const res = rpcRes.data as any;
+        if (res && res.success && res.page_id) {
+          // Confirm the new page is really there before reporting success
+          const created = await loadJarvisPage(supabase, auth.userId, cleanTitle, targetNotebook);
+          if (created.page?.page_id === res.page_id) {
+            const { payload, items } = notePayloadFor(created.page, created.page.raw_document_state || {});
+            const isCreated = res.action === "created";
+            return NextResponse.json(
+              {
+                success: true,
+                [isCreated ? "createdNote" : "updatedNote"]: { ...payload, addedBy, addedByOwner },
+                items,
+              },
+              { status: isCreated ? 201 : 200, headers: corsHeaders }
+            );
+          }
           return NextResponse.json(
             {
-              success: true,
-              [isCreated ? "createdNote" : "updatedNote"]: payload,
-              items: structured.items,
+              success: false,
+              error: "The note was created but could not be confirmed. Please try again.",
+              message: "The note was created but could not be confirmed. Please try again.",
             },
-            { status: isCreated ? 201 : 200, headers: corsHeaders }
+            { status: 500, headers: corsHeaders }
           );
         }
       }

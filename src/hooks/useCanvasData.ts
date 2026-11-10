@@ -14,6 +14,7 @@ import {
 } from "@/lib/offlineStore";
 import { Stroke, TextNode, AudioNode, ImageNode, FileNode, VideoNode, ShapeNode, ConnectorNode, DocumentState } from "@/components/CustomCanvas";
 import { TagPinNode } from "@/lib/tags";
+import { mergeDocStates, resolveLoadedState, stateKey } from "@/lib/docSync";
 
 export function useCanvasData(pageId: string) {
   const [loading, setLoading] = useState(true);
@@ -37,7 +38,11 @@ export function useCanvasData(pageId: string) {
   const futureRef = useRef<DocumentState[]>([]);
   const lastSavedStateRef = useRef<DocumentState | null>(null);
   const isUndoingRef = useRef(false);
-  const isRemoteUpdateRef = useRef(false);
+  // Fingerprint of the last state we loaded/received (not typed). Autosave
+  // skips it so loading a page is never mistaken for an edit.
+  const skipAutosaveKeyRef = useRef<string | null>(null);
+  // Last state known to match the server; used as the base for 3-way merges.
+  const serverBaseRef = useRef<DocumentState | null>(null);
   const isDirtyRef = useRef(false);
   const lastLocalEditTimeRef = useRef(0);
   const isFlushingRef = useRef(false);
@@ -60,6 +65,57 @@ export function useCanvasData(pageId: string) {
     currentStateRef.current = { strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins };
   }, [strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins]);
 
+  /**
+   * Put a document on screen. `asEdit: false` (loaded/received state) does not
+   * trigger autosave; `asEdit: true` (merged state that the server lacks) does.
+   */
+  const applyDocState = useCallback((state: DocumentState, opts: { asEdit?: boolean } = {}) => {
+    if (!opts.asEdit) {
+      skipAutosaveKeyRef.current = stateKey(state);
+      lastSavedStateRef.current = state;
+      lastSnapshotHashRef.current = JSON.stringify(state);
+      lastSnapshotTimeRef.current = Date.now();
+    }
+    currentStateRef.current = state;
+    setStrokes(state.strokes || []);
+    setTexts(state.texts || []);
+    setAudios(state.audios || []);
+    setImages(state.images || []);
+    setFiles(state.files || []);
+    setVideos(state.videos || []);
+    setShapes(state.shapes || []);
+    setConnectors(state.connectors || []);
+    setPageTags(state.pageTags || []);
+    setTagPins(state.tagPins || []);
+  }, []);
+
+  /**
+   * Handle a newer copy of the page from the server (live update or refetch).
+   * Clean editor -> show it. Unsaved local edits -> merge server changes in.
+   */
+  const handleRemoteDocState = useCallback((remoteState: DocumentState) => {
+    const remoteKey = stateKey(remoteState);
+    if (remoteKey === stateKey(currentStateRef.current)) {
+      serverBaseRef.current = remoteState;
+      return;
+    }
+    if (serverBaseRef.current && remoteKey === stateKey(serverBaseRef.current)) {
+      return; // nothing new on the server (e.g. echo of our own save)
+    }
+    const isEditing = isDirtyRef.current || (Date.now() - lastLocalEditTimeRef.current < 5000);
+    if (isEditing) {
+      const merged = mergeDocStates(serverBaseRef.current, currentStateRef.current as any, remoteState as any) as DocumentState;
+      serverBaseRef.current = remoteState;
+      if (stateKey(merged) !== stateKey(currentStateRef.current)) {
+        applyDocState(merged, { asEdit: true }); // autosave pushes the merged result
+      }
+      return;
+    }
+    serverBaseRef.current = remoteState;
+    applyDocState(remoteState);
+    setCachedPageState(pageId, remoteState, false).catch(() => {});
+  }, [applyDocState, pageId]);
+
 
   // Load state: Instant local cache first, then sync with DB
   useEffect(() => {
@@ -76,21 +132,7 @@ export function useCanvasData(pageId: string) {
       try {
         localRecord = await getCachedPageRecord(pageId);
         if (localRecord?.documentState && isMounted) {
-          const cached = localRecord.documentState;
-          setStrokes(cached.strokes || []);
-          setTexts(cached.texts || []);
-          setAudios(cached.audios || []);
-          setImages(cached.images || []);
-          setFiles(cached.files || []);
-          setVideos(cached.videos || []);
-          setShapes(cached.shapes || []);
-          setConnectors(cached.connectors || []);
-          setPageTags(cached.pageTags || []);
-          setTagPins(cached.tagPins || []);
-          currentStateRef.current = cached;
-          lastSavedStateRef.current = cached;
-          lastSnapshotHashRef.current = JSON.stringify(cached);
-          lastSnapshotTimeRef.current = Date.now();
+          applyDocState(localRecord.documentState);
           setLoading(false);
         }
       } catch (cacheErr) {
@@ -119,58 +161,23 @@ export function useCanvasData(pageId: string) {
           console.warn("Supabase fetch failed (possibly offline):", error);
         } else if (isMounted && data?.document_state) {
           const remoteState = data.document_state as DocumentState;
-          const remoteTime = (remoteState as any)?._clientUpdatedAt || 0;
-          const localTime = Math.max(
-            (localRecord?.documentState as any)?._clientUpdatedAt || 0,
-            localRecord?.updatedAt || 0,
-            lastLocalEditTimeRef.current || 0
-          );
-
-          // Conflict resolution:
-          // If local has pending unsaved changes or local is NEWER than remote:
-          if (isDirtyRef.current || hasPendingSync || localRecord?.isDirty || (localTime > 0 && localTime > remoteTime)) {
-            console.log("Local state is NEWER than Supabase. Preserving local edits and syncing up to Supabase.");
-            // Keep local state on screen!
-            // Immediately sync newer local state up to Supabase so remote becomes up-to-date:
-            const stateToPush = (currentStateRef.current && (
-              (currentStateRef.current.texts && currentStateRef.current.texts.length > 0) ||
-              (currentStateRef.current.strokes && currentStateRef.current.strokes.length > 0) ||
-              (currentStateRef.current.audios && currentStateRef.current.audios.length > 0) ||
-              (currentStateRef.current.images && currentStateRef.current.images.length > 0)
-            )) ? currentStateRef.current : localRecord?.documentState;
-
-            if (stateToPush) {
-              const fullState = {
-                ...stateToPush,
-                _clientUpdatedAt: localTime || Date.now()
-              };
-              const { error: syncErr } = await supabase
-                .from("pages")
-                .update({ document_state: fullState })
-                .eq("id", pageId);
-              if (!syncErr) {
-                isDirtyRef.current = false;
-                await setCachedPageState(pageId, fullState as any, false);
-                await removeSyncAction(`sync_${pageId}`);
-              }
-            }
+          // The server copy is the source of truth. The local cache only wins
+          // when it holds real unsaved edits, and then server-side changes
+          // (e.g. items added by Jarvis) are merged in rather than overwritten.
+          const hasUnsavedLocalEdits = isDirtyRef.current || hasPendingSync || Boolean(localRecord?.isDirty);
+          const { state, needsSave } = resolveLoadedState({
+            remote: remoteState as any,
+            local: hasUnsavedLocalEdits ? (currentStateRef.current as any) : null,
+            hasUnsavedLocalEdits,
+          });
+          serverBaseRef.current = remoteState;
+          if (needsSave) {
+            applyDocState(state as DocumentState, { asEdit: true }); // autosave pushes merged state
           } else {
-            // Remote state is genuinely newer or identical: apply it
-            setStrokes(remoteState.strokes || []);
-            setTexts(remoteState.texts || []);
-            setAudios(remoteState.audios || []);
-            setImages(remoteState.images || []);
-            setFiles(remoteState.files || []);
-            setVideos(remoteState.videos || []);
-            setShapes(remoteState.shapes || []);
-            setConnectors(remoteState.connectors || []);
-            setPageTags(remoteState.pageTags || []);
-            setTagPins(remoteState.tagPins || []);
-            currentStateRef.current = remoteState;
-            lastSavedStateRef.current = remoteState;
-            lastSnapshotHashRef.current = JSON.stringify(remoteState);
-            lastSnapshotTimeRef.current = Date.now();
+            applyDocState(remoteState);
+            isDirtyRef.current = false;
             await setCachedPageState(pageId, remoteState, false);
+            if (hasPendingSync) await removeSyncAction(`sync_${pageId}`);
           }
         }
       } catch (networkErr) {
@@ -241,6 +248,7 @@ export function useCanvasData(pageId: string) {
 
         if (!error) {
           isDirtyRef.current = false;
+          serverBaseRef.current = state;
           await setCachedPageState(pageId, state, false);
           await removeSyncAction(`sync_${pageId}`);
         } else {
@@ -291,6 +299,7 @@ export function useCanvasData(pageId: string) {
 
         if (!error) {
           isDirtyRef.current = false;
+          serverBaseRef.current = stateToSave;
           await setCachedPageState(pageId, stateToSave, false);
           await removeSyncAction(`sync_${pageId}`);
         } else {
@@ -440,9 +449,10 @@ export function useCanvasData(pageId: string) {
   // 3) Scheduled version snapshots
   useEffect(() => {
     if (loading) return;
-    if (isRemoteUpdateRef.current) {
-      isRemoteUpdateRef.current = false;
-      return;
+    const currentKey = stateKey({ strokes, texts, audios, images, files, videos, shapes, connectors, pageTags, tagPins });
+    if (skipAutosaveKeyRef.current !== null) {
+      if (currentKey === skipAutosaveKeyRef.current) return; // loaded/received state, not an edit
+      skipAutosaveKeyRef.current = null;
     }
 
     const now = Date.now();
@@ -510,6 +520,37 @@ export function useCanvasData(pageId: string) {
     };
   }, [flushSave, saveVersionToSupabase]);
 
+  const handleRemoteDocStateRef = useRef(handleRemoteDocState);
+  handleRemoteDocStateRef.current = handleRemoteDocState;
+
+  // Refetch on focus / when the tab becomes visible, so changes made elsewhere
+  // (e.g. Jarvis adding list items) show up even if a live update was missed.
+  useEffect(() => {
+    if (!pageId || typeof window === 'undefined') return;
+    let lastFetch = 0;
+    const refetch = async () => {
+      if (document.visibilityState === 'hidden' || !navigator.onLine) return;
+      if (Date.now() - lastFetch < 2000) return;
+      lastFetch = Date.now();
+      try {
+        const { data, error } = await supabase
+          .from('pages')
+          .select('document_state')
+          .eq('id', pageId)
+          .single();
+        if (!error && data?.document_state) {
+          handleRemoteDocStateRef.current(data.document_state as DocumentState);
+        }
+      } catch {}
+    };
+    window.addEventListener('focus', refetch);
+    document.addEventListener('visibilitychange', refetch);
+    return () => {
+      window.removeEventListener('focus', refetch);
+      document.removeEventListener('visibilitychange', refetch);
+    };
+  }, [pageId, supabase]);
+
   // Realtime subscription for collaborative updates on the current page
   useEffect(() => {
     if (!pageId) return;
@@ -526,43 +567,7 @@ export function useCanvasData(pageId: string) {
         },
         (payload: any) => {
           if (!payload.new || !payload.new.document_state) return;
-
-          // If local state is dirty or user edited recently (< 5s), do not let remote overwrite active typing!
-          if (isDirtyRef.current || (Date.now() - lastLocalEditTimeRef.current < 5000)) {
-            return;
-          }
-
-          const remoteState = payload.new.document_state as DocumentState;
-          const remoteJson = JSON.stringify(remoteState);
-          const currentJson = JSON.stringify(currentStateRef.current);
-          const lastSavedJson = JSON.stringify(lastSavedStateRef.current);
-
-          // If the update came from our own save or is identical to our current state, skip
-          if (remoteJson === currentJson || remoteJson === lastSavedJson) {
-            return;
-          }
-
-          const remoteTime = (remoteState as any)?._clientUpdatedAt || 0;
-          const localTime = (currentStateRef.current as any)?._clientUpdatedAt || lastLocalEditTimeRef.current || 0;
-
-          if (localTime > 0 && localTime > remoteTime) {
-            return;
-          }
-
-          // Apply remote state
-          isRemoteUpdateRef.current = true;
-          lastSavedStateRef.current = remoteState;
-          setStrokes(remoteState.strokes || []);
-          setTexts(remoteState.texts || []);
-          setAudios(remoteState.audios || []);
-          setImages(remoteState.images || []);
-          setFiles(remoteState.files || []);
-          setVideos(remoteState.videos || []);
-          setShapes(remoteState.shapes || []);
-          setConnectors(remoteState.connectors || []);
-          setPageTags(remoteState.pageTags || []);
-          setTagPins(remoteState.tagPins || []);
-          setCachedPageState(pageId, remoteState, false);
+          handleRemoteDocStateRef.current(payload.new.document_state as DocumentState);
         }
       )
       .subscribe();
