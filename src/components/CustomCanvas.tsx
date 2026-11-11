@@ -1685,10 +1685,10 @@ export function CustomCanvas({
       toast.error(`Recording processing failed: ${errMsg}`, { id: toastId, duration: 7000 });
       
       const recoveredTranscript = (liveTranscript || result.liveTranscript || '').trim();
-      const isCreditDepleted = errMsg.toLowerCase().includes('prepayment') || errMsg.toLowerCase().includes('credits are depleted');
+      const isCreditDepleted = ['prepayment', 'credits are depleted', 'usage limit'].some(s => errMsg.toLowerCase().includes(s));
       const fallbackSummary = recoveredTranscript
-        ? `### Meeting Transcript\n\n${recoveredTranscript}\n\n---\n*AI Summary could not be generated: ${isCreditDepleted ? 'Google Gemini prepayment credits are depleted. Please top up your project billing in Google AI Studio or check your API key in Settings.' : errMsg}*`
-        : `### Audio Recording Saved\n\nAI Transcription failed: ${isCreditDepleted ? 'Google Gemini prepayment credits are depleted. Please top up your project billing in Google AI Studio or check your API key in Settings.' : errMsg}\n\nYou can listen to your recording above.`;
+        ? `### Meeting Transcript\n\n${recoveredTranscript}\n\n---\n*AI Summary could not be generated: ${isCreditDepleted ? 'Motif AI is temporarily unavailable because the AI usage limit has been reached. Your recording is saved - use Retry Transcription & Summary later.' : errMsg}*`
+        : `### Audio Recording Saved\n\nAI Transcription failed: ${isCreditDepleted ? 'Motif AI is temporarily unavailable because the AI usage limit has been reached. Your recording is saved - use Retry Transcription & Summary later.' : errMsg}\n\nYou can listen to your recording above.`;
 
       setAudios(prev => prev.map(a => a.id === nodeId ? { 
         ...a, 

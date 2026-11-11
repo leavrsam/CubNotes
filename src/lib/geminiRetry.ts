@@ -77,7 +77,7 @@ export function formatGeminiErrorMessage(error: any, fallback = "AI request fail
   }
 
   if (lower.includes('prepayment') || lower.includes('credits are depleted')) {
-    return "Google Gemini prepayment credits are depleted. Please top up your project billing at https://aistudio.google.com or check your API key in Motif Settings.";
+    return "Motif AI is temporarily unavailable because the AI usage limit has been reached. Please try again later.";
   }
 
   // Clean out any lingering raw JSON wrappers if present
